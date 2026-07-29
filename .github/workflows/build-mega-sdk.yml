@@ -40,6 +40,7 @@ jobs:
           
       - name: Build Android bindings
         run: |
+          mkdir -p examples/android/ExampleApp/app/src/main/java/nz/mega/sdk
           cd examples/android/ExampleApp/app/src/main/jni
           export BUILD_ARCHS="${{ github.event.inputs.archs || 'arm64-v8a armeabi-v7a x86 x86_64' }}"
           bash cmake.sh
