@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y swig autoconf automake libtool curl wget unzip tar ninja-build cmake
+          sudo apt-get install -y swig autoconf automake autoconf-archive libtool curl wget unzip tar ninja-build cmake build-essential pkg-config
 
       - name: Setup vcpkg
         run: |
