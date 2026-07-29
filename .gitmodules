@@ -1,0 +1,3 @@
+[submodule "android/app/src/main/cpp/mega-sdk"]
+	path = android/app/src/main/cpp/mega-sdk
+	url = https://github.com/meganz/sdk.git

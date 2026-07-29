@@ -1,0 +1,57 @@
+name: Build MEGA SDK for Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      archs:
+        description: 'Architectures to build (e.g. arm64-v8a)'
+        required: false
+        default: 'arm64-v8a armeabi-v7a x86 x86_64'
+  push:
+    paths:
+      - '.github/workflows/build-mega-sdk.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout MEGA SDK
+        uses: actions/checkout@v4
+        with:
+          repository: meganz/sdk
+          submodules: recursive
+          
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y swig autoconf automake libtool curl wget unzip tar ninja-build cmake
+
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git /home/runner/vcpkg
+          /home/runner/vcpkg/bootstrap-vcpkg.sh
+          echo "VCPKG_ROOT=/home/runner/vcpkg" >> $GITHUB_ENV
+
+      - name: Setup Android NDK
+        run: |
+          echo "NDK_ROOT=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
+          
+      - name: Build Android bindings
+        run: |
+          cd examples/android/ExampleApp/app/src/main/jni
+          export BUILD_ARCHS="${{ github.event.inputs.archs || 'arm64-v8a armeabi-v7a x86 x86_64' }}"
+          bash cmake.sh
+
+      - name: Archive Android JNI Libs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mega-sdk-android-jniLibs
+          path: examples/android/ExampleApp/app/src/main/jniLibs/
+
+      - name: Archive Android Java Src
+        uses: actions/upload-artifact@v4
+        with:
+          name: mega-sdk-android-java
+          path: examples/android/ExampleApp/app/src/main/java/nz/mega/sdk/
