@@ -624,6 +624,7 @@ fun SiftApp(
                         contentDescription = null,
                         tint = iconTint,
                         modifier = Modifier
+                            .wrapContentSize(unbounded = true, align = Alignment.TopStart) // reset constraints first
                             .graphicsLayer {
                                 val p = progress.value
 
