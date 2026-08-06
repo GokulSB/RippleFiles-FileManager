@@ -617,11 +617,6 @@ fun SiftApp(
                         trashPulse = true
                     }
 
-                    val currentX = androidx.compose.ui.util.lerp(flying.startRect.center.x, trashIconCenter.x, progress.value)
-                    val currentY = androidx.compose.ui.util.lerp(flying.startRect.center.y, trashIconCenter.y, progress.value)
-                    val scale = androidx.compose.ui.util.lerp(1f, 0.15f, progress.value)
-                    val alpha = androidx.compose.ui.util.lerp(1f, 0f, (progress.value - 0.7f).coerceIn(0f, 0.3f) / 0.3f)
-
                     val iconTint = if (flying.file?.type == "folder") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
 
                     Icon(
@@ -630,11 +625,18 @@ fun SiftApp(
                         tint = iconTint,
                         modifier = Modifier
                             .graphicsLayer {
-                                translationX = currentX - (size.width / 2)
-                                translationY = currentY - (size.height / 2)
-                                scaleX = scale
-                                scaleY = scale
-                                this.alpha = alpha
+                                val p = progress.value
+
+                                val x = androidx.compose.ui.util.lerp(flying.startRect.center.x, trashIconCenter.x, p)
+                                val y = androidx.compose.ui.util.lerp(flying.startRect.center.y, trashIconCenter.y, p)
+                                val s = androidx.compose.ui.util.lerp(1f, 0.15f, p)
+                                val a = androidx.compose.ui.util.lerp(1f, 0f, (p - 0.7f).coerceIn(0f, 0.3f) / 0.3f)
+
+                                translationX = x - (size.width / 2)
+                                translationY = y - (size.height / 2)
+                                scaleX = s
+                                scaleY = s
+                                this.alpha = a
                             }
                             .size(40.dp)
                     )
