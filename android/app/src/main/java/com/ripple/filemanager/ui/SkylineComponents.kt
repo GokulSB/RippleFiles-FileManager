@@ -587,7 +587,7 @@ fun SkylineFolderGridTile(
                 lineHeight = 17.sp
             )
 
-            Spacer(Modifier.weight(1f, fill = false))
+            Spacer(Modifier.weight(1f))
             Spacer(Modifier.height(6.dp))
 
             // Bottom meta row: items · date, single line to prevent wrap bug
