@@ -60,6 +60,9 @@ import com.ripple.filemanager.AppState
 import com.ripple.filemanager.ThemeMode
 import com.ripple.filemanager.SortMode
 import com.ripple.filemanager.ui.theme.SiftTheme
+import com.ripple.filemanager.ui.theme.JetBrainsMonoFamily
+import com.ripple.filemanager.ui.theme.ManropeFontFamily
+import com.ripple.filemanager.ui.theme.SkylineColors
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -2575,30 +2578,64 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (infoDialogFile != null) {
             AlertDialog(
                 onDismissRequest = { infoDialogFile = null },
-                title = { Text(infoDialogFile?.name ?: "Info") },
+                shape = getDynamicCornerShape(0f, state.cornerRoundness),
+                containerColor = SkylineColors.Surface,
+                title = {
+                    Text(
+                        text = infoDialogFile?.name ?: "INFO",
+                        fontFamily = JetBrainsMonoFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = SkylineColors.TextPrimary,
+                        fontSize = 16.sp
+                    )
+                },
                 text = {
                     if (fileDetails == null) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Calculating size...", style = MaterialTheme.typography.bodySmall)
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = SkylineColors.Amber)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("SCANNING...", fontFamily = JetBrainsMonoFamily, color = SkylineColors.TextDim, fontSize = 12.sp)
                         }
                     } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Type: ${if (fileDetails!!.isFolder) "Folder" else "File"}")
-                            Text("Size: ${fileDetails!!.size}")
-                            if (fileDetails!!.itemCount != null) Text("Items: ${fileDetails!!.itemCount}")
-                            Text("Modified: ${fileDetails!!.changed}")
-                            Text("Owner: ${fileDetails!!.owner}")
-                            if (fileDetails!!.format != null) Text("Format: ${fileDetails!!.format}")
-                            if (fileDetails!!.resolution != null) Text("Resolution: ${fileDetails!!.resolution}")
-                            if (fileDetails!!.duration != null) Text("Duration: ${fileDetails!!.duration}")
-                            Text("Path: ${fileDetails!!.path}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            val details = listOfNotNull(
+                                "TYPE" to if (fileDetails!!.isFolder) "Folder" else "File",
+                                "SIZE" to fileDetails!!.size,
+                                fileDetails!!.itemCount?.let { "ITEMS" to it.toString() },
+                                "MODIFIED" to fileDetails!!.changed,
+                                "OWNER" to fileDetails!!.owner,
+                                fileDetails!!.format?.let { "FORMAT" to it },
+                                fileDetails!!.resolution?.let { "RESOLUTION" to it },
+                                fileDetails!!.duration?.let { "DURATION" to it }
+                            )
+                            details.forEach { (label, value) ->
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(label, fontFamily = JetBrainsMonoFamily, fontSize = 11.sp, color = SkylineColors.TextDim)
+                                    Text(value, fontFamily = ManropeFontFamily, fontSize = 12.sp, color = SkylineColors.TextPrimary)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text("PATH", fontFamily = JetBrainsMonoFamily, fontSize = 10.sp, color = SkylineColors.TextDim)
+                            Text(fileDetails!!.path, fontFamily = ManropeFontFamily, fontSize = 11.sp, color = SkylineColors.TextPrimary, lineHeight = 16.sp)
                         }
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { infoDialogFile = null }) { Text("Close") }
+                    Box(
+                        modifier = Modifier
+                            .clip(getDynamicCornerShape(4f, state.cornerRoundness))
+                            .background(SkylineColors.Amber)
+                            .clickable { infoDialogFile = null }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "CLOSE",
+                            fontFamily = JetBrainsMonoFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SkylineColors.Background
+                        )
+                    }
                 }
             )
         }
