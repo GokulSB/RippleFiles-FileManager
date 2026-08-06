@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sift - Material 3 Expressive File Manager</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    color-scheme: light dark;
+    --hue: 262;
+    --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --settle: cubic-bezier(0.2, 0, 0, 1);
+    --radius-xl: 28px;
+    --radius-lg: 22px;
+    --radius-md: 16px;
+    --shadow-soft: 0 18px 50px rgba(24, 16, 36, 0.12);
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    min-height: 100%;
+    font-family: "Google Sans", "Segoe UI", Roboto, Arial, sans-serif;
+    background:
+      radial-gradient(circle at 8% 12%, color-mix(in hsl, var(--primary-container) 52%, transparent), transparent 30%),
+      radial-gradient(circle at 90% 0%, color-mix(in hsl, var(--tertiary-container) 40%, transparent), transparent 28%),
+      var(--surface);
+    color: var(--on-surface);
+    overflow: hidden;
+    transition: background .35s var(--settle), color .35s var(--settle);
+  }
+
+  button, input { font: inherit; }
+  button { border: 0; cursor: pointer; color: inherit; }
+
+  .app {
+    height: 100vh;
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr) 320px;
+    background: color-mix(in hsl, var(--surface) 88%, transparent);
+  }
+
+  .sidebar {
+    min-width: 0;
+    padding: 22px 16px;
+    border-right: 1px solid var(--outline-soft);
+    background: color-mix(in hsl, var(--surface-container) 80%, var(--surface));
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 8px 8px;
+  }
+
+  .brand-mark {
+    width: 46px;
+    height: 46px;
+    border-radius: 42% 58% 60% 40% / 42% 36% 64% 58%;
+    background: var(--primary);
+    color: var(--on-primary);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 10px 24px color-mix(in hsl, var(--primary) 25%, transparent);
+  }
+
+  .brand-mark svg, .icon svg, .tool-btn svg, .nav-icon svg, .action-btn svg, .crumb svg, .file-shape svg { width: 20px; height: 20px; }
+
+  .brand h1 { font-size: 20px; letter-spacing: 0; font-weight: 800; }
+  .brand p { margin-top: 2px; color: var(--on-surface-variant); font-size: 12px; }
+
+  .create-btn {
+    height: 54px;
+    border-radius: 24px;
+    background: var(--primary-container);
+    color: var(--on-primary-container);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 800;
+    box-shadow: var(--shadow-soft);
+    transition: border-radius .35s var(--spring), transform .2s var(--spring), background .25s;
+  }
+
+  .create-btn:hover { border-radius: 50px; transform: translateY(-1px); }
+
+  .nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .nav-btn {
+    height: 46px;
+    width: 100%;
+    border-radius: 18px;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 12px;
+    color: var(--on-surface-variant);
+    font-weight: 700;
+    text-align: left;
+    transition: background .2s, color .2s, border-radius .35s var(--spring);
+  }
+
+  .nav-btn:hover { background: var(--surface-container-high); }
+  .nav-btn.active {
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
+    border-radius: 50px 18px 18px 50px;
+  }
+
+  .nav-icon {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+  }
+
+  .sidebar-card {
+    margin-top: auto;
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    background: var(--surface-container-high);
+  }
+
+  .storage-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .meter {
+    height: 10px;
+    border-radius: 999px;
+    margin: 14px 0 10px;
+    background: var(--surface-container);
+    overflow: hidden;
+  }
+
+  .meter-fill {
+    width: 64%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--primary), var(--tertiary));
+  }
+
+  .storage-meta { color: var(--on-surface-variant); font-size: 12px; line-height: 1.45; }
+
+  .main {
+    min-width: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .topbar {
+    min-height: 86px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 420px) auto;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 24px 12px;
+  }
+
+  .title-block { min-width: 0; }
+  .eyebrow { color: var(--on-surface-variant); font-size: 13px; font-weight: 700; }
+  .title-block h2 { margin-top: 2px; font-size: clamp(24px, 3vw, 34px); letter-spacing: 0; line-height: 1.05; }
+
+  .search {
+    min-width: 0;
+    height: 52px;
+    border-radius: 24px;
+    background: var(--surface-container-high);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    color: var(--on-surface-variant);
+    box-shadow: inset 0 0 0 1px var(--outline-soft);
+  }
+
+  .search input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--on-surface);
+    font-weight: 650;
+  }
+
+  .search input::placeholder { color: var(--on-surface-variant); opacity: .85; }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .tool-btn, .action-btn, .icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 16px;
+    background: var(--surface-container-high);
+    display: grid;
+    place-items: center;
+    color: var(--on-surface);
+    transition: border-radius .3s var(--spring), background .2s, transform .2s var(--spring);
+  }
+
+  .tool-btn:hover, .action-btn:hover, .icon:hover { border-radius: 50%; background: var(--secondary-container); color: var(--on-secondary-container); }
+  .tool-btn.active { background: var(--primary); color: var(--on-primary); }
+
+  .content {
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 0 24px 24px;
+    overflow: hidden;
+  }
+
+  .hero-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(220px, .65fr);
+    gap: 14px;
+  }
+
+  .storage-card, .quick-card {
+    border-radius: var(--radius-xl);
+    padding: 18px;
+    background: var(--primary-container);
+    color: var(--on-primary-container);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-height: 124px;
+  }
+
+  .storage-dial {
+    width: 76px;
+    height: 76px;
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .storage-dial svg { width: 76px; height: 76px; transform: rotate(-90deg); }
+  .storage-dial circle { fill: none; stroke-width: 8; stroke-linecap: round; }
+  .dial-track { stroke: color-mix(in hsl, var(--primary) 22%, transparent); }
+  .dial-fill { stroke: var(--primary); stroke-dasharray: 104 164; }
+  .dial-label { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 900; font-size: 14px; }
+
+  .storage-copy h3 { font-size: 20px; margin-bottom: 5px; }
+  .storage-copy p { font-size: 13px; opacity: .78; line-height: 1.45; }
+
+  .quick-card {
+    background: var(--tertiary-container);
+    color: var(--on-tertiary-container);
+    justify-content: space-between;
+  }
+
+  .quick-card h3 { font-size: 16px; margin-bottom: 6px; }
+  .quick-card p { color: color-mix(in hsl, var(--on-tertiary-container) 72%, transparent); font-size: 12px; line-height: 1.45; }
+
+  .quick-actions {
+    display: flex;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .quick-actions .action-btn { background: color-mix(in hsl, var(--tertiary) 16%, var(--tertiary-container)); color: var(--on-tertiary-container); }
+
+  .subbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--on-surface-variant); font-size: 13px; font-weight: 750; }
+  .crumb { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+  .crumb.current { color: var(--on-surface); }
+  .crumb-sep { opacity: .45; }
+
+  .segmented {
+    padding: 5px;
+    border-radius: 22px;
+    background: var(--surface-container);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+  }
+
+  .segment {
+    height: 36px;
+    min-width: 86px;
+    padding: 0 14px;
+    border-radius: 18px;
+    background: transparent;
+    color: var(--on-surface-variant);
+    font-size: 13px;
+    font-weight: 800;
+    transition: background .25s, color .25s, border-radius .35s var(--spring);
+  }
+
+  .segment.active { background: var(--primary); color: var(--on-primary); border-radius: 50px; }
+
+  .file-area {
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+    scrollbar-width: thin;
+    padding-right: 4px;
+  }
+
+  .file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+    gap: 12px;
+  }
+
+  .file-card {
+    min-height: 154px;
+    border-radius: 22px;
+    padding: 14px;
+    background: var(--surface-container);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform .2s var(--spring), background .2s, border-color .2s, border-radius .35s var(--spring);
+  }
+
+  .file-card:hover { transform: translateY(-2px); background: var(--surface-container-high); }
+  .file-card.selected {
+    border-color: var(--primary);
+    background: color-mix(in hsl, var(--primary-container) 64%, var(--surface-container));
+    border-radius: 32px 18px 26px 18px;
+  }
+
+  .file-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .file-shape {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+  }
+
+  .shape-blob { border-radius: 46% 54% 63% 37% / 45% 38% 62% 55%; }
+  .shape-hex { clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0% 50%); }
+  .shape-arch { border-radius: 60% 60% 8% 8% / 72% 72% 8% 8%; }
+  .shape-circle { border-radius: 50%; }
+  .shape-cookie { border-radius: 62% 38% 55% 45% / 42% 55% 45% 58%; }
+  .shape-diamond { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+
+  .file-menu {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: transparent;
+    display: grid;
+    place-items: center;
+    color: var(--on-surface-variant);
+  }
+
+  .file-menu:hover { background: var(--surface-container-high); }
+  .file-menu svg { width: 17px; height: 17px; }
+
+  .file-name {
+    font-size: 15px;
+    font-weight: 850;
+    line-height: 1.2;
+    min-height: 36px;
+    overflow-wrap: anywhere;
+  }
+
+  .file-meta {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--on-surface-variant);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .pill {
+    max-width: 90px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: var(--surface-container-high);
+    color: var(--on-surface-variant);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-grid.list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .file-grid.list .file-card {
+    min-height: 68px;
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 18px;
+  }
+
+  .file-grid.list .file-top { align-items: center; }
+  .file-grid.list .file-name { min-height: auto; flex: 1; }
+  .file-grid.list .file-meta { margin-top: 0; min-width: 220px; justify-content: flex-end; }
+
+  .details {
+    min-width: 0;
+    padding: 22px 16px;
+    border-left: 1px solid var(--outline-soft);
+    background: color-mix(in hsl, var(--surface-container) 72%, var(--surface));
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .details-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .details-top h2 { font-size: 18px; }
+
+  .preview {
+    border-radius: 30px;
+    background: var(--primary-container);
+    color: var(--on-primary-container);
+    min-height: 176px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 18px;
+  }
+
+  .preview .file-shape { width: 78px; height: 78px; margin: 0 auto 14px; }
+  .preview strong { display: block; font-size: 16px; overflow-wrap: anywhere; }
+  .preview span { display: block; margin-top: 6px; font-size: 12px; opacity: .72; }
+
+  .info-list {
+    border-radius: 22px;
+    background: var(--surface-container-high);
+    padding: 8px 14px;
+  }
+
+  .info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 42px;
+    border-bottom: 1px solid var(--outline-soft);
+    font-size: 13px;
+  }
+
+  .info-row:last-child { border-bottom: 0; }
+  .info-row span:first-child { color: var(--on-surface-variant); font-weight: 700; }
+  .info-row span:last-child { text-align: right; font-weight: 800; overflow-wrap: anywhere; }
+
+  .section-title {
+    margin-top: 4px;
+    color: var(--on-surface-variant);
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .activity {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .activity-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 18px;
+    background: var(--surface-container-high);
+    padding: 10px;
+  }
+
+  .activity-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--tertiary);
+    flex: 0 0 auto;
+  }
+
+  .activity-item p { font-size: 12px; line-height: 1.35; color: var(--on-surface-variant); }
+  .activity-item strong { color: var(--on-surface); }
+
+  .selection-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translate(-50%, 20px) scale(.96);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 30;
+    min-width: min(560px, calc(100vw - 32px));
+    min-height: 64px;
+    border-radius: 28px;
+    padding: 10px 12px 10px 18px;
+    background: var(--inverse-surface);
+    color: var(--inverse-on-surface);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .24);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    transition: opacity .25s, transform .35s var(--spring);
+  }
+
+  .selection-bar.show {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, 0) scale(1);
+  }
+
+  .selection-bar span { font-weight: 850; font-size: 14px; }
+  .selection-actions { display: flex; gap: 6px; }
+  .selection-actions button {
+    width: 42px;
+    height: 42px;
+    border-radius: 15px;
+    display: grid;
+    place-items: center;
+    background: color-mix(in hsl, var(--inverse-on-surface) 12%, transparent);
+    color: var(--inverse-on-surface);
+  }
+  .selection-actions button:hover { border-radius: 50%; }
+  .selection-actions svg { width: 19px; height: 19px; }
+
+  .theme-panel {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.36);
+    display: flex;
+    justify-content: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 40;
+    transition: opacity .25s;
+  }
+
+  .theme-panel.open { opacity: 1; pointer-events: auto; }
+
+  .theme-sheet {
+    width: min(420px, calc(100vw - 18px));
+    height: 100%;
+    background: var(--surface);
+    color: var(--on-surface);
+    padding: 22px;
+    transform: translateX(100%);
+    transition: transform .4s var(--spring);
+    box-shadow: -16px 0 50px rgba(0,0,0,.18);
+    overflow: auto;
+  }
+
+  .theme-panel.open .theme-sheet { transform: translateX(0); }
+
+  .sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .sheet-header h2 { font-size: 22px; }
+  .sheet-header p { margin-top: 4px; color: var(--on-surface-variant); font-size: 13px; line-height: 1.4; }
+
+  .control-block {
+    border-radius: 24px;
+    padding: 16px;
+    background: var(--surface-container);
+    margin-bottom: 12px;
+  }
+
+  .control-label {
+    font-size: 13px;
+    font-weight: 900;
+    margin-bottom: 10px;
+  }
+
+  .mode-row, .swatch-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .mode-btn {
+    height: 42px;
+    padding: 0 14px;
+    border-radius: 18px;
+    background: var(--surface-container-high);
+    color: var(--on-surface-variant);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 850;
+    transition: background .2s, color .2s, border-radius .35s var(--spring);
+  }
+
+  .mode-btn.active { background: var(--primary); color: var(--on-primary); border-radius: 50px; }
+  .mode-btn svg { width: 17px; height: 17px; }
+
+  .hue-slider {
+    width: 100%;
+    height: 44px;
+    appearance: none;
+    background: transparent;
+  }
+
+  .hue-slider::-webkit-slider-runnable-track {
+    height: 11px;
+    border-radius: 999px;
+    background: linear-gradient(to right, hsl(0,70%,55%), hsl(48,80%,55%), hsl(112,58%,45%), hsl(184,70%,43%), hsl(238,62%,60%), hsl(300,62%,56%), hsl(360,70%,55%));
+  }
+
+  .hue-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 4px solid var(--primary);
+    margin-top: -7px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.24);
+  }
+
+  .swatch {
+    width: 42px;
+    height: 42px;
+    border-radius: 42% 58% 60% 40% / 42% 36% 64% 58%;
+    border: 3px solid transparent;
+    transition: transform .22s var(--spring), border-color .2s, border-radius .35s var(--spring);
+  }
+
+  .swatch:hover { transform: scale(1.06) rotate(8deg); }
+  .swatch.active { border-color: var(--on-surface); border-radius: 50%; }
+
+  .theme-preview {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .tone {
+    min-height: 72px;
+    border-radius: 20px;
+    padding: 10px;
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .tone.primary { background: var(--primary-container); color: var(--on-primary-container); }
+  .tone.secondary { background: var(--secondary-container); color: var(--on-secondary-container); }
+  .tone.tertiary { background: var(--tertiary-container); color: var(--on-tertiary-container); }
+  .tone.surface { background: var(--surface-container-high); color: var(--on-surface); }
+
+  @media (max-width: 1180px) {
+    .app { grid-template-columns: 92px minmax(0, 1fr) 300px; }
+    .brand div:last-child, .nav-btn span, .create-btn span, .sidebar-card { display: none; }
+    .sidebar { align-items: center; padding-inline: 12px; }
+    .brand { padding-inline: 0; }
+    .create-btn { width: 56px; border-radius: 22px; }
+    .nav-btn { justify-content: center; width: 56px; padding: 0; }
+    .nav-btn.active { border-radius: 50%; }
+  }
+
+  @media (max-width: 920px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100vh; grid-template-columns: 1fr; }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      min-height: auto;
+      flex-direction: row;
+      justify-content: space-between;
+      border-right: 0;
+      border-bottom: 1px solid var(--outline-soft);
+      overflow-x: auto;
+    }
+    .brand div:last-child { display: block; }
+    .nav { flex-direction: row; }
+    .nav-btn span, .create-btn span { display: none; }
+    .details { display: none; }
+    .main { height: auto; min-height: calc(100vh - 91px); }
+    .topbar { grid-template-columns: 1fr auto; }
+    .search { grid-column: 1 / -1; }
+    .hero-strip { grid-template-columns: 1fr; }
+    .file-area { overflow: visible; }
+  }
+
+  @media (max-width: 620px) {
+    .sidebar { padding: 12px; gap: 10px; }
+    .brand h1, .brand p { display: none; }
+    .topbar, .content { padding-inline: 14px; }
+    .topbar { gap: 12px; }
+    .toolbar { gap: 6px; }
+    .hero-strip { display: none; }
+    .subbar { align-items: stretch; flex-direction: column; }
+    .segmented { width: 100%; }
+    .segment { flex: 1; min-width: 0; }
+    .file-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .file-grid.list .file-card { align-items: flex-start; flex-wrap: wrap; }
+    .file-grid.list .file-meta { min-width: 0; justify-content: space-between; width: 100%; }
+    .file-name { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" aria-label="File locations">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+      </div>
+      <div>
+        <h1>Sift</h1>
+        <p>Expressive file manager</p>
+      </div>
+    </div>
+
+    <button class="create-btn" id="createBtn">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      <span>Create</span>
+    </button>
+
+    <nav class="nav">
+      <button class="nav-btn active" data-location="home"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 9-8 9 8"></path><path d="M5 10v10h14V10"></path></svg></span><span>Home</span></button>
+      <button class="nav-btn" data-location="recent"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path><path d="M12 7v5l3 2"></path></svg></span><span>Recents</span></button>
+      <button class="nav-btn" data-location="starred"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"></path></svg></span><span>Starred</span></button>
+      <button class="nav-btn" data-location="drive"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a5 5 0 0 1 9.6-2h.4a4 4 0 0 1 0 8H6a4 4 0 0 1-1-7.87"></path></svg></span><span>Drive</span></button>
+      <button class="nav-btn" data-location="trash"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="m19 6-1 14H6L5 6"></path></svg></span><span>Trash</span></button>
+    </nav>
+
+    <div class="sidebar-card">
+      <div class="storage-head"><span>Device storage</span><span>64%</span></div>
+      <div class="meter"><div class="meter-fill"></div></div>
+      <p class="storage-meta">164 GB used of 256 GB<br>Photos and videos use the most space.</p>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="title-block">
+        <div class="eyebrow" id="greeting">Good evening</div>
+        <h2 id="locationTitle">Home files</h2>
+      </div>
+
+      <label class="search">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+        <input id="searchInput" type="search" placeholder="Search files, folders, and more">
+      </label>
+
+      <div class="toolbar" aria-label="View and settings">
+        <button class="tool-btn active" id="gridBtn" title="Grid view" aria-label="Grid view">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect></svg>
+        </button>
+        <button class="tool-btn" id="listBtn" title="List view" aria-label="List view">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"></path><path d="M3 6h.01M3 12h.01M3 18h.01"></path></svg>
+        </button>
+        <button class="tool-btn" id="themeBtn" title="Theme" aria-label="Theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 0 0 18 4.5 4.5 0 0 0 0-9h-1a2 2 0 0 1 0-4h1a2.5 2.5 0 0 0 0-5"></path><circle cx="7.5" cy="10.5" r=".5"></circle><circle cx="9" cy="6.5" r=".5"></circle><circle cx="15" cy="6.5" r=".5"></circle></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="content">
+      <div class="hero-strip">
+        <div class="storage-card">
+          <div class="storage-dial">
+            <svg viewBox="0 0 76 76" aria-hidden="true">
+              <circle class="dial-track" cx="38" cy="38" r="30"></circle>
+              <circle class="dial-fill" cx="38" cy="38" r="30"></circle>
+            </svg>
+            <div class="dial-label">64%</div>
+          </div>
+          <div class="storage-copy">
+            <h3>164 GB used of 256 GB</h3>
+            <p>Large videos, duplicate images, and downloads are ready to review.</p>
+          </div>
+        </div>
+
+        <div class="quick-card">
+          <div>
+            <h3>Quick tools</h3>
+            <p>Scan, upload, or make a folder in the current location.</p>
+          </div>
+          <div class="quick-actions">
+            <button class="action-btn" title="Scan document" aria-label="Scan document"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V5a1 1 0 0 1 1-1h2"></path><path d="M17 4h2a1 1 0 0 1 1 1v2"></path><path d="M20 17v2a1 1 0 0 1-1 1h-2"></path><path d="M7 20H5a1 1 0 0 1-1-1v-2"></path><path d="M7 12h10"></path></svg></button>
+            <button class="action-btn" title="Upload" aria-label="Upload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12"></path><path d="m7 8 5-5 5 5"></path><path d="M5 21h14"></path></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="subbar">
+        <div class="crumbs">
+          <span class="crumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg> Internal storage</span>
+          <span class="crumb-sep">/</span>
+          <span class="crumb current" id="crumbCurrent">Home</span>
+        </div>
+
+        <div class="segmented" aria-label="Filter files">
+          <button class="segment active" data-filter="all">All</button>
+          <button class="segment" data-filter="folder">Folders</button>
+          <button class="segment" data-filter="media">Media</button>
+          <button class="segment" data-filter="doc">Docs</button>
+        </div>
+      </div>
+
+      <div class="file-area">
+        <div class="file-grid" id="fileGrid"></div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="details" aria-label="File details">
+    <div class="details-top">
+      <div>
+        <div class="eyebrow">Selected item</div>
+        <h2>Details</h2>
+      </div>
+      <button class="icon" id="closeDetails" title="Clear selection" aria-label="Clear selection">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+      </button>
+    </div>
+
+    <div class="preview" id="detailsPreview"></div>
+    <div class="info-list" id="detailsInfo"></div>
+
+    <div class="section-title">Activity</div>
+    <div class="activity">
+      <div class="activity-item"><span class="activity-dot"></span><p><strong>Shared</strong> with Design Team yesterday.</p></div>
+      <div class="activity-item"><span class="activity-dot"></span><p><strong>Moved</strong> from Downloads last week.</p></div>
+      <div class="activity-item"><span class="activity-dot"></span><p><strong>Synced</strong> to Drive 4 minutes ago.</p></div>
+    </div>
+  </aside>
+</div>
+
+<div class="selection-bar" id="selectionBar">
+  <span id="selectionText">1 item selected</span>
+  <div class="selection-actions">
+    <button title="Share" aria-label="Share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="m8.6 10.6 6.8-4.2M8.6 13.4l6.8 4.2"></path></svg></button>
+    <button title="Move" aria-label="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><path d="m15 13 3 3-3 3"></path><path d="M10 16h8"></path></svg></button>
+    <button title="Delete" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="m19 6-1 14H6L5 6"></path></svg></button>
+  </div>
+</div>
+
+<div class="theme-panel" id="themePanel" aria-hidden="true">
+  <div class="theme-sheet" role="dialog" aria-modal="true" aria-labelledby="themeTitle">
+    <div class="sheet-header">
+      <div>
+        <h2 id="themeTitle">Display and theme</h2>
+        <p>Use system appearance or tune the file manager with your own dynamic color.</p>
+      </div>
+      <button class="icon" id="closeTheme" aria-label="Close theme panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+      </button>
+    </div>
+
+    <div class="control-block">
+      <div class="control-label">Theme mode</div>
+      <div class="mode-row">
+        <button class="mode-btn active" data-mode="system"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8M12 16v4"></path></svg>System</button>
+        <button class="mode-btn" data-mode="light"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>Light</button>
+        <button class="mode-btn" data-mode="dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 7 7 0 1 0 20 14.5z"></path></svg>Dark</button>
+      </div>
+    </div>
+
+    <div class="control-block">
+      <div class="control-label">Dynamic color</div>
+      <input type="range" min="0" max="360" value="262" class="hue-slider" id="hueSlider" aria-label="Dynamic color hue">
+      <div class="swatch-row" id="swatchRow"></div>
+    </div>
+
+    <div class="control-block">
+      <div class="control-label">Tonal preview</div>
+      <div class="theme-preview">
+        <div class="tone primary">Primary container</div>
+        <div class="tone secondary">Secondary container</div>
+        <div class="tone tertiary">Tertiary container</div>
+        <div class="tone surface">Surface container</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const app = document.getElementById("app");
+const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+const icons = {
+  folder: { cls: "shape-blob", bg: "primary-container", fg: "on-primary-container", svg: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>' },
+  image: { cls: "shape-hex", bg: "tertiary-container", fg: "on-tertiary-container", svg: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="9" cy="10" r="1.5"></circle><path d="m21 15-5-5-4 4-2-2-5 5"></path>' },
+  video: { cls: "shape-arch", bg: "secondary-container", fg: "on-secondary-container", svg: '<rect x="2.5" y="6" width="14" height="12" rx="2"></rect><path d="m21 9-4.5 3 4.5 3z"></path>' },
+  audio: { cls: "shape-circle", bg: "primary-container", fg: "on-primary-container", svg: '<path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="17" cy="16" r="3"></circle>' },
+  doc: { cls: "shape-cookie", bg: "tertiary-container", fg: "on-tertiary-container", svg: '<path d="M6 2h9l5 5v15H6z"></path><path d="M15 2v5h5"></path><path d="M9 13h6M9 17h6"></path>' },
+  archive: { cls: "shape-diamond", bg: "secondary-container", fg: "on-secondary-container", svg: '<rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M12 4v16M9 8h1M9 12h1M9 16h1"></path>' }
+};
+
+const files = [
+  { id: 1, name: "Camera", type: "folder", location: "home", kind: "folder", size: "412 items", changed: "Today", owner: "Me" },
+  { id: 2, name: "Design_Spec_v3.pdf", type: "doc", location: "recent", kind: "doc", size: "3.2 MB", changed: "1h ago", owner: "Design Team" },
+  { id: 3, name: "Beach_Sunset.jpg", type: "image", location: "home", kind: "media", size: "5.1 MB", changed: "3h ago", owner: "Me" },
+  { id: 4, name: "Trip_Photos.zip", type: "archive", location: "recent", kind: "archive", size: "245 MB", changed: "2m ago", owner: "Me" },
+  { id: 5, name: "Screen_Recording.mp4", type: "video", location: "home", kind: "media", size: "88 MB", changed: "Yesterday", owner: "Me" },
+  { id: 6, name: "Podcast_Ep12.mp3", type: "audio", location: "home", kind: "media", size: "48 MB", changed: "Yesterday", owner: "Ari" },
+  { id: 7, name: "Project Notes", type: "folder", location: "starred", kind: "folder", size: "18 items", changed: "Jun 28", owner: "Me" },
+  { id: 8, name: "Resume_2026.pdf", type: "doc", location: "home", kind: "doc", size: "420 KB", changed: "Jun 24", owner: "Me" },
+  { id: 9, name: "Team_Offsite.jpg", type: "image", location: "drive", kind: "media", size: "4.4 MB", changed: "Synced", owner: "Drive" },
+  { id: 10, name: "Client_Call.mp3", type: "audio", location: "drive", kind: "media", size: "22 MB", changed: "Synced", owner: "Drive" },
+  { id: 11, name: "Downloads", type: "folder", location: "home", kind: "folder", size: "152 items", changed: "Today", owner: "Me" },
+  { id: 12, name: "Old archive backup", type: "archive", location: "trash", kind: "archive", size: "1.8 GB", changed: "Deleted", owner: "Me" }
+];
+
+const presets = [
+  { name: "Violet Bloom", hue: 262 },
+  { name: "Coral Ember", hue: 14 },
+  { name: "Ocean Teal", hue: 178 },
+  { name: "Citrus", hue: 44 },
+  { name: "Rose Quartz", hue: 340 },
+  { name: "Moss", hue: 104 }
+];
+
+const state = {
+  location: "home",
+  filter: "all",
+  query: "",
+  list: false,
+  selected: new Set([1]),
+  hue: Number(localStorage.getItem("sift:hue")) || 262,
+  mode: localStorage.getItem("sift:mode") || "system"
+};
+
+function hsl(h, s, l) {
+  return `hsl(${Math.round((h + 360) % 360)}, ${s}%, ${l}%)`;
+}
+
+function setVar(name, value) {
+  document.documentElement.style.setProperty(name, value);
+}
+
+function isDarkMode() {
+  return state.mode === "dark" || (state.mode === "system" && prefersDark.matches);
+}
+
+function applyTheme() {
+  const h = state.hue;
+  const dark = isDarkMode();
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
+
+  if (dark) {
+    setVar("--primary", hsl(h, 64, 78));
+    setVar("--on-primary", hsl(h, 42, 15));
+    setVar("--primary-container", hsl(h, 42, 27));
+    setVar("--on-primary-container", hsl(h, 58, 91));
+    setVar("--secondary-container", hsl(h + 28, 24, 25));
+    setVar("--on-secondary-container", hsl(h + 28, 38, 89));
+    setVar("--tertiary", hsl(h + 128, 48, 72));
+    setVar("--tertiary-container", hsl(h + 128, 34, 25));
+    setVar("--on-tertiary-container", hsl(h + 128, 44, 90));
+    setVar("--surface", hsl(h, 14, 9));
+    setVar("--surface-container", hsl(h, 12, 14));
+    setVar("--surface-container-high", hsl(h, 12, 19));
+    setVar("--on-surface", hsl(h, 15, 94));
+    setVar("--on-surface-variant", hsl(h, 10, 73));
+    setVar("--outline-soft", hsl(h, 8, 24));
+    setVar("--inverse-surface", hsl(h, 10, 92));
+    setVar("--inverse-on-surface", hsl(h, 12, 14));
+  } else {
+    setVar("--primary", hsl(h, 48, 42));
+    setVar("--on-primary", hsl(h, 60, 99));
+    setVar("--primary-container", hsl(h, 58, 88));
+    setVar("--on-primary-container", hsl(h, 45, 19));
+    setVar("--secondary-container", hsl(h + 28, 28, 88));
+    setVar("--on-secondary-container", hsl(h + 28, 20, 22));
+    setVar("--tertiary", hsl(h + 128, 36, 38));
+    setVar("--tertiary-container", hsl(h + 128, 45, 88));
+    setVar("--on-tertiary-container", hsl(h + 128, 32, 19));
+    setVar("--surface", hsl(h, 24, 98));
+    setVar("--surface-container", hsl(h, 20, 94));
+    setVar("--surface-container-high", hsl(h, 18, 90));
+    setVar("--on-surface", hsl(h, 12, 11));
+    setVar("--on-surface-variant", hsl(h, 8, 38));
+    setVar("--outline-soft", hsl(h, 10, 84));
+    setVar("--inverse-surface", hsl(h, 12, 16));
+    setVar("--inverse-on-surface", hsl(h, 20, 94));
+  }
+
+  document.getElementById("hueSlider").value = state.hue;
+  document.querySelectorAll(".swatch").forEach(swatch => {
+    swatch.classList.toggle("active", Number(swatch.dataset.hue) === state.hue);
+  });
+  document.querySelectorAll(".mode-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === state.mode);
+  });
+}
+
+function shapeMarkup(type, size = 48) {
+  const icon = icons[type];
+  return `<div class="file-shape ${icon.cls}" style="width:${size}px;height:${size}px;background:var(--${icon.bg})">
+    <svg viewBox="0 0 24 24" fill="none" stroke="var(--${icon.fg})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon.svg}</svg>
+  </div>`;
+}
+
+function visibleFiles() {
+  return files.filter(file => {
+    const locationOk = state.location === "home" ? file.location !== "trash" : file.location === state.location;
+    const filterOk = state.filter === "all" || file.kind === state.filter || (state.filter === "media" && file.kind === "media");
+    const queryOk = file.name.toLowerCase().includes(state.query.toLowerCase());
+    return locationOk && filterOk && queryOk;
+  });
+}
+
+function renderFiles() {
+  const grid = document.getElementById("fileGrid");
+  grid.classList.toggle("list", state.list);
+  const items = visibleFiles();
+  grid.innerHTML = items.map(file => `
+    <article class="file-card ${state.selected.has(file.id) ? "selected" : ""}" data-id="${file.id}" tabindex="0" aria-label="${file.name}">
+      <div class="file-top">
+        ${shapeMarkup(file.type)}
+        <button class="file-menu" aria-label="More actions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+        </button>
+      </div>
+      <div class="file-name">${file.name}</div>
+      <div class="file-meta"><span>${file.size}</span><span class="pill">${file.changed}</span></div>
+    </article>
+  `).join("");
+
+  if (!items.length) {
+    grid.innerHTML = `<div class="file-card" style="grid-column:1/-1;min-height:180px;align-items:center;justify-content:center;text-align:center">
+      ${shapeMarkup("folder", 64)}
+      <div class="file-name">No matching files</div>
+      <div class="file-meta">Try another search or filter.</div>
+    </div>`;
+  }
+
+  renderDetails();
+  renderSelection();
+}
+
+function selectedFile() {
+  const first = [...state.selected][0];
+  return files.find(file => file.id === first) || files[0];
+}
+
+function renderDetails() {
+  const file = selectedFile();
+  document.getElementById("detailsPreview").innerHTML = `
+    <div>
+      ${shapeMarkup(file.type, 78)}
+      <strong>${file.name}</strong>
+      <span>${file.size} - ${file.changed}</span>
+    </div>
+  `;
+  document.getElementById("detailsInfo").innerHTML = `
+    <div class="info-row"><span>Type</span><span>${file.type}</span></div>
+    <div class="info-row"><span>Owner</span><span>${file.owner}</span></div>
+    <div class="info-row"><span>Location</span><span>${file.location === "home" ? "Internal storage" : file.location}</span></div>
+    <div class="info-row"><span>Modified</span><span>${file.changed}</span></div>
+  `;
+}
+
+function renderSelection() {
+  const bar = document.getElementById("selectionBar");
+  const count = state.selected.size;
+  document.getElementById("selectionText").textContent = `${count} ${count === 1 ? "item" : "items"} selected`;
+  bar.classList.toggle("show", count > 0);
+}
+
+function updateLocation(name) {
+  state.location = name;
+  state.selected.clear();
+  const labels = { home: "Home files", recent: "Recent files", starred: "Starred files", drive: "Drive files", trash: "Trash" };
+  document.getElementById("locationTitle").textContent = labels[name];
+  document.getElementById("crumbCurrent").textContent = labels[name].replace(" files", "");
+  document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.location === name));
+  renderFiles();
+}
+
+function updateGreeting() {
+  const hour = new Date().getHours();
+  document.getElementById("greeting").textContent = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+}
+
+document.getElementById("fileGrid").addEventListener("click", event => {
+  const card = event.target.closest(".file-card[data-id]");
+  if (!card) return;
+  const id = Number(card.dataset.id);
+  if (event.ctrlKey || event.metaKey) {
+    state.selected.has(id) ? state.selected.delete(id) : state.selected.add(id);
+  } else {
+    state.selected.clear();
+    state.selected.add(id);
+  }
+  renderFiles();
+});
+
+document.querySelectorAll(".nav-btn").forEach(btn => {
+  btn.addEventListener("click", () => updateLocation(btn.dataset.location));
+});
+
+document.querySelectorAll(".segment").forEach(btn => {
+  btn.addEventListener("click", () => {
+    state.filter = btn.dataset.filter;
+    document.querySelectorAll(".segment").forEach(segment => segment.classList.toggle("active", segment === btn));
+    renderFiles();
+  });
+});
+
+document.getElementById("searchInput").addEventListener("input", event => {
+  state.query = event.target.value;
+  renderFiles();
+});
+
+document.getElementById("gridBtn").addEventListener("click", () => {
+  state.list = false;
+  document.getElementById("gridBtn").classList.add("active");
+  document.getElementById("listBtn").classList.remove("active");
+  renderFiles();
+});
+
+document.getElementById("listBtn").addEventListener("click", () => {
+  state.list = true;
+  document.getElementById("listBtn").classList.add("active");
+  document.getElementById("gridBtn").classList.remove("active");
+  renderFiles();
+});
+
+document.getElementById("closeDetails").addEventListener("click", () => {
+  state.selected.clear();
+  renderFiles();
+});
+
+const themePanel = document.getElementById("themePanel");
+document.getElementById("themeBtn").addEventListener("click", () => {
+  themePanel.classList.add("open");
+  themePanel.setAttribute("aria-hidden", "false");
+});
+document.getElementById("closeTheme").addEventListener("click", () => {
+  themePanel.classList.remove("open");
+  themePanel.setAttribute("aria-hidden", "true");
+});
+themePanel.addEventListener("click", event => {
+  if (event.target === themePanel) {
+    themePanel.classList.remove("open");
+    themePanel.setAttribute("aria-hidden", "true");
+  }
+});
+
+document.getElementById("hueSlider").addEventListener("input", event => {
+  state.hue = Number(event.target.value);
+  localStorage.setItem("sift:hue", state.hue);
+  applyTheme();
+});
+
+document.querySelectorAll(".mode-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    state.mode = btn.dataset.mode;
+    localStorage.setItem("sift:mode", state.mode);
+    applyTheme();
+  });
+});
+
+document.getElementById("swatchRow").innerHTML = presets.map(preset => (
+  `<button class="swatch" data-hue="${preset.hue}" title="${preset.name}" aria-label="${preset.name}" style="background:${hsl(preset.hue, 64, 58)}"></button>`
+)).join("");
+
+document.querySelectorAll(".swatch").forEach(swatch => {
+  swatch.addEventListener("click", () => {
+    state.hue = Number(swatch.dataset.hue);
+    localStorage.setItem("sift:hue", state.hue);
+    applyTheme();
+  });
+});
+
+prefersDark.addEventListener("change", () => {
+  if (state.mode === "system") applyTheme();
+});
+
+document.getElementById("createBtn").addEventListener("click", () => {
+  state.selected.clear();
+  state.selected.add(11);
+  renderFiles();
+});
+
+updateGreeting();
+applyTheme();
+renderFiles();
+</script>
+</body>
+</html>

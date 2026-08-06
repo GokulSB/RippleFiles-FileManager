@@ -1,0 +1,111 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "org.jetbrains.kotlin.plugin.compose"
+}
+
+android {
+    namespace "com.ripple.filemanager"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.ripple.filemanager"
+        minSdk 26
+        targetSdk 36
+        versionCode 16
+        versionName "1.0.15"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("../keystore.jks")
+            storePassword "password123"
+            keyAlias "upload"
+            keyPassword "password123"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    buildFeatures {
+        compose true
+        aidl true
+    }
+    packaging {
+        resources.excludes.add("META-INF/DEPENDENCIES")
+        resources.excludes.add("META-INF/LICENSE")
+        resources.excludes.add("META-INF/LICENSE.txt")
+        resources.excludes.add("META-INF/license.txt")
+        resources.excludes.add("META-INF/NOTICE")
+        resources.excludes.add("META-INF/NOTICE.txt")
+        resources.excludes.add("META-INF/notice.txt")
+        resources.excludes.add("META-INF/ASL2.0")
+        resources.excludes.add("META-INF/*.kotlin_module")
+    }
+}
+
+composeCompiler {
+    metricsDestination = layout.buildDirectory.dir("compose_metrics")
+    reportsDestination = layout.buildDirectory.dir("compose_metrics")
+}
+
+dependencies {
+    implementation platform('androidx.compose:compose-bom:2024.10.01')
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+    implementation 'org.jetbrains.kotlinx:kotlinx-collections-immutable:0.3.7'
+    implementation 'androidx.core:core-splashscreen:1.0.1'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.compose.material3:material3-window-size-class'
+    implementation 'io.coil-kt:coil-compose:2.6.0'
+    implementation 'com.google.android.gms:play-services-auth:21.0.0'
+    implementation 'com.google.api-client:google-api-client-android:1.33.0'
+    implementation('com.google.apis:google-api-services-drive:v3-rev20220815-2.0.0') {
+        exclude group: 'org.apache.httpcomponents'
+    }
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}
+dependencies {
+    implementation 'io.coil-kt:coil-video:2.6.0'
+    def media3_version = "1.5.0"
+    implementation "androidx.media3:media3-exoplayer:${media3_version}"
+    implementation "androidx.media3:media3-ui:${media3_version}"
+    implementation "androidx.media3:media3-session:${media3_version}"
+} 
+dependencies {
+    // Shizuku
+    def shizuku_version = '13.1.5'
+    implementation "dev.rikka.shizuku:api:$shizuku_version"
+    implementation "dev.rikka.shizuku:provider:$shizuku_version"
+    
+    // libsu
+    def libsu_version = '6.0.0'
+    implementation "com.github.topjohnwu.libsu:core:$libsu_version"
+    implementation "com.github.topjohnwu.libsu:io:$libsu_version"
+    
+    implementation "androidx.documentfile:documentfile:1.0.1"
+}
+dependencies {
+    implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
+    implementation 'org.apache.poi:poi-ooxml:5.2.3'
+}

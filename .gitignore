@@ -1,0 +1,12 @@
+/*.py
+/*.jar
+/*.zip
+/*.png
+/*.html
+/*.java
+/*.kt
+/.idea/
+/gradle-cache-test/
+/mega-temp-java/
+android/gradle-8.*/
+android/gradle*.zip
