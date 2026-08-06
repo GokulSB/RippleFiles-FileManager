@@ -1,6 +1,6 @@
-# Sift: Expressive File Manager
+# RippleFiles-File Manager
 
-Sift is a beautifully designed, expressive file manager for Android, built with modern Kotlin and Jetpack Compose. It features a unique, customizable design language called "Skyline Ledger" that combines hard-edged geometric shapes with elegant typography and fluid micro-animations.
+RippleFiles is a beautifully designed, expressive file manager for Android, built with modern Kotlin and Jetpack Compose. It features a unique, customizable design language called "Skyline Ledger" that combines hard-edged geometric shapes with elegant typography and fluid micro-animations.
 
 ## Features
 - **Local & Cloud Storage**: Seamlessly browse local files alongside Google Drive, Dropbox, and MEGA.
