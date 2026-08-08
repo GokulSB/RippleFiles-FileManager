@@ -43,6 +43,7 @@ data class FileItem(
     val changed: String,
     val owner: String,
     val isPinned: Boolean = false,
+    val isLocked: Boolean = false,
     val isEmptyFolder: Boolean = false,
     val sizeBytes: Long = 0,
     val lastModified: Long = 0,
@@ -216,6 +217,25 @@ class FileRepository(private val context: Context) {
         prefs.edit().putStringSet("pinned_files", current).apply()
     }
 
+    fun getLockedFiles(): Set<String> = prefs.getStringSet("locked_files", emptySet()) ?: emptySet()
+    
+    fun setLocked(path: String, locked: Boolean) {
+        val current = getLockedFiles().toMutableSet()
+        if (locked) current.add(path) else current.remove(path)
+        prefs.edit().putStringSet("locked_files", current).apply()
+    }
+    
+    fun getGlobalPasswordHash(): String = prefs.getString("lock_password_hash", null) ?: hashPassword("0000")
+    fun setGlobalPasswordHash(hash: String?) = prefs.edit().putString("lock_password_hash", hash).apply()
+    fun isBiometricEnabled(): Boolean = prefs.getBoolean("lock_biometric_enabled", false)
+    fun setBiometricEnabled(enabled: Boolean) = prefs.edit().putBoolean("lock_biometric_enabled", enabled).apply()
+    
+    fun hashPassword(password: String): String {
+        val bytes = java.security.MessageDigest.getInstance("SHA-256").digest(password.toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+
     fun logRecentAction(path: String, action: String) {
         if (!path.startsWith("/")) return
         try {
@@ -246,7 +266,7 @@ class FileRepository(private val context: Context) {
     }
 
     suspend fun createFolder(parentPath: String, name: String): Boolean = withContext(Dispatchers.IO) {
-        if (parentPath == "recent" || parentPath == "starred") return@withContext false
+        if (parentPath == "recent" || parentPath == "pinned") return@withContext false
         if (parentPath.startsWith("drive_id:") || parentPath == "drive") {
             if (driveService == null) return@withContext false
             return@withContext try {
@@ -274,7 +294,7 @@ class FileRepository(private val context: Context) {
     }
 
     suspend fun createFile(parentPath: String, name: String): Boolean = withContext(Dispatchers.IO) {
-        if (parentPath == "recent" || parentPath == "starred") return@withContext false
+        if (parentPath == "recent" || parentPath == "pinned") return@withContext false
         if (parentPath.startsWith("drive_id:") || parentPath == "drive") {
             if (driveService == null) return@withContext false
             return@withContext try {
@@ -306,6 +326,7 @@ class FileRepository(private val context: Context) {
 
     suspend fun getFiles(location: String): List<FileItem> = withContext(Dispatchers.IO) {
         val pinned = getPinnedFiles()
+        val locked = getLockedFiles()
         
         if (location == "drive" || location.startsWith("drive_id:")) {
             if (driveService != null) {
@@ -315,7 +336,7 @@ class FileRepository(private val context: Context) {
             }
         }
         
-        val files = if (location == "starred") {
+        val files = if (location == "pinned") {
             pinned.mapNotNull { path ->
                 if (path.startsWith("drive_id:")) null else {
                     val f = File(path)
@@ -414,6 +435,7 @@ class FileRepository(private val context: Context) {
                             changed = timeStr,
                             owner = "Me",
                             isPinned = pinned.contains(path),
+                            isLocked = locked.contains(path),
                             isEmptyFolder = false,
                             sizeBytes = 0,
                             lastModified = timestamp,
@@ -450,6 +472,15 @@ class FileRepository(private val context: Context) {
                 "archive" -> "archive"
                 "doc" -> "doc"
                 else -> "file"
+            }
+
+            var actualSizeBytes = file.length()
+            if (isFolder) {
+                try {
+                    var sum = 0L
+                    file.walkTopDown().onEnter { !it.isHidden && it.name != "Android" }.filter { it.isFile }.take(5000).forEach { sum += it.length() }
+                    if (sum > 0) actualSizeBytes = sum
+                } catch(e: Exception) {}
             }
 
             val count = if (isFolder) {
@@ -494,8 +525,9 @@ class FileRepository(private val context: Context) {
                     changed = changedStr,
                     owner = "Me",
                     isPinned = pinned.contains(file.absolutePath),
+                    isLocked = locked.contains(file.absolutePath),
                     isEmptyFolder = isFolder && count == 0,
-                    sizeBytes = file.length(),
+                    sizeBytes = actualSizeBytes,
                     lastModified = file.lastModified(),
                     duration = durationStr
                 )
@@ -919,6 +951,7 @@ class FileRepository(private val context: Context) {
         }
     }
     private suspend fun fetchDriveFiles(pinned: Set<String>, location: String): List<FileItem> = withContext(Dispatchers.IO) {
+        val locked = getLockedFiles()
         val query = if (location == "drive") {
             "trashed = false and 'root' in parents"
         } else {
@@ -985,6 +1018,7 @@ class FileRepository(private val context: Context) {
                         changed = changedStr,
                         owner = file.owners?.firstOrNull()?.displayName ?: "Me",
                         isPinned = pinned.contains("drive_id:${file.id}"),
+                        isLocked = locked.contains("drive_id:${file.id}"),
                         isEmptyFolder = isFolder,
                         sizeBytes = file.getSize()?.toLong() ?: 0L,
                         lastModified = file.modifiedTime?.value ?: 0L,
@@ -1080,6 +1114,7 @@ class FileRepository(private val context: Context) {
         val appExts = setOf("apk", "xapk", "aab")
         
         val pinned = getPinnedFiles()
+        val locked = getLockedFiles()
         var idCounter = 100000
 
         try {
@@ -1104,6 +1139,7 @@ class FileRepository(private val context: Context) {
                                 changed = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(modified)),
                                 owner = "Me",
                                 isPinned = pinned.contains(file.absolutePath),
+                                isLocked = locked.contains(file.absolutePath),
                                 isEmptyFolder = true,
                                 sizeBytes = 0L,
                                 lastModified = modified
@@ -1137,6 +1173,7 @@ class FileRepository(private val context: Context) {
                         changed = changedStr,
                         owner = "Me",
                         isPinned = pinned.contains(file.absolutePath),
+                        isLocked = locked.contains(file.absolutePath),
                         isEmptyFolder = false,
                         sizeBytes = size,
                         lastModified = modified,

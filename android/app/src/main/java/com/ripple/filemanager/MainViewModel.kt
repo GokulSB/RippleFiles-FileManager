@@ -89,6 +89,12 @@ data class AppState(
     val gridColumns: Int = 2,
     val cornerRoundness: Float = 0.5f,
     val showCleanerScreen: Boolean = false,
+    val authRequestReason: AuthReason? = null,
+    val authRequestPath: String? = null,
+    val authRequestFileId: Int? = null,
+    val authRequestFolderName: String? = null,
+    val authErrorMessage: String? = null,
+    val securitySettingsErrorMessage: String? = null,
     val showTrashScreen: Boolean = false,
     val trashFiles: ImmutableList<FileItem> = persistentListOf(),
     val trashIsLoading: Boolean = false,
@@ -1057,6 +1063,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         repository.moveFiles(paths, destLocation, onProgress, checkPause)
                     }
                     
+                    // Force the progress to 100% and hold it briefly so the UI animation has time to play
+                    _state.update { it.copy(hasShizuku = repository.hasShizuku(), pasteProgress = 1f) }
+                    kotlinx.coroutines.delay(600)
+                    
                     _state.update { it.copy(hasShizuku = repository.hasShizuku(), isLoading = false, isPasteComplete = true, pasteProgress = null, pasteLoadingCount = paths.size) }
                     
                     kotlinx.coroutines.delay(2000)
@@ -1327,6 +1337,79 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(showFullScreenPlayer = show, hasShizuku = repository.hasShizuku()) }
     }
     
+    fun requestAuth(reason: AuthReason, path: String, fileId: Int?, folderName: String?) {
+        _state.update { 
+            it.copy(
+                authRequestReason = reason, 
+                authRequestPath = path, 
+                authRequestFileId = fileId, 
+                authRequestFolderName = folderName 
+            ) 
+        }
+    }
+
+    fun cancelAuth() {
+        _state.update { 
+            it.copy(
+                authRequestReason = null, 
+                authRequestPath = null, 
+                authRequestFileId = null, 
+                authRequestFolderName = null,
+                authErrorMessage = null
+            ) 
+        }
+    }
+
+    fun authSuccess(reason: AuthReason, path: String, fileId: Int?, folderName: String?, password: String?) {
+        viewModelScope.launch {
+            if (password != null) {
+                val currentHash = repository.getGlobalPasswordHash()
+                if (currentHash != repository.hashPassword(password)) {
+                    _state.value = _state.value.copy(authErrorMessage = "Wrong password, try again or reset from settings")
+                    return@launch
+                }
+            }
+            
+            when (reason) {
+                AuthReason.LOCK_FILE -> {
+                    repository.setLocked(path, true)
+                    loadFiles(_state.value.location)
+                    _snackbarMessage.emit("Item locked successfully")
+                }
+                AuthReason.UNLOCK_FILE -> {
+                    repository.setLocked(path, false)
+                    loadFiles(_state.value.location)
+                    _snackbarMessage.emit("Item unlocked successfully")
+                }
+                AuthReason.OPEN_FILE -> {
+                    if (fileId != null) {
+                        openFileViewer(fileId)
+                    } else if (folderName != null) {
+                        setLocation(path, folderName)
+                    }
+                }
+            }
+            cancelAuth()
+        }
+    }
+
+    fun updateGlobalPassword(oldPassword: String, newPassword: String) {
+        viewModelScope.launch {
+            val currentHash = repository.getGlobalPasswordHash()
+            if (currentHash == repository.hashPassword(oldPassword)) {
+                repository.setGlobalPasswordHash(repository.hashPassword(newPassword))
+                _state.value = _state.value.copy(securitySettingsErrorMessage = null)
+                _snackbarMessage.emit("Password updated successfully")
+            } else {
+                _state.value = _state.value.copy(securitySettingsErrorMessage = "Old password is wrong")
+            }
+        }
+    }
+
+    fun setBiometricEnabled(enabled: Boolean) {
+        repository.setBiometricEnabled(enabled)
+    }
+
     override fun onCleared() {
         super.onCleared()
         musicJob?.cancel()

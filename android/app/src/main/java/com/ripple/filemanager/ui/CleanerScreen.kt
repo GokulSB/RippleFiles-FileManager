@@ -15,7 +15,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.Description
@@ -91,7 +94,7 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                         },
                         actions = {
                             if (state.currentCleanerCategory != null) {
-                                TextButton(onClick = {
+                                IconButton(onClick = {
                                     val catData = when (state.currentCleanerCategory) {
                                         "Documents" -> data.documents
                                         "Images" -> data.images
@@ -104,10 +107,10 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                                     }
                                     if (catData != null) onAction(AppAction.SelectAllCleanerFiles(catData.files.map { it.id }))
                                 }) {
-                                    Text("Select All")
+                                    Icon(Icons.Default.SelectAll, contentDescription = "Select All")
                                 }
-                                TextButton(onClick = { onAction(AppAction.ClearCleanerSelection) }) {
-                                    Text("Select None")
+                                IconButton(onClick = { onAction(AppAction.ClearCleanerSelection) }) {
+                                    Icon(Icons.Default.Deselect, contentDescription = "Select None")
                                 }
                             }
                         },
@@ -120,7 +123,7 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                 bottomBar = {
                     if (state.currentCleanerCategory != null && state.cleanerSelectedFiles.isNotEmpty()) {
                         Surface(
-                            color = MaterialTheme.colorScheme.errorContainer,
+                            color = MaterialTheme.colorScheme.surface,
                             modifier = Modifier.fillMaxWidth().height(64.dp)
                         ) {
                             Row(
@@ -128,14 +131,15 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("${state.cleanerSelectedFiles.size} selected", color = MaterialTheme.colorScheme.onErrorContainer)
+                                Text("${state.cleanerSelectedFiles.size} selected", color = MaterialTheme.colorScheme.onSurface)
                                 Button(
                                     onClick = { onAction(AppAction.DeleteSelectedCleanerFiles) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                    shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
+                                    colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
                                 ) {
-                                    Icon(Icons.Default.Delete, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Delete")
+                                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    com.ripple.filemanager.ui.MonoLabel("DELETE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
                                 }
                             }
                         }
@@ -233,7 +237,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                             fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
                             fontSize = 11.sp,
                             letterSpacing = 2.sp,
-                            color = Color(0xFF8A6A44),
+                            color = com.ripple.filemanager.ui.theme.SkylineColors.AmberDim,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         Row(verticalAlignment = Alignment.Bottom) {
@@ -249,7 +253,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                                 text = "used of ${formatSize(data.totalStorageBytes)}",
                                 fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
                                 fontSize = 16.sp,
-                                color = Color(0xFF8A7A63),
+                                color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
@@ -310,14 +314,14 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                                             text = cat.first,
                                             fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
                                             fontSize = 12.sp,
-                                            color = Color(0xFFD9C9AE),
+                                            color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary2,
                                             modifier = Modifier.weight(1f)
                                         )
                                         Text(
                                             text = formatSize(cat.second),
                                             fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
                                             fontSize = 12.sp,
-                                            color = Color(0xFF8A7A63),
+                                            color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim,
                                             maxLines = 2
                                         )
                                     }
@@ -336,7 +340,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .border(1.dp, Color(0xFF3A2C1C))
+                            .border(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border)
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -382,7 +386,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                             text = "MANAGE",
                             fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF161009),
+                            color = com.ripple.filemanager.ui.theme.SkylineColors.Background,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
                     }
@@ -398,7 +402,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                 fontSize = 11.sp,
                 letterSpacing = 2.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF8A6A44),
+                color = com.ripple.filemanager.ui.theme.SkylineColors.AmberDim,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
         }
@@ -427,7 +431,7 @@ fun StorageBreakdownCard(title: String, sizeBytes: Long, totalUsedBytes: Long, i
     Surface(
         shape = getDynamicCornerShape(0f, cornerRoundness),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, Color(0xFF3A2C1C)),
+        border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().aspectRatio(1f)
     ) {
@@ -455,7 +459,7 @@ fun StorageBreakdownCard(title: String, sizeBytes: Long, totalUsedBytes: Long, i
                     text = title,
                     fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFF0E4D0),
+                    color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary,
                     fontSize = 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -463,7 +467,7 @@ fun StorageBreakdownCard(title: String, sizeBytes: Long, totalUsedBytes: Long, i
                 Text(
                     text = formatSize(sizeBytes),
                     fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
-                    color = Color(0xFFD9C9AE),
+                    color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary2,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 4.dp)
                 )
@@ -471,7 +475,7 @@ fun StorageBreakdownCard(title: String, sizeBytes: Long, totalUsedBytes: Long, i
                 Text(
                     text = "$pct%",
                     fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
-                    color = Color(0xFF8A7A63),
+                    color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim,
                     fontSize = 10.sp,
                     modifier = Modifier.padding(top = 2.dp)
                 )

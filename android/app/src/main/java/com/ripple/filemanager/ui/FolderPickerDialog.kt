@@ -25,7 +25,8 @@ import java.io.File
 fun FolderPickerDialog(
     initialPath: String = android.os.Environment.getExternalStorageDirectory().path,
     onDismiss: () -> Unit,
-    onFolderSelected: (String) -> Unit
+    onFolderSelected: (String) -> Unit,
+    cornerRoundness: Float = 0.5f
 ) {
     val context = LocalContext.current
     var currentPath by remember { mutableStateOf(initialPath) }
@@ -61,10 +62,10 @@ fun FolderPickerDialog(
                             loadFolders(parent)
                         }
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                     }
                 }
-                Text("Select Location", style = MaterialTheme.typography.titleLarge)
+                com.ripple.filemanager.ui.MonoLabel("SELECT LOCATION", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 16)
             }
         },
         text = {
@@ -97,13 +98,15 @@ fun FolderPickerDialog(
         },
         confirmButton = {
             TextButton(onClick = { onFolderSelected(currentPath) }) {
-                Text("Extract")
+                Text("EXTRACT", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
             }
-        }
+        },
+        containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+        shape = getDynamicCornerShape(12f, cornerRoundness)
     )
 }

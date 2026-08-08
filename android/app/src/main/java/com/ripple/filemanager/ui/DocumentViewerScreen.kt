@@ -53,7 +53,8 @@ import java.io.File
 fun DocumentViewerScreen(
     fileItem: FileItem,
     onClose: () -> Unit,
-    onAction: (AppAction) -> Unit
+    onAction: (AppAction) -> Unit,
+    cornerRoundness: Float = 0.5f
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()

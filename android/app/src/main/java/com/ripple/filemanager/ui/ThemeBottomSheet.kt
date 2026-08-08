@@ -16,6 +16,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -59,8 +65,9 @@ fun ThemeSettingsContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .border(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border, com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
                     .clip(com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -75,8 +82,9 @@ fun ThemeSettingsContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .border(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border, com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
                     .clip(com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -102,8 +110,8 @@ fun ThemeSettingsContent(
                     valueRange = 0f..360f,
                     enabled = !useDynamicTheme,
                     colors = SliderDefaults.colors(
-                        thumbColor = if (useDynamicTheme) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
-                        activeTrackColor = if (useDynamicTheme) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary
+                        thumbColor = if (useDynamicTheme) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else hsl(currentHue, 65f, 66f),
+                        activeTrackColor = if (useDynamicTheme) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else hsl(currentHue, 65f, 66f)
                     )
                 )
                 Row(
@@ -112,7 +120,7 @@ fun ThemeSettingsContent(
                 ) {
                     val presets = listOf(262f, 14f, 178f, 44f, 340f, 104f)
                     presets.forEach { hue ->
-                        val color = hsl(hue, 64f, 58f)
+                        val color = hsl(hue, 65f, 66f)
                         val isActive = kotlin.math.abs(currentHue - hue) < 1f
                         Box(
                             modifier = Modifier
@@ -126,46 +134,14 @@ fun ThemeSettingsContent(
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text("Icon shape", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    IconShapeType.values().forEach { shapeType ->
-                        val isActive = currentIconShape == shapeType
-                        val bgColor = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                        val shapeObj = getCustomShape(shapeType)
-                        
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(bgColor, shapeObj)
-                                .border(1.dp, if (isActive) Color.Transparent else MaterialTheme.colorScheme.outline, shapeObj)
-                                .clip(shapeObj)
-                                .clickable { onIconShapeChange(shapeType) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (shapeType == IconShapeType.SYSTEM) {
-                                Text("Auto", style = MaterialTheme.typography.labelSmall, color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-            }
+
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .border(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border, com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
                     .clip(com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -261,10 +237,110 @@ fun ThemeSettingsContent(
                         steps = 0
                     )
                 }
-
             }
         }
     }
+
+@Composable
+fun SecuritySettingsContent(
+    cornerRoundness: Float,
+    errorMessage: String?,
+    onUpdatePassword: (String, String) -> Unit,
+    onSetBiometric: (Boolean) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = context.getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE)
+    
+    // We want the current state to reflect the UI
+    var oldPassword by remember { mutableStateOf("") }
+    var currentPassword by remember { mutableStateOf("") }
+    var biometricEnabled by remember { mutableStateOf(prefs.getBoolean("lock_biometric_enabled", false)) }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border, com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
+                .clip(com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Global Password", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+            Text("Used for locking and unlocking items. Default is 0000.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            
+            if (errorMessage != null) {
+                Text(text = errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+
+            OutlinedTextField(
+                value = oldPassword,
+                onValueChange = { oldPassword = it },
+                label = { Text("Old Password") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+            )
+            
+            OutlinedTextField(
+                value = currentPassword,
+                onValueChange = { currentPassword = it },
+                label = { Text("Set New Password") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+            )
+            androidx.compose.material3.Button(
+                onClick = { 
+                    if (currentPassword.isNotEmpty() && oldPassword.isNotEmpty()) {
+                        onUpdatePassword(oldPassword, currentPassword)
+                        oldPassword = ""
+                        currentPassword = ""
+                    } else {
+                        android.widget.Toast.makeText(context, "Please enter both old and new passwords.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
+                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+            ) {
+                com.ripple.filemanager.ui.MonoLabel("UPDATE PASSWORD", color = com.ripple.filemanager.ui.theme.SkylineColors.Surface)
+            }
+        }
+        
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border, com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
+                .clip(com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Biometrics", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable { 
+                    biometricEnabled = !biometricEnabled 
+                    onSetBiometric(biometricEnabled)
+                }
+            ) {
+                androidx.compose.material3.Checkbox(
+                    checked = biometricEnabled,
+                    onCheckedChange = { 
+                        biometricEnabled = it 
+                        onSetBiometric(it)
+                    }
+                )
+                Text("Enable Fingerprint Access", color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
+            }
+        }
+    }
+}
 
 @Composable
 fun ModeButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isActive: Boolean, cornerRoundness: Float, onClick: () -> Unit) {

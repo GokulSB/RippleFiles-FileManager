@@ -1,6 +1,8 @@
 package com.ripple.filemanager.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
@@ -29,12 +31,29 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripple.filemanager.ui.theme.SkylineColors
+import com.ripple.filemanager.ui.theme.JetBrainsMonoFamily
+import com.ripple.filemanager.ui.theme.ManropeFontFamily
+import com.ripple.filemanager.AppAction
+import com.ripple.filemanager.AppState
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.draw.rotate
 
-data class BottomNavItem(val id: String, val icon: ImageVector, val label: String)
+data class BottomNavItem(val id: String, val activeIcon: ImageVector, val inactiveIcon: ImageVector, val label: String)
 
 @Composable
 fun BottomNavBar(
@@ -45,63 +64,35 @@ fun BottomNavBar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val navShape = getDynamicCornerShape(32f, cornerRoundness)
-    var tabOffsets by remember { mutableStateOf(persistentMapOf<String, Float>()) }
-
-    Box(
+    val navShape = com.ripple.filemanager.ui.getDynamicCornerShape(32f, cornerRoundness)
+    
+    Row(
         modifier = modifier
+            .height(54.dp)
+            .border(1.dp, SkylineColors.Amber.copy(alpha = 0.5f), navShape)
             .clip(navShape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, SkylineColors.Border, navShape)
-            .padding(horizontal = 6.dp, vertical = 6.dp)
+            .background(Color.Transparent)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        val selectedOffset = tabOffsets[selectedId]
-        val markerOffset = remember { Animatable(0f) }
-
-        LaunchedEffect(selectedOffset) {
-            if (selectedOffset != null) {
-                if (markerOffset.targetValue == 0f && markerOffset.value == 0f) {
-                    markerOffset.snapTo(selectedOffset)
-                } else {
-                    markerOffset.animateTo(
-                        targetValue = selectedOffset,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow
-                        )
-                    )
-                }
-            }
-        }
-
-        // Rail Slide Marker (Background Highlight)
-        if (selectedOffset != null) {
-            Box(
-                modifier = Modifier
-                    .offset { IntOffset(markerOffset.value.roundToInt(), 0) }
-                    .width(64.dp) // Fixed width for the marker, roughly tab size
-                    .matchParentSize()
-                    .clip(navShape)
-                    .background(SkylineColors.Amber.copy(alpha = 0.14f))
+        items.forEachIndexed { index, item ->
+            NavTab(
+                item = item,
+                isActive = item.id == selectedId,
+                tapCount = tapCounters[item.id] ?: 0,
+                cornerRoundness = cornerRoundness,
+                onSelect = { onSelect(item.id) },
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            items.forEach { item ->
-                NavTab(
-                    item = item,
-                    isActive = item.id == selectedId,
-                    tapCount = tapCounters[item.id] ?: 0,
-                    navShape = navShape,
-                    onSelect = { onSelect(item.id) },
-                    onPositioned = { x ->
-                        if (tabOffsets[item.id] != x) {
-                            tabOffsets = tabOffsets.put(item.id, x)
-                        }
-                    }
+            
+            // Vertical Divider
+            if (index < items.size - 1) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(32.dp)
+                        .background(SkylineColors.Border)
                 )
             }
         }
@@ -113,122 +104,321 @@ private fun NavTab(
     item: BottomNavItem,
     isActive: Boolean,
     tapCount: Int,
-    navShape: Shape,
+    cornerRoundness: Float,
     onSelect: () -> Unit,
-    onPositioned: (Float) -> Unit
+    modifier: Modifier = Modifier
 ) {
     val iconTint by animateColorAsState(
-        targetValue = if (isActive) SkylineColors.Amber else SkylineColors.TextDim,
-        animationSpec = tween(200),
+        targetValue = if (isActive) SkylineColors.Background else SkylineColors.Amber.copy(alpha = 0.6f),
+        animationSpec = tween(250, easing = FastOutSlowInEasing),
         label = "navTint_${item.id}"
     )
-
-    // Icon Lift & Scale on Activate
-    val transition = updateTransition(targetState = isActive, label = "tabTransition_${item.id}")
     
-    val iconOffsetY by transition.animateFloat(
-        transitionSpec = {
-            if (targetState) {
-                keyframes {
-                    durationMillis = 480
-                    0f at 0
-                    -8f at 192 // 40% overshoot
-                    -6f at 480 with FastOutSlowInEasing // 100% settle
-                }
-            } else {
-                tween(200)
-            }
-        },
-        label = "iconOffsetY_${item.id}"
-    ) { active ->
-        if (active) -6f else 0f
-    }
-    
-    val iconScale by transition.animateFloat(
-        transitionSpec = {
-            if (targetState) {
-                keyframes {
-                    durationMillis = 480
-                    1f at 0
-                    1.20f at 192
-                    1.12f at 480 with FastOutSlowInEasing
-                }
-            } else {
-                tween(200)
-            }
-        },
-        label = "iconScale_${item.id}"
-    ) { active ->
-        if (active) 1.12f else 1f
-    }
+    val bgTint by animateColorAsState(
+        targetValue = if (isActive) SkylineColors.Amber else Color.Transparent,
+        animationSpec = tween(250, easing = FastOutSlowInEasing),
+        label = "bgTint_${item.id}"
+    )
 
     Box(
-        modifier = Modifier
-            .width(64.dp)
-            .height(48.dp) // Fixed height to accommodate icon + revealed text
-            .clip(navShape)
+        modifier = modifier
+            .clip(com.ripple.filemanager.ui.getDynamicCornerShape(24f, cornerRoundness))
+            .background(bgTint)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onSelect
-            )
-            .onGloballyPositioned { layoutCoordinates ->
-                onPositioned(layoutCoordinates.positionInParent().x)
-            },
+            ),
         contentAlignment = Alignment.Center
     ) {
-        // Ripple Pulse (One-shot)
-        val rippleRadius = remember { Animatable(6f) }
-        val rippleAlpha = remember { Animatable(0f) }
-        
-        LaunchedEffect(tapCount) {
-            if (tapCount > 0) {
-                rippleRadius.snapTo(6f)
-                rippleAlpha.snapTo(0.55f)
-                launch {
-                    rippleRadius.animateTo(24f, animationSpec = tween(650, easing = EaseOut))
-                }
-                launch {
-                    rippleAlpha.animateTo(0f, animationSpec = tween(650, easing = EaseOut))
+        // Icon
+        Icon(
+            imageVector = if (isActive) item.activeIcon else item.inactiveIcon,
+            contentDescription = item.label,
+            tint = iconTint,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
+fun UnifiedBottomPill(
+    state: AppState,
+    onAction: (AppAction) -> Unit,
+    capturedTargetFolderName: String?,
+    onCaptureTargetFolder: (String?) -> Unit,
+    selectionModeContent: @Composable () -> Unit,
+    rippleNavContent: @Composable () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bottomState = when {
+        state.pasteProgress != null -> 0
+        state.isSelectionMode -> 1
+        state.clipboardPaths.isNotEmpty() -> 2
+        else -> 3
+    }
+    
+    AnimatedContent(
+        targetState = bottomState,
+        transitionSpec = { fadeIn() togetherWith fadeOut() },
+        label = "unified_pill"
+    ) { target ->
+        when (target) {
+            0 -> PastingStatePill(state, onAction, capturedTargetFolderName, modifier)
+            1 -> selectionModeContent()
+            2 -> ClipboardArmedPill(state, onAction, onCaptureTargetFolder, modifier)
+            3 -> rippleNavContent()
+        }
+    }
+}
+
+@Composable
+fun ClipboardArmedPill(
+    state: AppState,
+    onAction: (AppAction) -> Unit,
+    onCaptureTargetFolder: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var filesExpanded by remember { mutableStateOf(false) }
+    
+    val fileCount = state.clipboardPaths.size
+    val fileNames = state.clipboardPaths.map { it.substringAfterLast("/") }
+    
+    val cornerRadius by animateDpAsState(
+        targetValue = if (filesExpanded) 20.dp else 999.dp,
+        animationSpec = tween(180),
+        label = "pill_corner"
+    )
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (filesExpanded) 180f else 0f,
+        animationSpec = tween(180),
+        label = "chevron_rot"
+    )
+    
+    Column(
+        modifier = modifier
+            .border(1.dp, SkylineColors.Border, RoundedCornerShape(cornerRadius))
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(SkylineColors.Surface)
+            .animateContentSize()
+    ) {
+        if (filesExpanded) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 190.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(fileNames) { name ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, SkylineColors.Border, RoundedCornerShape(8.dp))
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Folder, contentDescription = null, tint = SkylineColors.TextDim, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = name,
+                            fontFamily = ManropeFontFamily,
+                            fontSize = 12.5.sp,
+                            color = SkylineColors.TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
-
-        if (rippleAlpha.value > 0f) {
-            Canvas(modifier = Modifier.matchParentSize()) {
-                drawCircle(
-                    color = SkylineColors.Amber.copy(alpha = rippleAlpha.value),
-                    radius = rippleRadius.value.dp.toPx(),
-                    center = center.copy(y = center.y + iconOffsetY.dp.toPx()) // Follow icon position
+        
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (state.clipboardAction == "cut") Icons.Outlined.ContentCut else Icons.Outlined.ContentCopy,
+                contentDescription = null,
+                tint = SkylineColors.Amber,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(
+                modifier = Modifier.weight(1f).clickable { filesExpanded = !filesExpanded }
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "$fileCount ITEMS READY",
+                        fontFamily = JetBrainsMonoFamily,
+                        fontSize = 11.sp,
+                        letterSpacing = 0.5.sp,
+                        color = SkylineColors.TextPrimary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = SkylineColors.TextDim,
+                        modifier = Modifier.size(13.dp).rotate(chevronRotation)
+                    )
+                }
+                Text(
+                    text = if (state.clipboardAction == "cut") "WILL MOVE" else "WILL COPY",
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 9.sp,
+                    color = SkylineColors.TextDim2
+                )
+            }
+            TextButton(
+                onClick = { onAction(AppAction.ClearClipboard) },
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = "CANCEL",
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 10.sp,
+                    color = SkylineColors.TextDim
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(SkylineColors.Amber)
+                    .clickable { 
+                        // Target location is current viewing location
+                        onCaptureTargetFolder(state.currentFolderName ?: "Current Folder")
+                        onAction(AppAction.PasteClipboard(state.location)) 
+                    }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.ContentPaste, contentDescription = null, tint = SkylineColors.Background, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "PASTE HERE",
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SkylineColors.Background
                 )
             }
         }
+    }
+}
 
-        // Icon
-        Icon(
-            imageVector = item.icon,
-            contentDescription = item.label,
-            tint = iconTint,
+@Composable
+fun PastingStatePill(
+    state: AppState,
+    onAction: (AppAction) -> Unit,
+    capturedTargetFolderName: String?,
+    modifier: Modifier = Modifier
+) {
+    val fileCount = state.clipboardPaths.size
+    val fileNames = state.clipboardPaths.map { it.substringAfterLast("/") }
+    val progress = state.pasteProgress ?: 0f
+    val currentFileIndex = (progress * fileCount).toInt().coerceIn(0, (fileCount - 1).coerceAtLeast(0))
+    val currentFileName = fileNames.getOrNull(currentFileIndex) ?: ""
+    val targetName = capturedTargetFolderName ?: state.currentFolderName ?: "Folder"
+    
+    Column(
+        modifier = modifier
+            .border(1.dp, SkylineColors.Border, RoundedCornerShape(999.dp))
+            .clip(RoundedCornerShape(999.dp))
+            .background(SkylineColors.Surface)
+    ) {
+        Row(
             modifier = Modifier
-                .offset { IntOffset(0, iconOffsetY.roundToInt()) }
-                .size((20 * iconScale).dp) // Scale the icon manually since Modifier.scale might affect rendering
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (state.clipboardAction == "cut") Icons.Outlined.ContentCut else Icons.Outlined.ContentCopy,
+                contentDescription = null,
+                tint = SkylineColors.Amber,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                val statusText = if (state.isPastePaused) "PAUSED" else if (state.clipboardAction == "cut") "MOVING" else "COPYING"
+                Text(
+                    text = "$statusText · $currentFileName",
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 10.5.sp,
+                    color = SkylineColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "INTO $targetName",
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 9.sp,
+                    color = SkylineColors.TextDim2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "${(progress * 100).roundToInt()}%",
+                fontFamily = JetBrainsMonoFamily,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = SkylineColors.Amber
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .border(1.dp, SkylineColors.Border, RoundedCornerShape(999.dp))
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable { onAction(AppAction.TogglePastePause) },
+                contentAlignment = Alignment.Center
+            ) {
+                val iconTint = if (state.isPastePaused) SkylineColors.Dust else SkylineColors.TextDim
+                Icon(
+                    imageVector = if (state.isPastePaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Cancel",
+                tint = SkylineColors.TextDim2,
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable { onAction(AppAction.CancelPaste) }
+            )
+        }
+        
+        val animatedProgress by animateFloatAsState(
+            targetValue = progress,
+            animationSpec = tween(120, easing = LinearEasing),
+            label = "paste_prog"
         )
         
-        // Label Reveal
-        AnimatedVisibility(
-            visible = isActive,
-            enter = fadeIn(tween(320, delayMillis = 80)) + slideInVertically(
-                animationSpec = tween(320, delayMillis = 80),
-                initialOffsetY = { it / 4 }
-            ),
-            exit = fadeOut(tween(100)), // Fast fade out when inactive
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 10.dp)
+                .height(5.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(SkylineColors.Surface2)
         ) {
-            Text(
-                text = item.label,
-                color = SkylineColors.Amber,
-                fontFamily = MaterialTheme.typography.labelSmall.fontFamily,
-                fontSize = 10.sp
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animatedProgress)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (state.isPastePaused) SkylineColors.TextDim2 else SkylineColors.Amber)
             )
         }
     }

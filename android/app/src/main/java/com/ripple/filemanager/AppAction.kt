@@ -1,5 +1,7 @@
 package com.ripple.filemanager
 
+enum class AuthReason { OPEN_FILE, LOCK_FILE, UNLOCK_FILE }
+
 sealed class AppAction {
     // Navigation & View State
     data class SetLocation(val path: String, val folderName: String? = null) : AppAction()
@@ -28,6 +30,11 @@ sealed class AppAction {
     data class CreateFolder(val name: String) : AppAction()
     data class CreateFile(val name: String) : AppAction()
     data class TogglePin(val path: String) : AppAction()
+    data class RequestAuth(val reason: AuthReason, val path: String, val fileId: Int? = null, val folderName: String? = null) : AppAction()
+    data class AuthSuccess(val reason: AuthReason, val path: String, val fileId: Int? = null, val folderName: String? = null, val password: String? = null) : AppAction()
+    object CancelAuth : AppAction()
+    data class UpdateGlobalPassword(val oldPassword: String, val newPassword: String) : AppAction()
+    data class SetBiometricEnabled(val enabled: Boolean) : AppAction()
     data class RenameFile(val path: String, val newName: String) : AppAction()
     data class BatchRenameFiles(
         val baseName: String, 

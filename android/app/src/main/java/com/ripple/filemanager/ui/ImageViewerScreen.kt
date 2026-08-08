@@ -74,7 +74,7 @@ fun ImageViewerScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete image?") },
+            title = { com.ripple.filemanager.ui.MonoLabel("DELETE IMAGE?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
             text = { Text("This action cannot be undone.") },
             confirmButton = {
                 TextButton(onClick = {
@@ -84,11 +84,13 @@ fun ImageViewerScreen(
                         onDeleteClick(currentFile)
                         onClose() // Close viewer after deletion
                     }
-                }) { Text("Delete") }
+                }) { Text("DELETE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
-            }
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
+            },
+            containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+            shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, 0.5f)
         )
     }
 

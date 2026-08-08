@@ -37,7 +37,7 @@ import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit) {
+fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: Float = 0.5f) {
     BackHandler {
         onClose()
     }
@@ -66,7 +66,11 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit) {
                 .background(MaterialTheme.colorScheme.surface)
         ) {
             val file = File(fileItem.path)
-            if (fileItem.name.endsWith(".zip", ignoreCase = true)) {
+            if (fileItem.name.endsWith(".pdf", ignoreCase = true)) {
+                PdfViewer(file, cornerRoundness)
+            } else if (fileItem.name.endsWith(".txt", ignoreCase = true) || fileItem.name.endsWith(".log", ignoreCase = true) || fileItem.name.endsWith(".md", ignoreCase = true)) {
+                TextViewer(file)
+            } else if (fileItem.name.endsWith(".zip", ignoreCase = true)) {
                 ZipViewer(file)
             } else {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -78,7 +82,7 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit) {
 }
 
 @Composable
-fun PdfViewer(file: File) {
+fun PdfViewer(file: File, cornerRoundness: Float = 0.5f) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var pdfRenderer by remember { mutableStateOf<PdfRenderer?>(null) }
     var pageCount by remember { mutableIntStateOf(0) }
@@ -121,10 +125,10 @@ fun PdfViewer(file: File) {
     if (needsPassword) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { /* Cannot dismiss */ },
-            title = { Text("Password Required") },
+            title = { com.ripple.filemanager.ui.MonoLabel("PASSWORD REQUIRED", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
             text = {
                 Column {
-                    Text("This PDF is password protected.")
+                    Text("This PDF is password protected.", color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
                     if (errorMsg != null) {
                         Text(
                             text = errorMsg ?: "",
@@ -139,7 +143,8 @@ fun PdfViewer(file: File) {
                         onValueChange = { password = it },
                         label = { Text("Password") },
                         visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        singleLine = true
+                        singleLine = true,
+                        shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness)
                     )
                     if (isDecrypting) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -169,9 +174,11 @@ fun PdfViewer(file: File) {
                     },
                     enabled = !isDecrypting && password.isNotEmpty()
                 ) {
-                    Text("Unlock")
+                    Text("UNLOCK", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                 }
-            }
+            },
+            containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+            shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness)
         )
     }
 
