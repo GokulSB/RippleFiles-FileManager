@@ -1,5 +1,8 @@
 package com.ripple.filemanager.ui.theme
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -24,19 +27,61 @@ fun hsl(h: Float, s: Float, l: Float): Color {
 
 // ── Skyline Ledger design tokens ──────────────────────────────────────────────
 object SkylineColors {
-    val Background    = Color(0xFF161009)
-    val Surface       = Color(0xFF1F1710)
-    val Surface2      = Color(0xFF271C12)
-    val Border        = Color(0xFF3A2C1C)
-    val Amber         = Color(0xFFE0AC70)
-    val AmberDim      = Color(0xFF8A6A44)
-    val Dust          = Color(0xFF7C93A0)   // folders / generic
-    val Sage          = Color(0xFF8BA888)   // media: photo / video
-    val Rust          = Color(0xFFC1654A)   // alerts / destructive
-    val TextPrimary   = Color(0xFFF0E4D0)
-    val TextPrimary2  = Color(0xFFF4EAD9)
-    val TextDim       = Color(0xFF8A7A63)
-    val TextDim2      = Color(0xFF6F6250)
+    var Background    by mutableStateOf(Color(0xFF161009))
+    var Surface       by mutableStateOf(Color(0xFF1F1710))
+    var Surface2      by mutableStateOf(Color(0xFF271C12))
+    var Border        by mutableStateOf(Color(0xFF3A2C1C))
+    var Amber         by mutableStateOf(Color(0xFFE0AC70))
+    var AmberDim      by mutableStateOf(Color(0xFF8A6A44))
+    var Dust          by mutableStateOf(Color(0xFF7C93A0))   // folders / generic
+    var Sage          by mutableStateOf(Color(0xFF8BA888))   // media: photo / video
+    var Rust          by mutableStateOf(Color(0xFFC1654A))   // alerts / destructive
+    var TextPrimary   by mutableStateOf(Color(0xFFF0E4D0))
+    var TextPrimary2  by mutableStateOf(Color(0xFFF4EAD9))
+    var TextDim       by mutableStateOf(Color(0xFF8A7A63))
+    var TextDim2      by mutableStateOf(Color(0xFF6F6250))
+    
+    fun updateColors(isDark: Boolean, dynamicColor: Boolean, customHue: Float, context: android.content.Context) {
+        val useSystem = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        val effectiveHue = if (useSystem) {
+            val scheme = if (isDark) androidx.compose.material3.dynamicDarkColorScheme(context) else androidx.compose.material3.dynamicLightColorScheme(context)
+            val hsl = FloatArray(3)
+            androidx.core.graphics.ColorUtils.colorToHSL(scheme.primary.toArgb(), hsl)
+            hsl[0]
+        } else {
+            customHue
+        }
+        
+        if (isDark) {
+            Background = hsl(effectiveHue, 41f, 6f)
+            Surface = hsl(effectiveHue, 31f, 9f)
+            Surface2 = hsl(effectiveHue, 30f, 12f)
+            Border = hsl(effectiveHue, 34f, 16f)
+            Amber = hsl(effectiveHue, 65f, 66f)
+            AmberDim = hsl(effectiveHue, 35f, 40f)
+            Dust = hsl(effectiveHue + 180f, 20f, 55f) // Complementary / cool
+            Sage = hsl(effectiveHue + 90f, 20f, 60f)  // Analogous
+            Rust = hsl(12f, 50f, 52f) // Keep alerts reddish
+            TextPrimary = hsl(effectiveHue, 47f, 87f)
+            TextPrimary2 = hsl(effectiveHue, 47f, 83f)
+            TextDim = hsl(effectiveHue, 25f, 46f)
+            TextDim2 = hsl(effectiveHue, 20f, 37f)
+        } else {
+            Background = hsl(40f, 65f, 95f)
+            Surface = hsl(40f, 55f, 90f)
+            Surface2 = hsl(40f, 50f, 85f)
+            Border = hsl(effectiveHue, 31f, 71f)
+            Amber = hsl(effectiveHue, 65f, 66f)
+            AmberDim = hsl(effectiveHue, 48f, 48f)
+            Dust = hsl(effectiveHue + 180f, 25f, 45f)
+            Sage = hsl(effectiveHue + 90f, 25f, 45f)
+            Rust = hsl(12f, 55f, 45f)
+            TextPrimary = hsl(effectiveHue, 36f, 12f)
+            TextPrimary2 = hsl(effectiveHue, 35f, 17f)
+            TextDim = hsl(effectiveHue, 23f, 33f)
+            TextDim2 = hsl(effectiveHue, 16f, 46f)
+        }
+    }
 }
 
 /** Maps a file type string to its Skyline type-tone color. */
@@ -62,72 +107,6 @@ fun fileTypeCode(type: String): String = when (type) {
     else      -> "SYS"
 }
 
-val SkylineLedgerColorScheme: ColorScheme = darkColorScheme(
-    primary              = SkylineColors.Amber,
-    onPrimary            = SkylineColors.Background,
-    primaryContainer     = SkylineColors.AmberDim,
-    onPrimaryContainer   = SkylineColors.TextPrimary,
-    secondary            = SkylineColors.Dust,
-    onSecondary          = SkylineColors.Background,
-    secondaryContainer   = Color(0xFF2A1F14),
-    onSecondaryContainer = SkylineColors.TextPrimary,
-    tertiary             = SkylineColors.Sage,
-    onTertiary           = SkylineColors.Background,
-    error                = SkylineColors.Rust,
-    onError              = SkylineColors.TextPrimary,
-    errorContainer       = Color(0xFF5A2015),
-    onErrorContainer     = SkylineColors.TextPrimary,
-    background           = SkylineColors.Background,
-    onBackground         = SkylineColors.TextPrimary,
-    surface              = SkylineColors.Surface,
-    onSurface            = SkylineColors.TextPrimary,
-    surfaceVariant       = SkylineColors.Surface2,
-    onSurfaceVariant     = SkylineColors.TextDim,
-    surfaceContainer     = SkylineColors.Surface2,
-    surfaceContainerHigh = Color(0xFF2F2218),
-    outline              = SkylineColors.Border,
-    outlineVariant       = Color(0xFF2A1F14),
-    inverseSurface       = SkylineColors.TextPrimary,
-    inverseOnSurface     = SkylineColors.Background,
-    inversePrimary       = SkylineColors.AmberDim,
-    scrim                = Color(0xCC000000)
-)
-
-// ── Legacy HSL schemes (kept for light mode + user hue picker) ────────────────
-fun customLightColors(h: Float): ColorScheme = lightColorScheme(
-    primary = hsl(h, 60f, 40f),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = hsl(h, 70f, 90f),
-    onPrimaryContainer = hsl(h, 70f, 10f),
-    secondaryContainer = hsl(h, 30f, 90f),
-    onSecondaryContainer = hsl(h, 30f, 10f),
-    surface = hsl(h, 15f, 98f),
-    surfaceContainer = hsl(h, 15f, 94f),
-    surfaceContainerHigh = hsl(h, 15f, 90f),
-    onSurface = hsl(h, 15f, 10f),
-    onSurfaceVariant = hsl(h, 15f, 30f),
-    outlineVariant = hsl(h, 15f, 80f),
-    background = hsl(h, 15f, 98f),
-    onBackground = hsl(h, 15f, 10f)
-)
-
-fun customDarkColors(h: Float): ColorScheme = darkColorScheme(
-    primary = hsl(h, 60f, 65f),
-    onPrimary = hsl(h, 60f, 10f),
-    primaryContainer = hsl(h, 40f, 30f),
-    onPrimaryContainer = hsl(h, 40f, 90f),
-    secondaryContainer = hsl(h, 30f, 30f),
-    onSecondaryContainer = hsl(h, 30f, 90f),
-    surface = hsl(h, 15f, 6f),
-    surfaceContainer = hsl(h, 15f, 12f),
-    surfaceContainerHigh = hsl(h, 15f, 18f),
-    onSurface = hsl(h, 15f, 90f),
-    onSurfaceVariant = hsl(h, 15f, 70f),
-    outlineVariant = hsl(h, 15f, 25f),
-    background = hsl(h, 15f, 6f),
-    onBackground = hsl(h, 15f, 90f)
-)
-
 @Composable
 fun SiftTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -139,14 +118,71 @@ fun SiftTheme(
     subTextScale: Float = 1.0f,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        // Skyline Ledger is the default dark scheme when dynamic color is off
-        darkTheme -> SkylineLedgerColorScheme
-        else -> customLightColors(customHue)
+    val context = LocalContext.current
+    SkylineColors.updateColors(darkTheme, dynamicColor, customHue, context)
+    
+    val colorScheme = if (darkTheme) {
+        darkColorScheme(
+            primary              = SkylineColors.Amber,
+            onPrimary            = SkylineColors.Background,
+            primaryContainer     = SkylineColors.AmberDim,
+            onPrimaryContainer   = SkylineColors.TextPrimary,
+            secondary            = SkylineColors.Dust,
+            onSecondary          = SkylineColors.Background,
+            secondaryContainer   = Color(0xFF2A1F14),
+            onSecondaryContainer = SkylineColors.TextPrimary,
+            tertiary             = SkylineColors.Sage,
+            onTertiary           = SkylineColors.Background,
+            error                = SkylineColors.Rust,
+            onError              = SkylineColors.TextPrimary,
+            errorContainer       = Color(0xFF5A2015),
+            onErrorContainer     = SkylineColors.TextPrimary,
+            background           = SkylineColors.Background,
+            onBackground         = SkylineColors.TextPrimary,
+            surface              = SkylineColors.Surface,
+            onSurface            = SkylineColors.TextPrimary,
+            surfaceVariant       = SkylineColors.Surface2,
+            onSurfaceVariant     = SkylineColors.TextDim,
+            surfaceContainer     = SkylineColors.Surface2,
+            surfaceContainerHigh = Color(0xFF2F2218),
+            outline              = SkylineColors.Border,
+            outlineVariant       = Color(0xFF2A1F14),
+            inverseSurface       = SkylineColors.TextPrimary,
+            inverseOnSurface     = SkylineColors.Background,
+            inversePrimary       = SkylineColors.AmberDim,
+            scrim                = Color(0xCC000000)
+        )
+    } else {
+        lightColorScheme(
+            primary              = SkylineColors.Amber,
+            onPrimary            = SkylineColors.Background,
+            primaryContainer     = SkylineColors.AmberDim,
+            onPrimaryContainer   = SkylineColors.TextPrimary,
+            secondary            = SkylineColors.Dust,
+            onSecondary          = SkylineColors.Background,
+            secondaryContainer   = SkylineColors.Surface2,
+            onSecondaryContainer = SkylineColors.TextPrimary,
+            tertiary             = SkylineColors.Sage,
+            onTertiary           = SkylineColors.Background,
+            error                = SkylineColors.Rust,
+            onError              = SkylineColors.TextPrimary,
+            errorContainer       = SkylineColors.Rust.copy(alpha = 0.2f),
+            onErrorContainer     = SkylineColors.TextPrimary,
+            background           = SkylineColors.Background,
+            onBackground         = SkylineColors.TextPrimary,
+            surface              = SkylineColors.Surface,
+            onSurface            = SkylineColors.TextPrimary,
+            surfaceVariant       = SkylineColors.Surface2,
+            onSurfaceVariant     = SkylineColors.TextDim,
+            surfaceContainer     = SkylineColors.Surface2,
+            surfaceContainerHigh = SkylineColors.Border,
+            outline              = SkylineColors.Border,
+            outlineVariant       = SkylineColors.Surface2,
+            inverseSurface       = SkylineColors.TextPrimary,
+            inverseOnSurface     = SkylineColors.Background,
+            inversePrimary       = SkylineColors.AmberDim,
+            scrim                = Color(0xCC000000)
+        )
     }
 
     val view = LocalView.current

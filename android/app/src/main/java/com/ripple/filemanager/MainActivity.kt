@@ -11,7 +11,7 @@ import android.provider.Settings
 import android.provider.DocumentsContract
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,7 +28,7 @@ import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.ui.SiftApp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
 
@@ -149,6 +149,11 @@ class MainActivity : ComponentActivity() {
                         is AppAction.SetOrganiserPath -> viewModel.setOrganiserPath(action.category, action.path)
                         is AppAction.OrganiseDownloads -> viewModel.organiseDownloads()
                         is AppAction.SetViewerPreference -> viewModel.setViewerPreference(action.category, action.preference)
+                        is AppAction.RequestAuth -> viewModel.requestAuth(action.reason, action.path, action.fileId, action.folderName)
+                        is AppAction.CancelAuth -> viewModel.cancelAuth()
+                        is AppAction.AuthSuccess -> viewModel.authSuccess(action.reason, action.path, action.fileId, action.folderName, action.password)
+                        is AppAction.UpdateGlobalPassword -> viewModel.updateGlobalPassword(action.oldPassword, action.newPassword)
+                        is AppAction.SetBiometricEnabled -> viewModel.setBiometricEnabled(action.enabled)
                     }
                 }
             }

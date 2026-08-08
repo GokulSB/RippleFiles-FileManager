@@ -143,26 +143,19 @@ fun SiftApp(
 
         var trashIconCenter by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
         var trashPulse by remember { mutableStateOf(false) }
-        LaunchedEffect(trashPulse) {
-            if (trashPulse) {
-                kotlinx.coroutines.delay(400)
-                trashPulse = false
-            }
-        }
-        val itemBounds = remember { mutableMapOf<Int, androidx.compose.ui.geometry.Rect>() }
-        val flyingDeletes = remember { androidx.compose.runtime.mutableStateListOf<FlyingDelete>() }
-
         val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
         if (state.showMegaPopup) {
             var email by remember { mutableStateOf("") }
             var password by remember { mutableStateOf("") }
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { onAction(AppAction.SetShowMegaPopup(false)) },
+                containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Cloud, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Cloud, contentDescription = null, tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        androidx.compose.material3.Text("Mega")
+                        com.ripple.filemanager.ui.MonoLabel("MEGA", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 16)
                     }
                 },
                 text = {
@@ -178,7 +171,8 @@ fun SiftApp(
                                 onValueChange = { email = it },
                                 label = { androidx.compose.material3.Text("Email") },
                                 singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             androidx.compose.material3.OutlinedTextField(
@@ -187,7 +181,8 @@ fun SiftApp(
                                 label = { androidx.compose.material3.Text("Password") },
                                 singleLine = true,
                                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
                             )
                             if (state.megaLoginError != null) {
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -200,9 +195,10 @@ fun SiftApp(
                                         onAction(AppAction.SetMegaAuthStatus(true, email, password))
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber, contentColor = Color(0xFF161009))
                             ) {
-                                androidx.compose.material3.Text("Login")
+                                androidx.compose.material3.Text("LOGIN")
                             }
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -218,18 +214,33 @@ fun SiftApp(
                 },
                 confirmButton = {
                     if (state.isMegaAuthenticated) {
-                        androidx.compose.material3.TextButton(onClick = {
-                            onAction(AppAction.SetMegaAuthStatus(false, null))
-                            onAction(AppAction.SetShowMegaPopup(false))
-                        }) {
-                            androidx.compose.material3.Text("Logout", color = MaterialTheme.colorScheme.error)
+                        androidx.compose.material3.TextButton(onClick = { onAction(AppAction.SetMegaAuthStatus(false, null, null)) }) {
+                            androidx.compose.material3.Text("LOGOUT", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 },
                 dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { onAction(AppAction.SetShowMegaPopup(false)) }) {
-                        androidx.compose.material3.Text("Close", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!state.isMegaAuthenticated) {
+                        androidx.compose.material3.TextButton(onClick = { onAction(AppAction.SetShowMegaPopup(false)) }) {
+                            androidx.compose.material3.Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
+                        }
                     }
+                }
+            )
+        }
+
+        if (state.authRequestReason != null && state.authRequestPath != null) {
+            AuthDialog(
+                errorMessage = state.authErrorMessage,
+                onDismiss = { onAction(AppAction.CancelAuth) },
+                onConfirm = { password -> 
+                    onAction(AppAction.AuthSuccess(
+                        reason = state.authRequestReason,
+                        path = state.authRequestPath,
+                        fileId = state.authRequestFileId,
+                        folderName = state.authRequestFolderName,
+                        password = password
+                    ))
                 }
             )
         }
@@ -268,14 +279,7 @@ fun SiftApp(
                         onAction = onAction,
                         snackbarHostState = snackbarHostState,
                         onDrawerOpen = { drawerScope.launch { drawerState.open() } },
-                        modifier = Modifier.weight(1f),
-                        onItemPositioned = { id, rect -> itemBounds[id] = rect },
-                        onDeleteFlying = { flyingDeletes.add(it) },
-                        trashIconCenter = trashIconCenter,
-                        onTrashIconPositioned = { trashIconCenter = it },
-                        trashPulse = trashPulse,
-                        onTrashPulseFinish = { trashPulse = false },
-                        itemBounds = itemBounds
+                        modifier = Modifier.weight(1f)
                     )
                     if (state.selectedFiles.isNotEmpty()) {
                         val file = state.files.find { it.id == state.selectedFiles.first() }
@@ -294,14 +298,7 @@ fun SiftApp(
                         onAction = onAction,
                         snackbarHostState = snackbarHostState,
                         onDrawerOpen = { drawerScope.launch { drawerState.open() } },
-                        modifier = Modifier.fillMaxSize(),
-                        onItemPositioned = { id, rect -> itemBounds[id] = rect },
-                        onDeleteFlying = { flyingDeletes.add(it) },
-                        trashIconCenter = trashIconCenter,
-                        onTrashIconPositioned = { trashIconCenter = it },
-                        trashPulse = trashPulse,
-                        onTrashPulseFinish = { trashPulse = false },
-                        itemBounds = itemBounds
+                        modifier = Modifier.fillMaxSize()
                     )
                     var fabMenuExpanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
                     var showCreateFolderDialog by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
@@ -332,188 +329,85 @@ fun SiftApp(
 
                     if (!state.isSelectionMode) {
                           val navBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                          val isThreeButton = navBottom > 24.dp
-                          Box(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = navBottom + 8.dp), contentAlignment = Alignment.Center) {
-                            RippleBottomNav(
-                                currentLocation = state.location,
-                                onLocationSelected = { 
-                                    onAction(AppAction.SetLocation(it))
-                                    if (it == "drive" && !state.isGoogleDriveAuthenticated && !state.isMegaAuthenticated && !state.isDropboxAuthenticated) {
-                                        onAction(AppAction.SetErrorMessage("Sign in to a cloud server in the menu first."))
-                                    }
-                                },
-                                onTabTapped = { onAction(AppAction.NavTabTapped(it)) },
-                                tapCounters = state.navTapCounters,
-                                cornerRoundness = state.cornerRoundness,
-                                modifier = Modifier
-                            )
-                        }
+                          val hasClipboardItems = state.clipboardPaths.isNotEmpty()
+                          
+                          // Menu and Small FABs (Absolute Positioned above the Bottom Row)
+                          Box(
+                              modifier = Modifier
+                                  .align(Alignment.BottomEnd)
+                                  .padding(end = 24.dp, bottom = navBottom + 24.dp + 68.dp + 16.dp)
+                          ) {
+                              val actions = kotlinx.collections.immutable.persistentListOf(
+                                  FabMenuAction("New folder", Icons.Default.CreateNewFolder) { showCreateFolderDialog = true; fabMenuExpanded = false }
+                              )
+                              Column(
+                                  horizontalAlignment = Alignment.End,
+                                  verticalArrangement = Arrangement.spacedBy(12.dp),
+                                  modifier = Modifier.align(Alignment.BottomEnd)
+                              ) {
+                                  actions.reversed().forEachIndexed { index, action ->
+                                      val delay = if (fabMenuExpanded && animEnabled) index * 40 else 0
+                                      androidx.compose.animation.AnimatedVisibility(
+                                          visible = fabMenuExpanded,
+                                          enter = if (animEnabled) {
+                                              androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180, delayMillis = delay)) +
+                                              androidx.compose.animation.scaleIn(
+                                                  initialScale = 0.6f,
+                                                  animationSpec = androidx.compose.animation.core.spring(
+                                                      dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                                                      stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                                                  )
+                                              ) +
+                                              androidx.compose.animation.slideInVertically(
+                                                  initialOffsetY = { it / 2 },
+                                                  animationSpec = androidx.compose.animation.core.tween(200, delayMillis = delay, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                              )
+                                          } else {
+                                              androidx.compose.animation.fadeIn(androidx.compose.animation.core.snap())
+                                          },
+                                          exit = if (animEnabled) {
+                                              androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) + androidx.compose.animation.scaleOut(targetScale = 0.6f, animationSpec = androidx.compose.animation.core.tween(150))
+                                          } else {
+                                              androidx.compose.animation.fadeOut(androidx.compose.animation.core.snap())
+                                          }
+                                      ) {
+                                          Surface(
+                                              color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                              shape = getDynamicCornerShape(50f, state.cornerRoundness),
+                                              border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                              onClick = action.onClick
+                                          ) {
+                                              Row(
+                                                  verticalAlignment = Alignment.CenterVertically,
+                                                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                  modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                                              ) {
+                                                  Icon(
+                                                      action.icon,
+                                                      contentDescription = action.label,
+                                                      tint = MaterialTheme.colorScheme.primary,
+                                                      modifier = Modifier.size(20.dp)
+                                                  )
+                                                  Text(
+                                                      text = action.label,
+                                                      color = MaterialTheme.colorScheme.onSurface,
+                                                      fontFamily = PoppinsFontFamily,
+                                                      fontSize = 14.sp
+                                                  )
+                                              }
+                                          }
+                                      }
+                                  }
+                              }
+                          }
+                          
 
-                        val hasClipboardItems = state.clipboardPaths.isNotEmpty()
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 16.dp, bottom = navBottom + 20.dp)
-                        ) {
-                                val actions = kotlinx.collections.immutable.persistentListOf(
-                                    FabMenuAction("New folder", Icons.Default.CreateNewFolder) { showCreateFolderDialog = true; fabMenuExpanded = false }
-                                )
-                                Column(
-                                    horizontalAlignment = Alignment.End,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                    modifier = Modifier.align(Alignment.BottomEnd).offset(y = (-64).dp)
-                                ) {
-                                    actions.reversed().forEachIndexed { index, action ->
-                                        val delay = if (fabMenuExpanded && animEnabled) index * 40 else 0
-                                        androidx.compose.animation.AnimatedVisibility(
-                                            visible = fabMenuExpanded,
-                                            enter = if (animEnabled) {
-                                                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180, delayMillis = delay)) +
-                                                androidx.compose.animation.scaleIn(
-                                                    initialScale = 0.6f,
-                                                    animationSpec = androidx.compose.animation.core.spring(
-                                                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-                                                        stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
-                                                    )
-                                                ) +
-                                                androidx.compose.animation.slideInVertically(
-                                                    initialOffsetY = { it / 2 },
-                                                    animationSpec = androidx.compose.animation.core.tween(200, delayMillis = delay, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                                                )
-                                            } else {
-                                                androidx.compose.animation.fadeIn(androidx.compose.animation.core.snap())
-                                            },
-                                            exit = if (animEnabled) {
-                                                androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) + androidx.compose.animation.scaleOut(targetScale = 0.6f, animationSpec = androidx.compose.animation.core.tween(150))
-                                            } else {
-                                                androidx.compose.animation.fadeOut(androidx.compose.animation.core.snap())
-                                            }
-                                        ) {
-                                            Surface(
-                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                shape = getDynamicCornerShape(50f, state.cornerRoundness),
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                onClick = action.onClick
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                                                ) {
-                                                    Icon(
-                                                        action.icon,
-                                                        contentDescription = action.label,
-                                                        tint = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(20.dp)
-                                                    )
-                                                    Text(
-                                                        text = action.label,
-                                                        color = MaterialTheme.colorScheme.onSurface,
-                                                        fontFamily = PoppinsFontFamily,
-                                                        fontSize = 14.sp
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                if (hasClipboardItems && state.pasteProgress == null && !state.isPasteComplete) {
-                                    Box(modifier = Modifier.align(Alignment.TopCenter).offset(y = (-56).dp)) {
-                                        SmallFloatingActionButton(
-                                            onClick = { onAction(AppAction.ClearClipboard) },
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            shape = getDynamicCornerShape(12f, state.cornerRoundness)
-                                        ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Cancel")
-                                        }
-                                    }
-                                }
-                                if (state.pasteProgress != null) {
-                                    Row(modifier = Modifier.align(Alignment.TopCenter).offset(y = (-56).dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        SmallFloatingActionButton(
-                                            onClick = { onAction(AppAction.TogglePastePause) },
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            shape = getDynamicCornerShape(12f, state.cornerRoundness)
-                                        ) {
-                                            Icon(if (state.isPastePaused) Icons.Default.PlayArrow else Icons.Default.Pause, contentDescription = "Pause/Resume")
-                                        }
-                                        SmallFloatingActionButton(
-                                            onClick = { onAction(AppAction.CancelPaste) },
-                                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                                            shape = getDynamicCornerShape(12f, state.cornerRoundness)
-                                        ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Cancel Paste")
-                                        }
-                                    }
-                                }
-                                OffsetFab(
-                                    onClick = {
-                                        if (hasClipboardItems) {
-                                            if (state.pasteProgress == null && !state.isPasteComplete) {
-                                                onAction(AppAction.PasteClipboard(state.location))
-                                            }
-                                        } else {
-                                            fabMenuExpanded = !fabMenuExpanded
-                                        }
-                                    },
-                                    modifier = Modifier.align(Alignment.BottomEnd),
-                                    isExpanded = fabMenuExpanded,
-                                    cornerRoundness = state.cornerRoundness
-                                ) {
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                        if (state.organiseProgress != null) {
-                                            androidx.compose.material3.CircularProgressIndicator(
-                                                progress = { state.organiseProgress },
-                                                modifier = Modifier.fillMaxSize(0.9f),
-                                                color = com.ripple.filemanager.ui.theme.SkylineColors.Background,
-                                                trackColor = com.ripple.filemanager.ui.theme.SkylineColors.Background.copy(alpha = 0.3f)
-                                            )
-                                            Text(
-                                                "${(state.organiseProgress * 100).toInt()}%",
-                                                fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
-                                                fontWeight = FontWeight.Bold,
-                                                color = com.ripple.filemanager.ui.theme.SkylineColors.Background
-                                            )
-                                        } else if (hasClipboardItems) {
-                                            androidx.compose.animation.AnimatedContent(
-                                                targetState = when {
-                                                    state.isPasteComplete -> 2
-                                                    state.pasteProgress != null -> 1
-                                                    else -> 0
-                                                },
-                                                label = "paste_fab_anim"
-                                            ) { target ->
-                                                when (target) {
-                                                    2 -> Icon(Icons.Default.Check, contentDescription = "Complete", tint = com.ripple.filemanager.ui.theme.SkylineColors.Background)
-                                                    1 -> Text("${((state.pasteProgress ?: 0f) * 100).toInt()}%", fontWeight = FontWeight.Bold, color = com.ripple.filemanager.ui.theme.SkylineColors.Background)
-                                                    else -> Icon(Icons.Outlined.ContentPaste, contentDescription = "Paste", tint = com.ripple.filemanager.ui.theme.SkylineColors.Background)
-                                                }
-                                            }
-                                        } else {
-                                            val rotation by androidx.compose.animation.core.animateFloatAsState(
-                                                targetValue = if (fabMenuExpanded) 45f else 0f,
-                                                animationSpec = if (animEnabled) androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy, stiffness = androidx.compose.animation.core.Spring.StiffnessMedium) else androidx.compose.animation.core.snap(),
-                                                label = "fabRotation"
-                                            )
-                                            Icon(
-                                                imageVector = Icons.Default.Add,
-                                                contentDescription = if (fabMenuExpanded) "Close menu" else "New",
-                                                modifier = Modifier.graphicsLayer { rotationZ = rotation },
-                                                tint = com.ripple.filemanager.ui.theme.SkylineColors.Background
-                                            )
-                                        }
-                                    }
-                                }
-                            }
                             
                             if (showCreateFolderDialog) {
                                 var folderName by remember { mutableStateOf("") }
                                 AlertDialog(
                                     onDismissRequest = { showCreateFolderDialog = false },
-                                    title = { Text("New folder") },
+                                    title = { com.ripple.filemanager.ui.MonoLabel("NEW FOLDER", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                                     text = {
                                         OutlinedTextField(
                                             value = folderName,
@@ -532,14 +426,16 @@ fun SiftApp(
                                                 showCreateFolderDialog = false
                                             }
                                         ) {
-                                            Text("Save")
+                                            Text("SAVE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                         }
                                     },
                                     dismissButton = {
                                         TextButton(onClick = { showCreateFolderDialog = false }) {
-                                            Text("Cancel")
+                                            Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                                         }
-                                    }
+                                    },
+                                    containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                                    shape = getDynamicCornerShape(12f, state.cornerRoundness)
                                 )
                             }
                             
@@ -547,7 +443,7 @@ fun SiftApp(
                                 var fileName by remember { mutableStateOf("") }
                                 AlertDialog(
                                     onDismissRequest = { showCreateFileDialog = false },
-                                    title = { Text("New file") },
+                                    title = { com.ripple.filemanager.ui.MonoLabel("NEW FILE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                                     text = {
                                         OutlinedTextField(
                                             value = fileName,
@@ -566,14 +462,16 @@ fun SiftApp(
                                                 showCreateFileDialog = false
                                             }
                                         ) {
-                                            Text("Save")
+                                            Text("SAVE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                         }
                                     },
                                     dismissButton = {
                                         TextButton(onClick = { showCreateFileDialog = false }) {
-                                            Text("Cancel")
+                                            Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                                         }
-                                    }
+                                    },
+                                    containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                                    shape = getDynamicCornerShape(12f, state.cornerRoundness)
                                 )
                             }
                         } // end if (!state.isSelectionMode)
@@ -597,49 +495,7 @@ fun SiftApp(
                     TrashScreen(
                         state = state,
                         onAction = onAction,
-                        onClose = { onAction(AppAction.SetTrashScreenVisible(false)) },
-                        onItemPositioned = { id, rect -> itemBounds[id] = rect },
-                        onDeleteFlying = { flyingDeletes.add(it) },
-                        itemBounds = itemBounds
-                    )
-                }
-            }
-
-            flyingDeletes.forEach { flying ->
-                androidx.compose.runtime.key(flying.id) {
-                    val progress = remember { androidx.compose.animation.core.Animatable(0f) }
-                    LaunchedEffect(flying.id) {
-                        progress.animateTo(
-                            targetValue = 1f,
-                            animationSpec = androidx.compose.animation.core.tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                        )
-                        flyingDeletes.removeAll { it.id == flying.id }
-                        trashPulse = true
-                    }
-
-                    val iconTint = if (flying.file?.type == "folder") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-
-                    Icon(
-                        imageVector = flying.icon,
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier
-                            .wrapContentSize(unbounded = true, align = Alignment.TopStart) // reset constraints first
-                            .graphicsLayer {
-                                val p = progress.value
-
-                                val x = androidx.compose.ui.util.lerp(flying.startRect.center.x, trashIconCenter.x, p)
-                                val y = androidx.compose.ui.util.lerp(flying.startRect.center.y, trashIconCenter.y, p)
-                                val s = androidx.compose.ui.util.lerp(1f, 0.15f, p)
-                                val a = androidx.compose.ui.util.lerp(1f, 0f, (p - 0.7f).coerceIn(0f, 0.3f) / 0.3f)
-
-                                translationX = x - (size.width / 2)
-                                translationY = y - (size.height / 2)
-                                scaleX = s
-                                scaleY = s
-                                this.alpha = a
-                            }
-                            .size(40.dp)
+                        onClose = { onAction(AppAction.SetTrashScreenVisible(false)) }
                     )
                 }
             }
@@ -691,7 +547,8 @@ fun SiftApp(
                         
                         Surface(
                             shape = getDynamicCornerShape(16f, state.cornerRoundness),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color = MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { isThemeExpanded = !isThemeExpanded }
@@ -737,11 +594,46 @@ fun SiftApp(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
+                        var isSecurityExpanded by remember { mutableStateOf(false) }
+                        
+                        Surface(
+                            shape = getDynamicCornerShape(16f, state.cornerRoundness),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isSecurityExpanded = !isSecurityExpanded }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Security", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                                Icon(
+                                    imageVector = if (isSecurityExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Expand",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        androidx.compose.animation.AnimatedVisibility(visible = isSecurityExpanded) {
+                            SecuritySettingsContent(
+                                cornerRoundness = state.cornerRoundness,
+                                errorMessage = state.securitySettingsErrorMessage,
+                                onUpdatePassword = { oldPass, newPass -> onAction(AppAction.UpdateGlobalPassword(oldPass, newPass)) },
+                                onSetBiometric = { onAction(AppAction.SetBiometricEnabled(it)) }
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
                         var isViewersExpanded by remember { mutableStateOf(false) }
                         
                         Surface(
                             shape = getDynamicCornerShape(16f, state.cornerRoundness),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color = MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { isViewersExpanded = !isViewersExpanded }
@@ -792,7 +684,8 @@ fun SiftApp(
                         
                         Surface(
                             shape = getDynamicCornerShape(16f, state.cornerRoundness),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color = MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { isOrganiserExpanded = !isOrganiserExpanded }
@@ -826,7 +719,8 @@ fun SiftApp(
                                     val (label, pathValue) = info
                                     Surface(
                                         shape = getDynamicCornerShape(16f, state.cornerRoundness),
-                                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
                                         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
                                     ) {
                                         Row(
@@ -909,12 +803,14 @@ fun SiftApp(
                             DocumentViewerScreen(
                                 fileItem = state.viewingFile!!,
                                 onClose = { onAction(AppAction.CloseFileViewer) },
-                                onAction = onAction
+                                onAction = onAction,
+                                cornerRoundness = state.cornerRoundness
                             )
                         } else {
                             FileViewerScreen(
                                 fileItem = state.viewingFile!!,
-                                onClose = { onAction(AppAction.CloseFileViewer) }
+                                onClose = { onAction(AppAction.CloseFileViewer) },
+                                cornerRoundness = state.cornerRoundness
                             )
                         }
                     }
@@ -1219,8 +1115,15 @@ fun DrawerContent(
 
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showGDrivePopup = false },
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                title = { androidx.compose.material3.Text("Google Drive", style = MaterialTheme.typography.headlineSmall) },
+                containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
+                title = { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Cloud, contentDescription = null, tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        com.ripple.filemanager.ui.MonoLabel("GOOGLE DRIVE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 16)
+                    }
+                },
                 text = {
                     if (state.isGoogleDriveAuthenticated) {
                         androidx.compose.material3.Text("Logged in as:\n${state.googleDriveAccountEmail ?: "Unknown"}", style = MaterialTheme.typography.bodyMedium)
@@ -1235,7 +1138,7 @@ fun DrawerContent(
                             onCloseDrawer()
                             onAction(AppAction.SetLocation("drive"))
                         }) {
-                            androidx.compose.material3.Text("View Files", color = MaterialTheme.colorScheme.primary)
+                            androidx.compose.material3.Text("VIEW FILES", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                         }
                     } else {
                         androidx.compose.material3.TextButton(onClick = {
@@ -1243,7 +1146,7 @@ fun DrawerContent(
                                 googleSignInLauncher.launch(googleSignInClient.signInIntent)
                             }
                         }) {
-                            androidx.compose.material3.Text("Login", color = MaterialTheme.colorScheme.primary)
+                            androidx.compose.material3.Text("LOGIN", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                         }
                     }
                 },
@@ -1255,11 +1158,11 @@ fun DrawerContent(
                             }
                             showGDrivePopup = false
                         }) {
-                            androidx.compose.material3.Text("Logout", color = MaterialTheme.colorScheme.error)
+                            androidx.compose.material3.Text("LOGOUT", color = MaterialTheme.colorScheme.error)
                         }
                     } else {
                         androidx.compose.material3.TextButton(onClick = { showGDrivePopup = false }) {
-                            androidx.compose.material3.Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            androidx.compose.material3.Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                         }
                     }
                 }
@@ -1269,15 +1172,18 @@ fun DrawerContent(
 
 
         if (showDropboxPopup) {
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
             var email by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
             var password by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showDropboxPopup = false },
+                containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Cloud, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Cloud, contentDescription = null, tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        androidx.compose.material3.Text("Dropbox")
+                        com.ripple.filemanager.ui.MonoLabel("DROPBOX", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 16)
                     }
                 },
                 text = {
@@ -1293,7 +1199,8 @@ fun DrawerContent(
                                 onValueChange = { email = it },
                                 label = { androidx.compose.material3.Text("Email") },
                                 singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             androidx.compose.material3.OutlinedTextField(
@@ -1302,27 +1209,25 @@ fun DrawerContent(
                                 label = { androidx.compose.material3.Text("Password") },
                                 singleLine = true,
                                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness)
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(
                                 onClick = {
                                     if (email.isNotBlank() && password.isNotBlank()) {
                                         onAction(AppAction.SetDropboxAuthStatus(true, email))
-                                        showDropboxPopup = false
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber, contentColor = Color(0xFF161009))
                             ) {
-                                androidx.compose.material3.Text("Login")
+                                androidx.compose.material3.Text("LOGIN")
                             }
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                androidx.compose.material3.TextButton(onClick = { /* Handle Sign Up */ }) {
-                                    androidx.compose.material3.Text("Sign Up")
-                                }
-                                androidx.compose.material3.TextButton(onClick = { /* Handle Forgot Password */ }) {
-                                    androidx.compose.material3.Text("Forgot Password?")
+                                androidx.compose.material3.TextButton(onClick = { uriHandler.openUri("https://dropbox.com/register") }) {
+                                    androidx.compose.material3.Text("CREATE ACCOUNT", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                 }
                             }
                         }
@@ -1331,16 +1236,22 @@ fun DrawerContent(
                 confirmButton = {
                     if (state.isDropboxAuthenticated) {
                         androidx.compose.material3.TextButton(onClick = {
-                            onAction(AppAction.SetDropboxAuthStatus(false, null))
                             showDropboxPopup = false
+                            onCloseDrawer()
+                            onAction(AppAction.SetLocation("dropbox"))
                         }) {
-                            androidx.compose.material3.Text("Logout", color = MaterialTheme.colorScheme.error)
+                            androidx.compose.material3.Text("VIEW FILES", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                        }
+                        androidx.compose.material3.TextButton(onClick = { onAction(AppAction.SetDropboxAuthStatus(false, null)) }) {
+                            androidx.compose.material3.Text("LOGOUT", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 },
                 dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { showDropboxPopup = false }) {
-                        androidx.compose.material3.Text("Close", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!state.isDropboxAuthenticated) {
+                        androidx.compose.material3.TextButton(onClick = { showDropboxPopup = false }) {
+                            androidx.compose.material3.Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
+                        }
                     }
                 }
             )
@@ -1646,14 +1557,7 @@ fun MainContent(
     onAction: (AppAction) -> Unit,
     snackbarHostState: SnackbarHostState,
     onDrawerOpen: () -> Unit = {},
-    modifier: Modifier = Modifier,
-    onItemPositioned: (Int, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
-    onDeleteFlying: (FlyingDelete) -> Unit = {},
-    trashIconCenter: androidx.compose.ui.geometry.Offset = androidx.compose.ui.geometry.Offset.Zero,
-    onTrashIconPositioned: (androidx.compose.ui.geometry.Offset) -> Unit = {},
-    trashPulse: Boolean = false,
-    onTrashPulseFinish: () -> Unit = {},
-    itemBounds: Map<Int, androidx.compose.ui.geometry.Rect> = emptyMap()
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -1664,6 +1568,16 @@ fun MainContent(
     var fileDetails by remember { mutableStateOf<FileDetails?>(null) }
     var showSortMenu by remember { mutableStateOf(false) }
     var backProgress by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+
+    var capturedTargetFolderName by remember { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(state.isPasteComplete) {
+        if (state.isPasteComplete) {
+            val fileCount = state.clipboardPaths.size
+            snackbarHostState.showSnackbar("Pasted $fileCount item(s) into ${capturedTargetFolderName ?: "folder"}")
+            capturedTargetFolderName = null
+        }
+    }
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -1748,12 +1662,20 @@ fun MainContent(
             
             SnackbarHost(hostState = snackbarHostState, modifier = Modifier.imePadding().padding(bottom = snackbarBottomPadding)) { data ->
                 Snackbar(
-                    snackbarData = data,
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    shape = getDynamicCornerShape(12f, state.cornerRoundness),
-                    actionColor = MaterialTheme.colorScheme.primary
-                )
+                    modifier = Modifier.border(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Amber, getDynamicCornerShape(0f, state.cornerRoundness)),
+                    containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                    contentColor = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary,
+                    shape = getDynamicCornerShape(0f, state.cornerRoundness),
+                    action = {
+                        data.visuals.actionLabel?.let { actionLabel ->
+                            androidx.compose.material3.TextButton(onClick = { data.performAction() }) {
+                                com.ripple.filemanager.ui.MonoLabel(text = actionLabel.uppercase(), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 12)
+                            }
+                        }
+                    }
+                ) {
+                    com.ripple.filemanager.ui.MonoLabel(text = data.visuals.message, color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary, fontSize = 12)
+                }
             }
         },
         topBar = {
@@ -1765,31 +1687,12 @@ fun MainContent(
                     onTrashClick = {
                         onAction(AppAction.SetTrashScreenVisible(true))
                     },
-                    cornerRoundness = state.cornerRoundness
+                    onOrganiseClick = {
+                        onAction(AppAction.OrganiseDownloads)
+                    },
+                    cornerRoundness = state.cornerRoundness,
+                    organiseProgress = state.organiseProgress
                 )
-                // Preserve trash pulse animation as an overlay on the trash icon area
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = trashPulse,
-                    enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)),
-                    exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(400)),
-                    modifier = Modifier.align(Alignment.TopEnd)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(top = 8.dp, end = 12.dp)
-                            .background(
-                                brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                                    colors = listOf(
-                                        com.ripple.filemanager.ui.theme.SkylineColors.Amber.copy(alpha = 0.4f),
-                                        androidx.compose.ui.graphics.Color.Transparent
-                                    )
-                                )
-                            )
-                            .onGloballyPositioned { onTrashIconPositioned(it.boundsInRoot().center) }
-                    )
-                }
             }
         }
     ) { paddingValues ->
@@ -1896,7 +1799,7 @@ fun MainContent(
                     val targetLocation = state.location
 var showSortMenu by remember { mutableStateOf(false) }
 Column {
-if (state.storageTotalGb > 0f && (targetLocation == "home" || targetLocation == "drive" || targetLocation == "recent" || targetLocation == "starred" || targetLocation.startsWith("drive_id:") || targetLocation.startsWith(android.os.Environment.getExternalStorageDirectory().absolutePath))) {
+if (state.storageTotalGb > 0f && (targetLocation == "home" || targetLocation == "drive" || targetLocation == "recent" || targetLocation == "pinned" || targetLocation.startsWith("drive_id:") || targetLocation.startsWith(android.os.Environment.getExternalStorageDirectory().absolutePath))) {
     val isScrollable = (state.sdCardStorageTotalGb > 0 && state.isGoogleDriveAuthenticated)
     Row(
         modifier = Modifier
@@ -2208,7 +2111,12 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         val fadeDuration = if (android.animation.ValueAnimator.getDurationScale() == 0f) 0 else 200
                         val easing = androidx.compose.animation.core.FastOutSlowInEasing
                         
+                        val tabs = listOf("home", "recent", "favorites", "cloud")
+                        val initialIndex = tabs.indexOf(initialState.location)
+                        val targetIndex = tabs.indexOf(targetState.location)
+
                         val isForward = when {
+                            initialIndex != -1 && targetIndex != -1 -> targetIndex > initialIndex
                             initialState.location == "home" && targetState.location != "home" -> true
                             targetState.location == "home" && initialState.location != "home" -> false
                             initialState.location.startsWith("/") && targetState.location.startsWith("/") -> targetState.location.length > initialState.location.length
@@ -2305,12 +2213,15 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             iconShape = state.activeIconShape,
                                             searchQuery = state.query,
                                             onFileClick = { file -> 
-                                                if (state.query.isNotEmpty()) {
-                                                    onAction(AppAction.SetQuery(""))
-                                                }
-                                                if (state.isSelectionMode) {
-                                                    onAction(AppAction.ToggleSelection(file.id))
+                                                if (file.isLocked) {
+                                                    onAction(AppAction.RequestAuth(com.ripple.filemanager.AuthReason.OPEN_FILE, file.path, fileId = file.id, folderName = file.name))
                                                 } else {
+                                                    if (state.query.isNotEmpty()) {
+                                                        onAction(AppAction.SetQuery(""))
+                                                    }
+                                                    if (state.isSelectionMode) {
+                                                        onAction(AppAction.ToggleSelection(file.id))
+                                                    } else {
                                                     if (file.type == "folder") {
                                                         onAction(AppAction.SetLocation(file.path, file.name))
                                                     } else if (file.name.endsWith(".pdf", ignoreCase = true) || file.type == "image" || file.type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { file.name.endsWith(it, ignoreCase = true) }) {
@@ -2365,16 +2276,20 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                             android.widget.Toast.makeText(context, "Error opening APK: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
                                                         }
                                                     }
+                                                    }
                                                 }
                                             },
                                             onFileLongClick = { file ->
-                                                onAction(AppAction.ToggleSelection(file.id))
+                                                if (!file.isLocked) {
+                                                    onAction(AppAction.ToggleSelection(file.id))
+                                                }
                                             },
                                             onPinClick = { file -> onAction(AppAction.TogglePin(file.path)) },
                                             onInfoClick = { file -> infoDialogFile = file },
                                             onRenameClick = { file, newName -> onAction(AppAction.RenameFile(file.path, newName)) },
                                             onExtractClick = { file -> extractTargetFile = file },
-                                            onItemPositioned = onItemPositioned,
+                                            onLockClick = { file -> onAction(AppAction.RequestAuth(com.ripple.filemanager.AuthReason.LOCK_FILE, file.path)) },
+                                            onUnlockClick = { file -> onAction(AppAction.RequestAuth(com.ripple.filemanager.AuthReason.UNLOCK_FILE, file.path)) },
                                             cornerRoundness = state.cornerRoundness,
                                             gridColumns = state.gridColumns,
                                             modifier = Modifier.fillMaxSize()
@@ -2403,7 +2318,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             }
         }
         
-        Box(modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 70.dp), contentAlignment = Alignment.BottomCenter) {
+        Box(modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 24.dp), contentAlignment = Alignment.BottomCenter) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2419,30 +2334,35 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     )
                 }
 
-                AnimatedVisibility(
-                    visible = state.isSelectionMode,
-                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .clip(getDynamicCornerShape(16f, state.cornerRoundness))
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        BadgedBox(
-                            badge = {
-                                if (state.selectedFiles.isNotEmpty()) {
-                                    Badge { Text(state.selectedFiles.size.toString()) }
-                                }
-                            }
+                UnifiedBottomPill(
+                    state = state,
+                    onAction = onAction,
+                    capturedTargetFolderName = capturedTargetFolderName,
+                    onCaptureTargetFolder = { capturedTargetFolderName = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    selectionModeContent = {
+                        val shape = getDynamicCornerShape(32f, state.cornerRoundness)
+                        Row(
+                            modifier = Modifier
+                                .height(54.dp)
+                                .border(1.dp, SkylineColors.Amber.copy(alpha = 0.5f), shape)
+                                .clip(shape)
+                                .background(Color.Transparent)
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            IconButton(onClick = { onAction(AppAction.SetShowBatchRenameDialog(true)) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Edit, contentDescription = "Batch Rename", tint = MaterialTheme.colorScheme.onPrimaryContainer) }
-                        }
-                        IconButton(onClick = { onAction(AppAction.SelectAll) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Default.SelectAll, contentDescription = "Select All", tint = MaterialTheme.colorScheme.onPrimaryContainer) }
-                            IconButton(onClick = { onAction(AppAction.SelectNone) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Default.Deselect, contentDescription = "Select None", tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+                            BadgedBox(
+                                badge = {
+                                    if (state.selectedFiles.isNotEmpty()) {
+                                        Badge(containerColor = SkylineColors.Amber, contentColor = Color(0xFF161009)) { Text(state.selectedFiles.size.toString()) }
+                                    }
+                                }
+                            ) {
+                                IconButton(onClick = { onAction(AppAction.SetShowBatchRenameDialog(true)) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Edit, contentDescription = "Batch Rename", tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
+                            }
+                            IconButton(onClick = { onAction(AppAction.SelectAll) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Default.SelectAll, contentDescription = "Select All", tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
+                            IconButton(onClick = { onAction(AppAction.SelectNone) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Default.Deselect, contentDescription = "Select None", tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
                             IconButton(onClick = {
                                 val uris = state.selectedFiles.mapNotNull { id ->
                                     state.files.find { it.id == id }?.path?.let { path ->
@@ -2457,12 +2377,29 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     }
                                     context.startActivity(Intent.createChooser(intent, "Share files"))
                                 }
-                            }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onPrimaryContainer) }
-                            IconButton(onClick = { onAction(AppAction.SetClipboard("copy")) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.onPrimaryContainer) }
-                            IconButton(onClick = { onAction(AppAction.SetClipboard("cut")) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.ContentCut, contentDescription = "Cut", tint = MaterialTheme.colorScheme.onPrimaryContainer) }
-                            IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+                            }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Share, contentDescription = "Share", tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
+                            IconButton(onClick = { onAction(AppAction.SetClipboard("copy")) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy", tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
+                            IconButton(onClick = { onAction(AppAction.SetClipboard("cut")) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.ContentCut, contentDescription = "Cut", tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
+                            IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
+                        }
+                    },
+                    rippleNavContent = {
+                        RippleBottomNav(
+                            currentLocation = state.location,
+                            onLocationSelected = { 
+                                onAction(AppAction.SetLocation(it))
+                                if (it == "drive" && !state.isGoogleDriveAuthenticated && !state.isMegaAuthenticated && !state.isDropboxAuthenticated) {
+                                    onAction(AppAction.SetErrorMessage("Sign in to a cloud server in the menu first."))
+                                }
+                            },
+                            onTabTapped = { onAction(AppAction.NavTabTapped(it)) },
+                            tapCounters = state.navTapCounters,
+                            cornerRoundness = state.cornerRoundness,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                        )
                     }
-                }
+                )
+
             }
         }
         
@@ -2483,28 +2420,19 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val warningText = if (isDrive) "Deleting is irreversible proceed" else if (state.isRecycleBinEnabled) "Files will be moved to Trash." else "This action cannot be undone."
             AlertDialog(
                 onDismissRequest = { showDeleteConfirm = false },
-                title = { Text("Delete selected item(s)?") },
+                title = { com.ripple.filemanager.ui.MonoLabel("DELETE SELECTED ITEM(S)?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                 text = { Text(warningText) },
                 confirmButton = {
                     TextButton(onClick = {
-                        val durationScale = android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
-                        if (durationScale > 0f) {
-                            state.selectedFiles.forEach { id ->
-                                val file = state.files.find { it.id == id } ?: state.trashFiles.find { it.id == id }
-                                val rect = itemBounds[id]
-                                if (file != null && rect != null) {
-                                    val icon = if (file.type == "folder") androidx.compose.material.icons.Icons.Default.Folder else androidx.compose.material.icons.Icons.Outlined.InsertDriveFile
-                                    onDeleteFlying(FlyingDelete(id = id.toString(), startRect = rect, icon = icon, file = file))
-                                }
-                            }
-                        }
                         onAction(AppAction.DeleteSelectedFiles)
                         showDeleteConfirm = false
-                    }) { Text("Delete") }
+                    }) { Text("DELETE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
-                }
+                    TextButton(onClick = { showDeleteConfirm = false }) { Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
+                },
+                containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                shape = getDynamicCornerShape(12f, state.cornerRoundness)
             )
         }
 
@@ -2515,7 +2443,8 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     onFolderSelected = { path ->
                         isExtracting = true
                         onAction(AppAction.ExtractZip(extractTargetFile!!.path, path))
-                    }
+                    },
+                    cornerRoundness = state.cornerRoundness
                 )
             } else {
                 if (state.extractProgress == null) {
@@ -2524,31 +2453,34 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 } else {
                     AlertDialog(
                         onDismissRequest = {},
-                        title = { Text("Extracting Zip") },
+                        title = { com.ripple.filemanager.ui.MonoLabel("EXTRACTING ZIP", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                         text = {
                             Column {
-                                Text("Extracting ${extractTargetFile!!.name}...")
+                                Text("Extracting ${extractTargetFile!!.name}...", color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
                                 Spacer(modifier = Modifier.height(16.dp))
                                 LinearProgressIndicator(
                                     progress = { state.extractProgress ?: 0f },
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = com.ripple.filemanager.ui.theme.SkylineColors.Amber
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text("${((state.extractProgress ?: 0f) * 100).toInt()}%")
+                                Text("${((state.extractProgress ?: 0f) * 100).toInt()}%", color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
                             }
                         },
                         confirmButton = {
                             TextButton(onClick = { onAction(AppAction.ToggleExtractPause) }) {
-                                Text(if (state.isExtractPaused) "Resume" else "Pause")
+                                Text(if (state.isExtractPaused) "RESUME" else "PAUSE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { 
                                 onAction(AppAction.CancelExtract)
                             }) {
-                                Text("Cancel")
+                                Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                             }
-                        }
+                        },
+                        containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                        shape = getDynamicCornerShape(12f, state.cornerRoundness)
                     )
                 }
             }
@@ -2557,7 +2489,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (state.extractResultPath != null) {
             AlertDialog(
                 onDismissRequest = { onAction(AppAction.ClearExtractResult) },
-                title = { Text("Extraction Complete") },
+                title = { com.ripple.filemanager.ui.MonoLabel("EXTRACTION COMPLETE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                 text = { Text("Folder extracted successfully. Do you want to open it?") },
                 confirmButton = {
                     TextButton(onClick = { 
@@ -2567,14 +2499,16 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             onAction(AppAction.SetLocation(path))
                         }
                     }) {
-                        Text("Open")
+                        Text("OPEN", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { onAction(AppAction.ClearExtractResult) }) {
-                        Text("Cancel")
+                        Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                     }
-                }
+                },
+                containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                shape = getDynamicCornerShape(12f, state.cornerRoundness)
             )
         }
         
@@ -2702,7 +2636,7 @@ fun Sidebar(currentLocation: String, onLocationSelected: (String) -> Unit, corne
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             NavButton("Home", "home", Icons.Default.Home, currentLocation, cornerRoundness, onLocationSelected)
             NavButton("Recents", "recent", Icons.Default.Schedule, currentLocation, cornerRoundness, onLocationSelected)
-            NavButton("Starred", "starred", Icons.Default.Star, currentLocation, cornerRoundness, onLocationSelected)
+            NavButton("Pinned", "pinned", Icons.Default.PushPin, currentLocation, cornerRoundness, onLocationSelected)
             NavButton("Drive", "drive", Icons.Default.Cloud, currentLocation, cornerRoundness, onLocationSelected)
             NavButton("Trash", "trash", Icons.Default.Delete, currentLocation, cornerRoundness, onLocationSelected)
         }
@@ -2755,13 +2689,13 @@ fun RippleBottomNav(
     modifier: Modifier = Modifier
 ) {
     val items = listOf(
-        "home" to androidx.compose.material.icons.Icons.Default.Home,
-        "recent" to androidx.compose.material.icons.Icons.Default.Schedule,
-        "starred" to androidx.compose.material.icons.Icons.Default.Star,
-        "drive" to androidx.compose.material.icons.Icons.Default.Cloud
+        Triple("home", androidx.compose.material.icons.Icons.Filled.Home, androidx.compose.material.icons.Icons.Outlined.Home),
+        Triple("recent", androidx.compose.material.icons.Icons.Filled.Schedule, androidx.compose.material.icons.Icons.Outlined.Schedule),
+        Triple("pinned", androidx.compose.material.icons.Icons.Filled.PushPin, androidx.compose.material.icons.Icons.Outlined.PushPin),
+        Triple("drive", androidx.compose.material.icons.Icons.Filled.Cloud, androidx.compose.material.icons.Icons.Outlined.Cloud)
     )
     
-    val selectedIndex = items.indexOfFirst { (id, _) ->
+    val selectedIndex = items.indexOfFirst { (id, _, _) ->
         if (id == "drive") {
             currentLocation == "drive" || currentLocation.startsWith("drive_id:") ||
             currentLocation == "mega" || currentLocation.startsWith("mega_id:") ||
@@ -2776,15 +2710,15 @@ fun RippleBottomNav(
     val selectedId = items.getOrNull(selectedIndex)?.first ?: "home"
 
     BottomNavBar(
-        items = items.map { (id, icon) ->
+        items = items.map { (id, activeIcon, inactiveIcon) ->
             val label = when(id) {
                 "home"    -> "Home"
                 "recent"  -> "Recent"
-                "starred" -> "Starred"
+                "pinned" -> "Pinned"
                 "drive"   -> "Cloud"
                 else      -> id
             }
-            BottomNavItem(id = id, icon = icon, label = label)
+            BottomNavItem(id = id, activeIcon = activeIcon, inactiveIcon = inactiveIcon, label = label)
         },
         selectedId = selectedId,
         tapCounters = tapCounters,
@@ -2825,18 +2759,17 @@ fun BatchRenameDialog(
                 .fillMaxWidth(0.95f)
                 .wrapContentHeight(),
             shape = getDynamicCornerShape(28f, cornerRoundness),
-            color = MaterialTheme.colorScheme.surface,
+            color = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
             tonalElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Batch Rename",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold
+                com.ripple.filemanager.ui.MonoLabel(
+                    text = "BATCH RENAME",
+                    color = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
+                    fontSize = 16
                 )
 
                 // Live Preview Section
@@ -2914,7 +2847,7 @@ fun BatchRenameDialog(
                         label = { Text("Base Name") },
                         modifier = Modifier.weight(2f),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = getDynamicCornerShape(12f, cornerRoundness)
                     )
                     OutlinedTextField(
                         value = extension,
@@ -2922,7 +2855,7 @@ fun BatchRenameDialog(
                         label = { Text("File Type") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = getDynamicCornerShape(12f, cornerRoundness)
                     )
                 }
 
@@ -2937,8 +2870,8 @@ fun BatchRenameDialog(
                             onClick = { numberingStyle = style },
                             label = { Text(style) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF6B4C41),
-                                selectedLabelColor = Color.White
+                                selectedContainerColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
+                                selectedLabelColor = Color(0xFF161009)
                             )
                         )
                     }
@@ -2952,7 +2885,7 @@ fun BatchRenameDialog(
                             label = { Text("Starts From") },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
+                            shape = getDynamicCornerShape(12f, cornerRoundness)
                         )
                         OutlinedTextField(
                             value = paddingStr,
@@ -2960,7 +2893,7 @@ fun BatchRenameDialog(
                             label = { Text("Leading Zeros") },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
+                            shape = getDynamicCornerShape(12f, cornerRoundness)
                         )
                     }
 
@@ -2972,7 +2905,7 @@ fun BatchRenameDialog(
                             RadioButton(
                                 selected = isPrefix,
                                 onClick = { isPrefix = true },
-                                colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF6B4C41))
+                                colors = RadioButtonDefaults.colors(selectedColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                             )
                             Text("Prefix")
                         }
@@ -2980,7 +2913,7 @@ fun BatchRenameDialog(
                             RadioButton(
                                 selected = !isPrefix,
                                 onClick = { isPrefix = false },
-                                colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF6B4C41))
+                                colors = RadioButtonDefaults.colors(selectedColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                             )
                             Text("Suffix")
                         }
@@ -3000,7 +2933,7 @@ fun BatchRenameDialog(
                     
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = onDismiss) {
-                            Text("Cancel", color = Color(0xFF6B4C41))
+                            Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                         }
                         Button(
                             onClick = {
@@ -3008,9 +2941,9 @@ fun BatchRenameDialog(
                                 val start = startNumberStr.toIntOrNull() ?: 1
                                 onRename(baseName, extension, pad, start, isPrefix, numberingStyle)
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6B4C41), contentColor = Color.White)
+                            colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber, contentColor = Color(0xFF161009))
                         ) {
-                            Text("Rename")
+                            Text("RENAME")
                         }
                     }
                 }
@@ -3255,5 +3188,101 @@ fun StorageCard(
                 fontSize = 10
             )
         }
+    }
+}
+
+@Composable
+fun AuthDialog(
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (password: String?) -> Unit
+) {
+    var password by remember { mutableStateOf("") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = context.getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE)
+    val biometricEnabled = prefs.getBoolean("lock_biometric_enabled", false)
+    var biometricFailures by remember { mutableStateOf(0) }
+    var showPasswordField by remember { mutableStateOf(!biometricEnabled) }
+    
+    // Auto trigger biometric if enabled
+    LaunchedEffect(Unit) {
+        if (biometricEnabled && context is androidx.fragment.app.FragmentActivity) {
+            var biometricPrompt: androidx.biometric.BiometricPrompt? = null
+            val executor = androidx.core.content.ContextCompat.getMainExecutor(context)
+            val callback = object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    // Auth directly without password
+                    onConfirm(null)
+                }
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    biometricFailures++
+                    if (biometricFailures >= 3) {
+                        biometricPrompt?.cancelAuthentication()
+                        android.widget.Toast.makeText(context, "Fingerprint failed 3 times. Please enter password.", android.widget.Toast.LENGTH_LONG).show()
+                        showPasswordField = true
+                    }
+                }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    showPasswordField = true
+                }
+            }
+            biometricPrompt = androidx.biometric.BiometricPrompt(context, executor, callback)
+            val promptInfo = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Authenticate")
+                .setSubtitle("Use your device credential to verify access")
+                .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                .build()
+            biometricPrompt.authenticate(promptInfo)
+        }
+    }
+
+    if (showPasswordField) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = onDismiss,
+            containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+            shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, 0.5f),
+            title = {
+                com.ripple.filemanager.ui.MonoLabel(
+                    text = "AUTHENTICATE",
+                    color = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
+                    fontSize = 14
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Enter Global Password") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, 0.5f)
+                    )
+                    if (errorMessage != null) {
+                        Text(text = errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { 
+                        if (password.isNotEmpty()) {
+                            onConfirm(password)
+                        }
+                    }
+                ) {
+                    Text("VERIFY", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = onDismiss) {
+                    Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
+                }
+            }
+        )
     }
 }

@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Audiotrack
 import androidx.compose.material.icons.outlined.Description
@@ -161,7 +163,7 @@ fun FileGrid(
     folderState: FolderListUiState,
     pasteLoadingCount: Int? = null,
     selectedFiles: ImmutableSet<Int>,
-    shatteringFiles: ImmutableSet<Int> = persistentSetOf(),
+    deletingIds: Set<Int> = emptySet(),
     isListMode: Boolean,
     iconShape: com.ripple.filemanager.IconShapeType,
     cornerRoundness: Float,
@@ -171,6 +173,8 @@ fun FileGrid(
     onInfoClick: (FileItem) -> Unit,
     onRenameClick: (FileItem, String) -> Unit,
     onExtractClick: (FileItem) -> Unit,
+    onLockClick: (FileItem) -> Unit = {},
+    onUnlockClick: (FileItem) -> Unit = {},
     modifier: Modifier = Modifier,
     header: @Composable () -> Unit = {},
     emptyState: @Composable () -> Unit = {
@@ -221,25 +225,16 @@ fun FileGrid(
                     items(count = currentFiles.size + skeletonCount, key = { if (it < currentFiles.size) currentFiles[it].id else "skeleton_$it" }, contentType = { if (it < currentFiles.size) (if (currentFiles[it].type == "folder") 1 else 0) else 2 }) { index ->
                         if (index < currentFiles.size) {
                             val file = currentFiles[index]
-                            val isShattering = shatteringFiles.contains(file.id)
-                            val shatterProgress by androidx.compose.animation.core.animateFloatAsState(
-                                targetValue = if (isShattering) 1f else 0f,
-                                animationSpec = androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.LinearOutSlowInEasing)
-                            )
-                            FileListCard(
-                            modifier = Modifier
-                                .animateItem()
-                                .graphicsLayer {
-                                    if (shatterProgress > 0f) {
-                                        scaleX = 1f + shatterProgress * 0.5f
-                                        scaleY = 1f + shatterProgress * 0.5f
-                                        alpha = 1f - shatterProgress
-                                        rotationZ = (file.id % 20 - 10) * shatterProgress * 5f
-                                        translationY = shatterProgress * 100f
-                                    }
-                                }
-                                .depthStackEffect(index = index, listState = listState)
-                                .onGloballyPositioned { onItemPositioned(file.id, it.boundsInRoot()) },
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = !deletingIds.contains(file.id),
+                                exit = androidx.compose.animation.shrinkOut(
+                                    shrinkTowards = Alignment.Center,
+                                    animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
+                                modifier = Modifier.animateItem()
+                            ) {
+                                FileListCard(
+                                    modifier = Modifier.depthStackEffect(index = index, listState = listState),
                             imageLoader = customImageLoader,
                             file = file,
                             isSelected = selectedFiles.contains(file.id),
@@ -251,8 +246,11 @@ fun FileGrid(
                             onPinClick = { onPinClick(file) },
                             onInfoClick = { onInfoClick(file) },
                             onRenameClick = { name -> onRenameClick(file, name) },
-                            onExtractClick = { onExtractClick(file) }
+                            onExtractClick = { onExtractClick(file) },
+                            onLockClick = { onLockClick(file) },
+                            onUnlockClick = { onUnlockClick(file) }
                         )
+                            }
                         } else {
                             FolderSkeletonCard(index = index, isListMode = true, cornerRoundness = cornerRoundness, gridColumns = gridColumns)
                         }
@@ -282,39 +280,33 @@ fun FileGrid(
                     items(count = currentFiles.size + skeletonCount, key = { if (it < currentFiles.size) "${currentFiles[it].path}_$it" else "skeleton_$it" }, contentType = { if (it < currentFiles.size) (if (currentFiles[it].type == "folder") 1 else 0) else 2 }) { index ->
                         if (index < currentFiles.size) {
                             val file = currentFiles[index]
-                            val isShattering = shatteringFiles.contains(file.id)
-                            val shatterProgress by androidx.compose.animation.core.animateFloatAsState(
-                                targetValue = if (isShattering) 1f else 0f,
-                                animationSpec = androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.LinearOutSlowInEasing)
-                            )
-                            FileGridCard(
-                            modifier = Modifier
-                                .animateItem()
-                                .graphicsLayer {
-                                    if (shatterProgress > 0f) {
-                                        scaleX = 1f + shatterProgress * 0.5f
-                                        scaleY = 1f + shatterProgress * 0.5f
-                                        alpha = 1f - shatterProgress
-                                        rotationZ = (file.id % 20 - 10) * shatterProgress * 5f
-                                        translationY = shatterProgress * 100f
-                                    }
-                                }
-                                .gridDepthStackEffect(index = index, gridState = gridState)
-                                .onGloballyPositioned { onItemPositioned(file.id, it.boundsInRoot()) },
-                            imageLoader = customImageLoader,
-                            file = file,
-                            isSelected = selectedFiles.contains(file.id),
-                            iconShape = iconShape,
-                            cornerRoundness = cornerRoundness,
-                            gridColumns = gridColumns,
-                            searchQuery = searchQuery,
-                            onClick = { onFileClick(file) },
-                            onLongClick = { onFileLongClick(file) },
-                            onPinClick = { onPinClick(file) },
-                            onInfoClick = { onInfoClick(file) },
-                            onRenameClick = { name -> onRenameClick(file, name) },
-                            onExtractClick = { onExtractClick(file) }
-                        )
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = !deletingIds.contains(file.id),
+                                exit = androidx.compose.animation.shrinkOut(
+                                    shrinkTowards = Alignment.Center,
+                                    animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
+                                modifier = Modifier.animateItem()
+                            ) {
+                                FileGridCard(
+                                    modifier = Modifier.gridDepthStackEffect(index = index, gridState = gridState),
+                                    imageLoader = customImageLoader,
+                                    file = file,
+                                    isSelected = selectedFiles.contains(file.id),
+                                    iconShape = iconShape,
+                                    cornerRoundness = cornerRoundness,
+                                    gridColumns = gridColumns,
+                                    searchQuery = searchQuery,
+                                    onClick = { onFileClick(file) },
+                                    onLongClick = { onFileLongClick(file) },
+                                    onPinClick = { onPinClick(file) },
+                                    onInfoClick = { onInfoClick(file) },
+                                    onRenameClick = { name -> onRenameClick(file, name) },
+                                    onExtractClick = { onExtractClick(file) },
+                                    onLockClick = { onLockClick(file) },
+                                    onUnlockClick = { onUnlockClick(file) }
+                                )
+                            }
                         } else {
                             FolderSkeletonCard(index = index, isListMode = false, cornerRoundness = cornerRoundness, gridColumns = gridColumns)
                         }
@@ -327,7 +319,7 @@ fun FileGrid(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoader, iconShape: com.ripple.filemanager.IconShapeType, cornerRoundness: Float, gridColumns: Int = 2, modifier: Modifier = Modifier, searchQuery: String = "", onClick: () -> Unit, onLongClick: () -> Unit, onPinClick: () -> Unit, onInfoClick: () -> Unit, onRenameClick: (String) -> Unit, onExtractClick: () -> Unit) {
+fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoader, iconShape: com.ripple.filemanager.IconShapeType, cornerRoundness: Float, gridColumns: Int = 2, modifier: Modifier = Modifier, searchQuery: String = "", onClick: () -> Unit, onLongClick: () -> Unit, onPinClick: () -> Unit, onInfoClick: () -> Unit, onRenameClick: (String) -> Unit, onExtractClick: () -> Unit, onLockClick: () -> Unit = {}, onUnlockClick: () -> Unit = {}) {
     val dynamicRadius = (24f * (cornerRoundness * 2)).coerceIn(0f, 100f)
     val shape = if (isSelected) RoundedCornerShape(topStart = 32.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 26.dp)
                 else RoundedCornerShape(dynamicRadius.dp)
@@ -381,7 +373,8 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             .border(if (isSelected) 2.dp else 1.dp, borderColor, shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         color = bgColor,
-        shape = shape
+        shape = shape,
+        shadowElevation = if (!isDarkTheme) 3.dp else 0.dp
     ) {
         Box(modifier = Modifier.fillMaxWidth().wrapContentHeight().defaultMinSize(minHeight = 100.dp).then(if (isMediaOrDoc) Modifier.aspectRatio(if (gridColumns > 2) 1f else 0.85f) else Modifier)) {
             if (isMediaOrDoc) {
@@ -475,16 +468,18 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                         val density = LocalDensity.current
                         val yOffset = with(density) { (-40).dp.roundToPx() }
                         Popup(alignment = Alignment.TopEnd, offset = androidx.compose.ui.unit.IntOffset(0, yOffset), onDismissRequest = { showMenu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
-                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh, shadowElevation = 4.dp) {
+                            Surface(
+                                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                                shadowElevation = 4.dp
+                            ) {
                                 Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { showMenu = false; onPinClick() }, modifier = Modifier.size(36.dp)) { Icon(if (file.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin, contentDescription = "Pin") }
-                                    IconButton(onClick = { 
-                                        showMenu = false
-                                        if (isNativeRootFolder(file.path)) { Toast.makeText(context, "Cannot rename native root folders", Toast.LENGTH_SHORT).show() } else { isEditingName = true; editNameValue = file.name }
-                                    }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.Edit, contentDescription = "Rename") }
-                                    IconButton(onClick = { showMenu = false; onInfoClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.Info, contentDescription = "Info") }
+                                    IconButton(onClick = { showMenu = false; onPinClick() }, modifier = Modifier.size(36.dp)) { Icon(if (file.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin, contentDescription = "Pin", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
+                                    IconButton(onClick = { showMenu = false; if (file.isLocked) onUnlockClick() else onLockClick() }, modifier = Modifier.size(36.dp)) { Icon(if (file.isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (file.isLocked) "Unlock" else "Lock", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
+                                    IconButton(onClick = { showMenu = false; onInfoClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.Info, contentDescription = "Info", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
                                     if (file.name.endsWith(".zip", ignoreCase = true)) {
-                                        IconButton(onClick = { showMenu = false; onExtractClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.FolderZip, contentDescription = "Extract") }
+                                        IconButton(onClick = { showMenu = false; onExtractClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.FolderZip, contentDescription = "Extract", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
                                     }
                                 }
                             }
@@ -497,8 +492,16 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                 Icon(
                     Icons.Default.PushPin,
                     contentDescription = "Pinned",
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
                     modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 2.dp).size(28.dp).graphicsLayer(rotationZ = 45f)
+                )
+            }
+            if (file.isLocked) {
+                Icon(
+                    Icons.Outlined.Lock,
+                    contentDescription = "Locked",
+                    tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).size(24.dp)
                 )
             }
         }
@@ -507,7 +510,7 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoader, iconShape: com.ripple.filemanager.IconShapeType, cornerRoundness: Float, modifier: Modifier = Modifier, searchQuery: String = "", onClick: () -> Unit, onLongClick: () -> Unit, onPinClick: () -> Unit, onInfoClick: () -> Unit, onRenameClick: (String) -> Unit, onExtractClick: () -> Unit) {
+fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoader, iconShape: com.ripple.filemanager.IconShapeType, cornerRoundness: Float, modifier: Modifier = Modifier, searchQuery: String = "", onClick: () -> Unit, onLongClick: () -> Unit, onPinClick: () -> Unit, onInfoClick: () -> Unit, onRenameClick: (String) -> Unit, onExtractClick: () -> Unit, onLockClick: () -> Unit = {}, onUnlockClick: () -> Unit = {}) {
     val dynamicRadius = (24f * (cornerRoundness * 2)).coerceIn(0f, 100f)
     val shape = if (isSelected) RoundedCornerShape(topStart = 32.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 26.dp)
                 else RoundedCornerShape(dynamicRadius.dp)
@@ -561,7 +564,8 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             .border(if (isSelected) 2.dp else 1.dp, borderColor, shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         color = bgColor,
-        shape = shape
+        shape = shape,
+        shadowElevation = if (!isDarkTheme) 3.dp else 0.dp
     ) {
         Box(modifier = Modifier.fillMaxWidth().wrapContentHeight().defaultMinSize(minHeight = 68.dp)) {
             Row(
@@ -623,8 +627,9 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                                 properties = PopupProperties(focusable = true)
                             ) {
                                 Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
                                     shadowElevation = 4.dp
                                 ) {
                                     Row(
@@ -633,24 +638,16 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         IconButton(onClick = { showMenu = false; onPinClick() }, modifier = Modifier.size(36.dp)) {
-                                            Icon(if (file.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin, contentDescription = "Pin")
+                                            Icon(if (file.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin, contentDescription = "Pin", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                         }
-                                        IconButton(onClick = { 
-                                            showMenu = false
-                                            if (isNativeRootFolder(file.path)) {
-                                                Toast.makeText(context, "Cannot rename native root folders", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                isEditingName = true
-                                                editNameValue = file.name
-                                            }
-                                        }, modifier = Modifier.size(36.dp)) {
-                                            Icon(Icons.Outlined.Edit, contentDescription = "Rename")
+                                        IconButton(onClick = { showMenu = false; if (file.isLocked) onUnlockClick() else onLockClick() }, modifier = Modifier.size(36.dp)) {
+                                            Icon(if (file.isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (file.isLocked) "Unlock" else "Lock", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                         }
                                         IconButton(onClick = { showMenu = false; onInfoClick() }, modifier = Modifier.size(36.dp)) {
-                                            Icon(Icons.Outlined.Info, contentDescription = "Info")
+                                            Icon(Icons.Outlined.Info, contentDescription = "Info", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                         }
                                         if (file.name.endsWith(".zip", ignoreCase = true)) {
-                                            IconButton(onClick = { showMenu = false; onExtractClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.FolderZip, contentDescription = "Extract") }
+                                            IconButton(onClick = { showMenu = false; onExtractClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.FolderZip, contentDescription = "Extract", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
                                         }
                                     }
                                 }
@@ -663,8 +660,16 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                 Icon(
                     Icons.Default.PushPin,
                     contentDescription = "Pinned",
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
                     modifier = Modifier.align(Alignment.TopStart).padding(8.dp).size(24.dp)
+                )
+            }
+            if (file.isLocked) {
+                Icon(
+                    Icons.Outlined.Lock,
+                    contentDescription = "Locked",
+                    tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(24.dp)
                 )
             }
         }

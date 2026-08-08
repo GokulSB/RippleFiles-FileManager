@@ -21,11 +21,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -288,15 +290,6 @@ fun OffsetFab(
     Box(
         modifier = modifier
             .then(sizeModifier)
-            .drawBehind {
-                // Hard offset shadow (3dp x, 3dp y, 0 blur)
-                drawRect(
-                    color = shadowColor,
-                    topLeft = Offset(3.dp.toPx(), 3.dp.toPx()),
-                    size = size,
-                    // If we want rounded shadow, drawRoundRect can be used, but since it's hard offset, we'll keep hard edge for now or use shape
-                )
-            }
             .background(SkylineColors.Amber, shape)
             .border(1.dp, SkylineColors.AmberDim, shape)
             .clickable(
@@ -331,8 +324,10 @@ fun SkylineTopBar(
     onQueryChange: (String) -> Unit,
     onMenuClick: () -> Unit,
     onTrashClick: () -> Unit,
+    onOrganiseClick: () -> Unit,
     modifier: Modifier = Modifier,
-    cornerRoundness: Float = 0f
+    cornerRoundness: Float = 0f,
+    organiseProgress: Float? = null
 ) {
     val shape = getDynamicCornerShape(12f, cornerRoundness)
     Row(
@@ -385,6 +380,20 @@ fun SkylineTopBar(
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { onQueryChange("") }) {
                         Icon(Icons.Default.Close, contentDescription = "Clear", tint = SkylineColors.TextDim, modifier = Modifier.size(16.dp))
+                    }
+                } else if (organiseProgress != null) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(24.dp)) {
+                        CircularProgressIndicator(
+                            progress = { organiseProgress },
+                            color = SkylineColors.Amber,
+                            trackColor = SkylineColors.Amber.copy(alpha = 0.2f),
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                } else {
+                    IconButton(onClick = onOrganiseClick) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "Organise Files", tint = SkylineColors.AmberDim, modifier = Modifier.size(18.dp))
                     }
                 }
             },
@@ -454,11 +463,19 @@ fun SkylineFolderGridTile(
     val baseTone = fileTypeTone(type)
     val toneColor = when {
         type == "folder" -> {
-            val count = itemCountOrMeta.substringBefore(" ").toIntOrNull() ?: 0
-            when {
-                count > 50 -> SkylineColors.Rust // Red-ish for >50 items
-                count > 10 -> SkylineColors.Amber // Yellow-ish for >10 items
-                else -> SkylineColors.Sage // Green-ish for small folders
+            if (sizeBytes > 0L) {
+                when {
+                    sizeBytes > 1024L * 1024L * 1024L -> SkylineColors.Rust // Red-ish for Large (>1GB)
+                    sizeBytes > 100L * 1024L * 1024L -> SkylineColors.Amber // Yellow-ish for Medium (>100MB)
+                    else -> SkylineColors.Sage // Green-ish for Small
+                }
+            } else {
+                val count = itemCountOrMeta.substringBefore(" ").toIntOrNull() ?: 0
+                when {
+                    count > 50 -> SkylineColors.Rust // Red-ish for >50 items
+                    count > 10 -> SkylineColors.Amber // Yellow-ish for >10 items
+                    else -> SkylineColors.Sage // Green-ish for small folders
+                }
             }
         }
         else -> {
@@ -474,10 +491,14 @@ fun SkylineFolderGridTile(
 
     val borderColor = if (isSelected) SkylineColors.Amber else SkylineColors.Border
     val borderWidth = if (isSelected) 2.dp else 1.dp
+    
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val shadowMod = if (!isDark) Modifier.shadow(3.dp, shape, spotColor = Color(0x33000000)) else Modifier
 
     Column(
         modifier = modifier
             .defaultMinSize(minHeight = 110.dp)
+            .then(shadowMod)
             .border(borderWidth, borderColor, shape)
             .background(MaterialTheme.colorScheme.surface, shape)
             .clip(shape)
@@ -515,7 +536,7 @@ fun SkylineFolderGridTile(
                 if (isPinned) {
                     Spacer(Modifier.width(4.dp))
                     Icon(
-                        imageVector = Icons.Default.Lock,
+                        imageVector = Icons.Default.PushPin,
                         contentDescription = "Pinned",
                         tint = SkylineColors.Amber,
                         modifier = Modifier.size(12.dp)
@@ -550,24 +571,20 @@ fun SkylineFolderGridTile(
                         ) {
                             Icon(Icons.Default.MoreVert, contentDescription = "More", tint = SkylineColors.TextDim, modifier = Modifier.size(16.dp))
                         }
-                        androidx.compose.material3.DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                            modifier = Modifier
-                                .background(MaterialTheme.colorScheme.surface)
-                                .border(1.dp, SkylineColors.Border, getDynamicCornerShape(12f, cornerRoundness))
-                                .clip(getDynamicCornerShape(12f, cornerRoundness))
-                        ) {
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text("Pin", fontFamily = ManropeFontFamily, color = SkylineColors.TextPrimary) },
-                                onClick = { showMenu = false; onPinClick?.invoke() },
-                                leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = SkylineColors.Amber) }
-                            )
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text("App info", fontFamily = ManropeFontFamily, color = SkylineColors.TextPrimary) },
-                                onClick = { showMenu = false; onInfoClick?.invoke() },
-                                leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = SkylineColors.Amber) }
-                            )
+                        if (showMenu) {
+                            androidx.compose.ui.window.Popup(alignment = androidx.compose.ui.Alignment.TopEnd, onDismissRequest = { showMenu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+                                Surface(
+                                    shape = getDynamicCornerShape(12f, cornerRoundness),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, SkylineColors.Border),
+                                    shadowElevation = 4.dp
+                                ) {
+                                    Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = "Pin", tint = SkylineColors.Amber) }
+                                        IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = "App info", tint = SkylineColors.Amber) }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -630,11 +647,19 @@ fun SkylineFolderListRow(
     val baseTone = fileTypeTone(type)
     val toneColor = when {
         type == "folder" -> {
-            val count = trailingMeta.substringBefore(" ").toIntOrNull() ?: 0
-            when {
-                count > 50 -> SkylineColors.Rust // Red-ish for >50 items
-                count > 10 -> SkylineColors.Amber // Yellow-ish for >10 items
-                else -> SkylineColors.Sage // Green-ish for small folders
+            if (sizeBytes > 0L) {
+                when {
+                    sizeBytes > 1024L * 1024L * 1024L -> SkylineColors.Rust // Red-ish for Large (>1GB)
+                    sizeBytes > 100L * 1024L * 1024L -> SkylineColors.Amber // Yellow-ish for Medium (>100MB)
+                    else -> SkylineColors.Sage // Green-ish for Small
+                }
+            } else {
+                val count = trailingMeta.substringBefore(" ").toIntOrNull() ?: 0
+                when {
+                    count > 50 -> SkylineColors.Rust // Red-ish for >50 items
+                    count > 10 -> SkylineColors.Amber // Yellow-ish for >10 items
+                    else -> SkylineColors.Sage // Green-ish for small folders
+                }
             }
         }
         else -> {
@@ -647,11 +672,15 @@ fun SkylineFolderListRow(
         }
     }
     val borderColor = if (isSelected) SkylineColors.Amber else SkylineColors.Border
+    
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val shadowMod = if (!isDark) Modifier.shadow(3.dp, shape, spotColor = Color(0x33000000)) else Modifier
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 64.dp)
+            .then(shadowMod)
             .border(1.dp, borderColor, shape)
             .background(if (isSelected) SkylineColors.Amber.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface, shape)
             .clip(shape)
@@ -675,7 +704,7 @@ fun SkylineFolderListRow(
 
         if (isPinned) {
             Icon(
-                imageVector = Icons.Default.Lock,
+                imageVector = Icons.Default.PushPin,
                 contentDescription = "Pinned",
                 tint = SkylineColors.Amber,
                 modifier = Modifier.size(14.dp)
@@ -724,24 +753,20 @@ fun SkylineFolderListRow(
                 ) {
                     Icon(Icons.Default.MoreVert, contentDescription = "More", tint = SkylineColors.TextDim, modifier = Modifier.size(18.dp))
                 }
-                androidx.compose.material3.DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(1.dp, SkylineColors.Border, getDynamicCornerShape(12f, cornerRoundness))
-                        .clip(getDynamicCornerShape(12f, cornerRoundness))
-                ) {
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Pin", fontFamily = ManropeFontFamily, color = SkylineColors.TextPrimary) },
-                        onClick = { showMenu = false; onPinClick?.invoke() },
-                        leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = SkylineColors.Amber) }
-                    )
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("App info", fontFamily = ManropeFontFamily, color = SkylineColors.TextPrimary) },
-                        onClick = { showMenu = false; onInfoClick?.invoke() },
-                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = SkylineColors.Amber) }
-                    )
+                if (showMenu) {
+                    androidx.compose.ui.window.Popup(alignment = androidx.compose.ui.Alignment.TopEnd, onDismissRequest = { showMenu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+                        Surface(
+                            shape = getDynamicCornerShape(12f, cornerRoundness),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, SkylineColors.Border),
+                            shadowElevation = 4.dp
+                        ) {
+                            Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = "Pin", tint = SkylineColors.Amber) }
+                                IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = "App info", tint = SkylineColors.Amber) }
+                            }
+                        }
+                    }
                 }
             }
         }

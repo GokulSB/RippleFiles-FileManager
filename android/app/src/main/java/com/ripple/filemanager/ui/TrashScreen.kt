@@ -41,14 +41,11 @@ import kotlinx.coroutines.launch
 fun TrashScreen(
     state: AppState,
     onAction: (AppAction) -> Unit,
-    onClose: () -> Unit,
-    onItemPositioned: (Int, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
-    onDeleteFlying: (com.ripple.filemanager.ui.FlyingDelete) -> Unit = {},
-    itemBounds: Map<Int, androidx.compose.ui.geometry.Rect> = emptyMap()
+    onClose: () -> Unit
 ) {
     var selectedFiles by remember { mutableStateOf<ImmutableSet<Int>>(persistentSetOf()) }
     var showSettings by remember { mutableStateOf(false) }
-    var shatteringFiles by remember { mutableStateOf<ImmutableSet<Int>>(persistentSetOf()) }
+    var deletingIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -118,66 +115,74 @@ fun TrashScreen(
                 exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
             ) {
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 8.dp
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        Button(onClick = {
-                            val filesToRestore = state.trashFiles.filter { it.id in selectedFiles }.mapNotNull { it.encodedTrashName }
-                            onAction(AppAction.RestoreTrashFiles(filesToRestore))
-                            selectedFiles = persistentSetOf()
-                        }) {
-                            Icon(Icons.Outlined.Restore, contentDescription = "Restore", modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Restore")
+                        Button(
+                            onClick = {
+                                val filesToRestore = state.trashFiles.filter { it.id in selectedFiles }.mapNotNull { it.encodedTrashName }
+                                onAction(AppAction.RestoreTrashFiles(filesToRestore))
+                                selectedFiles = kotlinx.collections.immutable.persistentSetOf()
+                            },
+                            shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
+                            colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
+                        ) {
+                            Icon(androidx.compose.material.icons.Icons.Outlined.Restore, contentDescription = "Restore", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            com.ripple.filemanager.ui.MonoLabel("RESTORE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
                         }
                         
                         var showDeleteConfirm by remember { mutableStateOf(false) }
                         
                         Button(
                             onClick = { showDeleteConfirm = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
+                            colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
                         ) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Delete Permanently", modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Delete")
+                            Icon(androidx.compose.material.icons.Icons.Outlined.Delete, contentDescription = "Delete Permanently", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            com.ripple.filemanager.ui.MonoLabel("DELETE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
                         }
                         
                         if (showDeleteConfirm) {
                             AlertDialog(
                                 onDismissRequest = { showDeleteConfirm = false },
-                                title = { Text("Delete permanently?") },
+                                title = { com.ripple.filemanager.ui.MonoLabel("DELETE PERMANENTLY?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                                 text = { Text("These files will be deleted forever. This action cannot be undone.") },
                                 confirmButton = {
                                     Button(
                                         onClick = {
                                             showDeleteConfirm = false
                                             val filesToDelete = state.trashFiles.filter { it.id in selectedFiles }.mapNotNull { it.encodedTrashName }
-                                            val deletingIds = selectedFiles
-                                            shatteringFiles = shatteringFiles.plus(deletingIds).toImmutableSet()
+                                            val idsToRemove = selectedFiles
+                                            deletingIds = deletingIds + idsToRemove
                                             selectedFiles = persistentSetOf()
                                             
                                             coroutineScope.launch {
-                                                kotlinx.coroutines.delay(500)
+                                                kotlinx.coroutines.delay(220)
                                                 onAction(AppAction.PermanentlyDeleteTrashFiles(filesToDelete))
-                                                shatteringFiles = shatteringFiles.minus(deletingIds).toImmutableSet()
+                                                deletingIds = deletingIds - idsToRemove
                                             }
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                        shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
+                                        colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
                                     ) {
-                                        Icon(Icons.Outlined.Delete, contentDescription = "Delete", modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Delete")
+                                        Icon(Icons.Outlined.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        com.ripple.filemanager.ui.MonoLabel("DELETE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
                                     }
                                 },
                                 dismissButton = {
                                     TextButton(onClick = { showDeleteConfirm = false }) {
-                                        Text("Cancel")
+                                        Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                                     }
-                                }
+                                },
+                                containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+                                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
                             )
                         }
                     }
@@ -206,7 +211,7 @@ fun TrashScreen(
                         FileGrid(
                             folderState = FolderListUiState.Loaded(state.trashFiles),
                             selectedFiles = selectedFiles,
-                            shatteringFiles = shatteringFiles,
+                            deletingIds = deletingIds,
                             isListMode = state.isListMode,
                             iconShape = com.ripple.filemanager.IconShapeType.SYSTEM,
                             cornerRoundness = state.cornerRoundness,
@@ -232,8 +237,7 @@ fun TrashScreen(
                             onPinClick = {},
                             onInfoClick = {},
                             onRenameClick = { _, _ -> },
-                            onExtractClick = {},
-                            onItemPositioned = onItemPositioned
+                            onExtractClick = {}
                         )
                     }
                 }
@@ -250,7 +254,7 @@ fun TrashScreen(
 
         AlertDialog(
             onDismissRequest = { showSettings = false },
-            title = { Text("Bin Settings") },
+            title = { com.ripple.filemanager.ui.MonoLabel("BIN SETTINGS", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(
@@ -272,7 +276,8 @@ fun TrashScreen(
                                 label = { Text("Time") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.weight(1f),
-                                singleLine = true
+                                singleLine = true,
+                                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
                             )
                             ExposedDropdownMenuBox(
                                 expanded = expanded,
@@ -286,7 +291,8 @@ fun TrashScreen(
                                     label = { Text("Unit") },
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                                     colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                                    modifier = Modifier.menuAnchor()
+                                    modifier = Modifier.menuAnchor(),
+                                    shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
                                 )
                                 ExposedDropdownMenu(
                                     expanded = expanded,
@@ -316,14 +322,16 @@ fun TrashScreen(
                         onAction(AppAction.RefreshTrash)
                     }
                 ) {
-                    Text("Save")
+                    Text("SAVE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSettings = false }) {
-                    Text("Cancel")
+                    Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                 }
-            }
+            },
+            containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+            shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
         )
     }
 }
