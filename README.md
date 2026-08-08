@@ -19,6 +19,9 @@ RippleFiles is a beautifully designed, expressive file manager for Android, buil
 ## Building
 This project requires Android SDK 35 (or 36, depending on your setup) and JDK 17+.
 
+## Downloads
+[![Get it on Google Play](https://img.shields.io/badge/Get%20it%20on-Google%20Play-green?logo=google-play)](https://play.google.com/store/apps/details?id=com.ripple.filemanager)
+
 ```bash
 cd android
 ./gradlew assembleDebug
