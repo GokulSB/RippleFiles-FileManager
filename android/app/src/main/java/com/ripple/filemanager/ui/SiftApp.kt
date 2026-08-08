@@ -962,7 +962,7 @@ fun DrawerContent(
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     Icons.Outlined.Cloud,
-                                    contentDescription = "Link cloud",
+                                    contentDescription = "Connections",
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -970,7 +970,7 @@ fun DrawerContent(
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
-                            "Link cloud",
+                            "Connections",
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.weight(1f)
                         )
@@ -985,7 +985,7 @@ fun DrawerContent(
                     AnimatedVisibility(visible = isCloudExpanded) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp).horizontalScroll(rememberScrollState())
                         ) {
                             // Google Drive
                             Surface(
@@ -1067,6 +1067,93 @@ fun DrawerContent(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (state.isDropboxAuthenticated) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                         maxLines = 1
+                                    )
+                                }
+                            }
+
+                            // LAN / SMB
+                            Surface(
+                                shape = getDynamicCornerShape(12f, cornerRoundness),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                                onClick = { onAction(AppAction.SetErrorMessage("LAN/SMB coming soon")) },
+                                modifier = Modifier.size(64.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.fillMaxSize().padding(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Dns,
+                                        contentDescription = "LAN/SMB",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Text(
+                                        "LAN/SMB",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            // FTP
+                            Surface(
+                                shape = getDynamicCornerShape(12f, cornerRoundness),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                                onClick = { onAction(AppAction.SetErrorMessage("FTP coming soon")) },
+                                modifier = Modifier.size(64.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.fillMaxSize().padding(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Storage,
+                                        contentDescription = "FTP",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Text(
+                                        "FTP",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            // SFTP
+                            Surface(
+                                shape = getDynamicCornerShape(12f, cornerRoundness),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                                onClick = { onAction(AppAction.SetErrorMessage("SFTP coming soon")) },
+                                modifier = Modifier.size(64.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.fillMaxSize().padding(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Security,
+                                        contentDescription = "SFTP",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Text(
+                                        "SFTP",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
