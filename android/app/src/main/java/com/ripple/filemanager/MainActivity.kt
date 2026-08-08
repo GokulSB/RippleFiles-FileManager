@@ -106,7 +106,7 @@ class MainActivity : FragmentActivity() {
                         is AppAction.ToggleExtractPause -> viewModel.toggleExtractPause()
                         is AppAction.CancelExtract -> viewModel.cancelExtract()
                         is AppAction.ClearExtractResult -> viewModel.clearExtractResult()
-                        is AppAction.SetGoogleDriveAuthStatus -> viewModel.setGoogleDriveAuthStatus(action.isAuthenticated, action.email)
+                        is AppAction.SetGoogleDriveAuthStatus -> viewModel.updateGoogleDriveAuthStatus(action.isAuthenticated, action.email)
                         is AppAction.SetMegaAuthStatus -> viewModel.setMegaAuthStatus(action.isAuthenticated, action.email, action.password)
                         is AppAction.SetShowMegaPopup -> viewModel.setShowMegaPopup(action.show)
                         is AppAction.SetDropboxAuthStatus -> viewModel.setDropboxAuthStatus(action.isAuthenticated, action.email)
