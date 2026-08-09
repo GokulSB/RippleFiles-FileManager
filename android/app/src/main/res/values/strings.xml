@@ -1,4 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- App Details -->
     <string name="app_name">Ripple Files – File Manager</string>
     <string name="launcher_name">Ripple Files\nFile Manager</string>
+
+    <!-- BottomNavBar.kt -->
+    <string name="cancel">Cancel</string>
+
+    <!-- CleanerScreen.kt -->
+    <string name="back">Back</string>
+    <string name="select_all">Select All</string>
+    <string name="select_none">Select None</string>
+    <string name="no_files_to_clean">No files to clean here!</string>
+
+    <!-- DetailsPane.kt -->
+    <string name="selected_item">Selected item</string>
+    <string name="details_title">Details</string>
+    <string name="close_details">Close details</string>
+    <string name="activity_label">ACTIVITY</string>
+
+    <!-- DocumentViewerScreen.kt -->
+    <string name="share">Share</string>
+    <string name="zoom_in">Zoom In</string>
+    <string name="zoom_out">Zoom Out</string>
+    <string name="bookmark">Bookmark</string>
+
+    <!-- FileGrid.kt -->
+    <string name="no_matching_files">No matching files</string>
+    <string name="try_another_search">Try another search or filter.</string>
+    <string name="play">Play</string>
+    <string name="confirm">Confirm</string>
+    <string name="more_options">More</string>
+    <string name="pin_file">Pin</string>
+    <string name="file_info">Info</string>
+    <string name="extract_archive">Extract</string>
+    <string name="pinned_badge">Pinned</string>
+    <string name="locked_badge">Locked</string>
+
+    <!-- FileViewer.kt -->
+    <string name="no_viewer_available">No viewer available for this file type.</string>
+    <string name="pdf_password_protected">This PDF is password protected.</string>
+    <string name="password_label">Password</string>
+    <string name="unlock_action">UNLOCK</string>
+
+    <!-- FolderPickerDialog.kt -->
+    <string name="no_folders_here">No folders here</string>
+    <string name="extract_action">EXTRACT</string>
+    <!-- Cancel already defined -->
+
+    <!-- FullScreenMusicPlayer.kt -->
+    <string name="now_playing">Now Playing</string>
+    <string name="close">Close</string>
+    <string name="album_art">Album Art</string>
+    <string name="previous_track">Previous</string>
+    <string name="next_track">Next</string>
+
+    <!-- ImageViewerScreen.kt -->
+    <string name="delete_warning_undone">This action cannot be undone.</string>
+    <string name="delete_action">DELETE</string>
+    <string name="edit_action">Edit</string>
+    <string name="favorite_action">Favorite</string>
+    <string name="delete_label">Delete</string>
+    <string name="details_label">Details</string>
+    <string name="dimensions_label">Dimensions</string>
+    <string name="file_size_label">File size</string>
+    <string name="date_modified_label">Date modified</string>
+    <string name="source_label">Source</string>
+    <string name="location_label">Location</string>
+
+    <!-- MiniMusicPlayer.kt -->
+    <!-- Album Art, Previous, Next already defined -->
+
+    <!-- SiftApp.kt -->
+    <string name="logged_in_as">Logged in as:</string>
+    <string name="email_label">Email</string>
+    <!-- Password already defined -->
+    <string name="login_action">LOGIN</string>
+    <string name="sign_up_action">Sign Up</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="logout_action">LOGOUT</string>
+    <string name="folder_name_label">Folder name</string>
+    <string name="save_action">SAVE</string>
+    <string name="file_name_label">File name</string>
+    <string name="select_internal_storage_error">Please select a folder on internal storage.</string>
+    <string name="settings_title">Settings</string>
+    <string name="theme_appearance_settings">Theme (Appearance)</string>
+    <string name="expand_content_desc">Expand</string>
+    <string name="security_settings">Security</string>
+    <string name="viewers_settings">Viewers</string>
+    <string name="text_pdf_viewer">Text / PDF</string>
+    <string name="music_viewer">Music</string>
+    <string name="image_viewer">Image</string>
+    <string name="file_organiser_settings">File Organiser</string>
+    <string name="pick_directory">Pick Directory</string>
+    <string name="connections_content_desc">Connections</string>
+    <string name="google_drive">Google Drive</string>
+    <string name="mega">Mega</string>
+    <string name="dropbox">Dropbox</string>
+    <string name="lan_smb">LAN/SMB</string>
+    <string name="ftp">FTP</string>
+    <string name="sftp">SFTP</string>
+    <string name="storage_cleaner_nav">Storage cleaner</string>
+    <string name="settings_nav">Settings</string>
+    <string name="about_nav">About</string>
+    <string name="sign_in_google_drive_desc">Sign in to Google Drive to access your cloud files securely.</string>
+    <string name="view_files_action">VIEW FILES</string>
+    <string name="create_account_action">CREATE ACCOUNT</string>
+    <string name="sign_in_cloud_desc">Sign in to access your cloud files securely.</string>
+    <string name="sign_in_google_drive">Sign in to Google Drive</string>
+    <string name="sign_in_mega">Sign in to Mega</string>
+    <string name="error_content_desc">Error</string>
+    <string name="something_went_wrong">Oops! Something went wrong</string>
+    <string name="grant_permission">Grant Permission</string>
+    <string name="retry">Retry</string>
+    <string name="local_storage">Local</string>
+    <string name="sd_card_storage">SD Card</string>
+    <string name="path_separator"> / </string>
+    <string name="select_cloud_content_desc">Select Cloud</string>
+    <string name="smb_network">SMB Network</string>
+    <string name="sort_content_desc">Sort</string>
+    <string name="sort_alphabetical">Alphabetical</string>
+    <string name="sort_date">Date</string>
+    <string name="sort_size">Size</string>
+    <string name="toggle_view_content_desc">Toggle View</string>
+    <string name="access_restricted_content_desc">Restricted</string>
+    <string name="access_restricted_title">Access Restricted</string>
+    <string name="access_restricted_desc">Android 11+ restricts access to this folder. Please grant access using Shizuku or a compatible alternative.</string>
+    <string name="shizuku_not_detected">Shizuku service not detected. Ensure it\'s running.</string>
+    <string name="grant_access_action">Grant Access</string>
+    <string name="empty_folder_content_desc">Empty</string>
+    <string name="no_files_found">No files found</string>
+    <string name="batch_rename">Batch Rename</string>
+    <string name="copy_action">Copy</string>
+    <string name="cut_action">Cut</string>
+    <string name="extract_open_prompt">Folder extracted successfully. Do you want to open it?</string>
+    <string name="open_action">OPEN</string>
+    <string name="scanning_progress">SCANNING...</string>
+    <string name="path_label">PATH</string>
+    <string name="downloading_file">Downloading file...</string>
+    <string name="app_name_title">MFile Manager</string>
+    <string name="app_subtitle">Expressive file manager</string>
+    <string name="create_action">Create</string>
+    <string name="device_storage_label">Device storage</string>
+    <string name="base_name_label">Base Name</string>
+    <string name="file_type_label">File Type</string>
+    <string name="numbering_style_label">Numbering Style</string>
+    <string name="starts_from_label">Starts From</string>
+    <string name="leading_zeros_label">Leading Zeros</string>
+    <string name="prefix_label">Prefix</string>
+    <string name="suffix_label">Suffix</string>
+    <string name="rename_action">RENAME</string>
+    <string name="select_content_desc">Select</string>
+    <string name="in_app_viewer">In-app</string>
+    <string name="device_default_viewer">Device default</string>
+    <string name="no_app_found">No app found to open this file</string>
+    <string name="fingerprint_failed_fallback">Fingerprint failed 3 times. Please enter password.</string>
+    <string name="enter_global_password">Enter Global Password</string>
+    <string name="verify_action">VERIFY</string>
+
+    <!-- SkylineComponents.kt -->
+    <string name="grid_view">Grid</string>
+    <string name="list_view">List</string>
+    <string name="menu_content_desc">Menu</string>
+    <string name="clear_content_desc">Clear</string>
+    <string name="organise_files">Organise Files</string>
+    <string name="trash">Trash</string>
+    <string name="app_info">App info</string>
+
+    <!-- SmbConnectionsScreen.kt -->
+    <string name="smb_connections_title">SMB Connections</string>
+    <string name="add_content_desc">Add</string>
+    <string name="new_connection">New Connection</string>
+    <string name="stop_connection">Stop</string>
+    <string name="connect_action">Connect</string>
+
+    <!-- SmbFormScreen.kt -->
+    <string name="add_smb_connection_title">Add SMB Connection</string>
+    <string name="display_name_hint">Display Name (e.g. My NAS)</string>
+    <string name="host_ip_label">Host or IP</string>
+    <string name="port_label">Port</string>
+    <string name="share_name_label">Share Name</string>
+    <string name="domain_optional_label">Domain (Optional)</string>
+    <string name="username_label">Username</string>
+
+    <!-- ThemeBottomSheet.kt -->
+    <string name="theme_mode_label">Theme mode</string>
+    <string name="dynamic_color_label">Dynamic color</string>
+    <string name="use_system_theme_color">Use system theme color</string>
+    <string name="font_style_label">Font style</string>
+    <string name="text_formatting_label">Text formatting</string>
+    <string name="corner_roundness_label">Corner Roundness</string>
+    <string name="square_corners">Square</string>
+    <string name="round_corners">Round</string>
+    <string name="grid_columns_label">Grid Columns</string>
+    <string name="global_password_label">Global Password</string>
+    <string name="global_password_desc">Used for locking and unlocking items. Default is 0000.</string>
+    <string name="old_password_label">Old Password</string>
+    <string name="set_new_password_label">Set New Password</string>
+    <string name="enter_both_passwords_error">Please enter both old and new passwords.</string>
+    <string name="biometrics_label">Biometrics</string>
+    <string name="enable_fingerprint_access">Enable Fingerprint Access</string>
+
+    <!-- TrashScreen.kt -->
+    <string name="bin_disabled">Bin (DISABLED)</string>
+    <string name="files_deleted_permanently">Files are deleted permanently</string>
+    <string name="deselect_all">Deselect All</string>
+    <string name="restore_action">Restore</string>
+    <string name="delete_permanently_action">Delete Permanently</string>
+    <string name="delete_forever_warning">These files will be deleted forever. This action cannot be undone.</string>
+    <string name="bin_is_empty">Bin is empty</string>
+    <string name="enable_bin">Enable Bin</string>
+    <string name="time_label">Time</string>
+    <string name="unit_label">Unit</string>
+
+    <!-- ============================================= -->
+    <!-- Formats & Plurals (Phase 3)                    -->
+    <!-- ============================================= -->
+
+    <plurals name="files_selected">
+        <item quantity="one">1 file selected</item>
+        <item quantity="other">%1$d files selected</item>
+    </plurals>
+    <string name="file_size_and_date">%1$s - %2$s</string>
+    <string name="page_number">Page %1$d</string>
+
+    <string name="error_opening_pdf">Error opening PDF: %1$s</string>
+    <string name="error_opening_zip">Error opening Zip: %1$s</string>
+    <string name="error_opening_apk">Error opening APK: %1$s</string>
+
+    <string name="logged_in_as_email">Logged in as:\n%1$s</string>
+    <string name="unknown_user">Unknown</string>
+
+    <string name="extracting_file">Extracting %1$s...</string>
+    <string name="extraction_progress_percent">%1$d%%</string>
+
+    <string name="storage_usage_summary">%1$s used of %2$s\n%3$s</string>
+    <string name="storage_percentage">%1$d%%</string>
+
+    <string name="smb_connection_details">%1$s:%2$d / %3$s</string>
+
+    <string name="grid_columns_value">%1$d</string>
+
+    <string name="bin_retention_title">Bin (%1$d %2$s)</string>
+    <string name="bin_retention_desc">Files deleted after %1$d %2$s</string>
+
 </resources>

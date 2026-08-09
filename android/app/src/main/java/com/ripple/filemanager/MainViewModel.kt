@@ -21,6 +21,8 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
+import kotlinx.collections.immutable.ImmutableMap
+import com.ripple.filemanager.data.smb.SmbConnection
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
@@ -37,9 +39,27 @@ enum class IconShapeType {
     FLOWER
 }
 
+enum class ConnectionStatus { Idle, Connecting, Connected, Error }
+
+@androidx.compose.runtime.Immutable
+data class SmbState(
+    val savedConnections: ImmutableList<SmbConnection> = persistentListOf(),
+    val activeConnectionId: String? = null,
+    val currentPath: String = "",
+    val connectionStatus: ConnectionStatus = ConnectionStatus.Idle,
+    val error: SmbError? = null
+)
+
+enum class NavTab { HOME, RECENT, PINNED, CLOUD }
+
+@androidx.compose.runtime.Immutable
+data class NavBarState(val selected: NavTab = NavTab.HOME)
+
 @androidx.compose.runtime.Immutable
 data class AppState(
+    val navBarState: NavBarState = NavBarState(),
     val hasShizuku: Boolean = false,
+    val smbState: SmbState = SmbState(),
     val location: String = "home",
     val currentFolderName: String? = null,
     val driveFolderStack: List<Pair<String, String>> = emptyList(),
@@ -153,6 +173,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val megaClient by lazy { nz.mega.sdk.MegaClient(application) }
 
+    private val smbStore by lazy { com.ripple.filemanager.data.smb.SmbStore(application) }
+    private val smbProvider = com.ripple.filemanager.data.smb.SmbStorageProvider()
+
     init {
         val savedTheme = prefs.getString("theme_mode", "SYSTEM") ?: "SYSTEM"
         val savedHue = prefs.getFloat("theme_hue", 262f)
@@ -204,6 +227,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             viewerMusic = prefs.getString("viewer_music", "In-app") ?: "In-app",
             viewerImage = prefs.getString("viewer_image", "In-app") ?: "In-app"
         ) }
+        
+        val savedSmbConnectionId = prefs.getString("active_smb_connection", null)
+        val savedConnectionsList = smbStore.getConnections()
+        val validSmbConnection = if (savedSmbConnectionId != null && savedConnectionsList.any { it.id == savedSmbConnectionId }) savedSmbConnectionId else null
+        
+        _state.update { it.copy(smbState = it.smbState.copy(
+            savedConnections = savedConnectionsList,
+            activeConnectionId = validSmbConnection,
+            connectionStatus = if (validSmbConnection != null) ConnectionStatus.Connected else ConnectionStatus.Idle
+        )) }
 
         viewModelScope.launch(Dispatchers.IO) {
             val email = repository.currentGoogleAccountEmail
@@ -284,6 +317,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     megaClient.getChildren(null)
                 } else if (location.startsWith("mega_id:")) {
                     megaClient.getChildren(location.removePrefix("mega_id:"))
+                } else if (location.startsWith("smb_")) {
+                    val connectionId = location.substringAfter("smb_").substringBefore(":")
+                    var res = smbProvider.listFiles(location, connectionId)
+                    if (res.isFailure) {
+                        val connection = smbStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
+                        val password = smbStore.getPassword(connectionId) ?: throw Exception("Password not found")
+                        smbProvider.connect(connection, password).getOrThrow()
+                        res = smbProvider.listFiles(location, connectionId)
+                    }
+                    res.getOrThrow()
                 } else {
                     repository.getFiles(location)
                 }
@@ -312,20 +355,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun navTabTapped(id: String) {
-        val currentCount = _state.value.navTapCounters[id] ?: 0
+        val tapCount = _state.value.navTapCounters[id] ?: 0
         val map = _state.value.navTapCounters as kotlinx.collections.immutable.PersistentMap
-        _state.update { it.copy(navTapCounters = map.put(id, currentCount + 1)) }
+        _state.update { it.copy(navTapCounters = map.put(id, tapCount + 1)) }
+    }
+    
+    fun selectNavTab(tab: NavTab) {
+        _state.update { it.copy(navBarState = NavBarState(selected = tab)) }
+        if (tab == NavTab.CLOUD) {
+            val st = _state.value
+            if (st.smbState.activeConnectionId != null) {
+                setLocation("smb_${st.smbState.activeConnectionId}:/")
+            } else if (st.isGoogleDriveAuthenticated) {
+                setLocation("drive")
+            } else if (st.isMegaAuthenticated) {
+                setLocation("mega")
+            } else if (st.isDropboxAuthenticated) {
+                setLocation("dropbox")
+            } else {
+                setLocation("cloud")
+            }
+        } else {
+            val targetLocation = when (tab) {
+                NavTab.HOME -> "home"
+                NavTab.RECENT -> "recent"
+                NavTab.PINNED -> "pinned"
+                else -> "home"
+            }
+            setLocation(targetLocation)
+        }
     }
 
     fun setLocation(location: String, folderName: String? = null) {
         val current = _state.value
-        val enteringCloudSubfolder = location.startsWith("drive_id:") || location.startsWith("mega_id:") || location.startsWith("dropbox_id:")
-        val wasInCloud = current.location == "drive" || current.location == "mega" || current.location == "dropbox" || current.location.startsWith("drive_id:") || current.location.startsWith("mega_id:") || current.location.startsWith("dropbox_id:")
+        val enteringCloudSubfolder = location.startsWith("drive_id:") || location.startsWith("mega_id:") || location.startsWith("dropbox_id:") || location.startsWith("smb_")
+        val wasInCloud = current.location == "drive" || current.location == "mega" || current.location == "dropbox" || current.location.startsWith("drive_id:") || current.location.startsWith("mega_id:") || current.location.startsWith("dropbox_id:") || current.location.startsWith("smb_")
 
         val newStack = when {
             enteringCloudSubfolder && wasInCloud ->
                 current.driveFolderStack + (current.location to (current.currentFolderName ?: "Cloud"))
-            location == "drive" || location == "mega" || location == "dropbox" -> emptyList()
+            location == "drive" || location == "mega" || location == "dropbox" || (location.startsWith("smb_") && location.endsWith(":/")) -> emptyList()
             else -> current.driveFolderStack
         }
 
@@ -1408,6 +1477,86 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setBiometricEnabled(enabled: Boolean) {
         repository.setBiometricEnabled(enabled)
+    }
+
+    fun handleSmbAction(action: AppAction.SmbAction) {
+        when (action) {
+            is AppAction.SmbAction.AddConnection -> {
+                smbStore.saveConnection(action.connection, action.password)
+                _state.update { it.copy(smbState = it.smbState.copy(savedConnections = smbStore.getConnections())) }
+            }
+            is AppAction.SmbAction.DeleteConnection -> {
+                smbStore.deleteConnection(action.connectionId)
+                _state.update { it.copy(smbState = it.smbState.copy(savedConnections = smbStore.getConnections())) }
+                if (_state.value.smbState.activeConnectionId == action.connectionId) {
+                    handleSmbAction(AppAction.SmbAction.Disconnect(action.connectionId))
+                }
+            }
+            is AppAction.SmbAction.Connect -> {
+                val connection = smbStore.getConnections().find { it.id == action.connectionId } ?: return
+                val password = smbStore.getPassword(action.connectionId) ?: return
+                
+                _state.update { it.copy(smbState = it.smbState.copy(connectionStatus = ConnectionStatus.Connecting, error = null)) }
+                
+                viewModelScope.launch {
+                    val result = smbProvider.connect(connection, password)
+                    if (result.isSuccess) {
+                        _state.update { it.copy(
+                            smbState = it.smbState.copy(
+                                activeConnectionId = action.connectionId,
+                                connectionStatus = ConnectionStatus.Connected,
+                                error = null
+                            )
+                        )}
+                        prefs.edit().putString("active_smb_connection", action.connectionId).apply()
+                        setLocation("smb_${action.connectionId}:/")
+                    } else {
+                        val e = result.exceptionOrNull()
+                        val smbError = when (e) {
+                            is java.net.UnknownHostException, is java.net.ConnectException -> SmbError.HOST_UNREACHABLE
+                            is java.net.SocketTimeoutException, is java.util.concurrent.TimeoutException -> SmbError.TIMEOUT
+                            else -> {
+                                val msg = e?.message ?: ""
+                                if (msg.contains("LOGON_FAILURE") || msg.contains("Access denied") || msg.contains("Authentication")) SmbError.AUTH_FAILED
+                                else if (msg.contains("BAD_NETWORK_NAME") || msg.contains("not found")) SmbError.SHARE_NOT_FOUND
+                                else SmbError.UNKNOWN
+                            }
+                        }
+                        _state.update { it.copy(smbState = it.smbState.copy(connectionStatus = ConnectionStatus.Error, error = smbError)) }
+                        _snackbarMessage.emit("SMB Error: $smbError")
+                    }
+                }
+            }
+
+            is AppAction.SmbAction.Disconnect -> {
+                viewModelScope.launch {
+                    smbProvider.disconnect()
+                    _state.update { it.copy(smbState = it.smbState.copy(
+                        activeConnectionId = null,
+                        connectionStatus = ConnectionStatus.Idle,
+                        error = null,
+                        currentPath = ""
+                    ))}
+                    prefs.edit().remove("active_smb_connection").apply()
+                    
+                    val st = _state.value
+                    if (st.isGoogleDriveAuthenticated) {
+                        setLocation("drive")
+                    } else if (st.isMegaAuthenticated) {
+                        setLocation("mega")
+                    } else if (st.isDropboxAuthenticated) {
+                        setLocation("dropbox")
+                    } else {
+                        setLocation("cloud")
+                    }
+                }
+            }
+            is AppAction.SmbAction.NavigateTo -> {
+                setLocation(action.path)
+            }
+            is AppAction.SmbAction.ConnectSucceeded -> {}
+            is AppAction.SmbAction.ConnectFailed -> {}
+        }
     }
 
     override fun onCleared() {

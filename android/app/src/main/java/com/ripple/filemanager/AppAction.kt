@@ -1,5 +1,7 @@
 package com.ripple.filemanager
 
+import com.ripple.filemanager.data.smb.SmbConnection
+
 enum class AuthReason { OPEN_FILE, LOCK_FILE, UNLOCK_FILE }
 
 sealed class AppAction {
@@ -67,6 +69,17 @@ sealed class AppAction {
     data class AutoRequestAccess(val path: String) : AppAction()
     object RequestShizukuAccess : AppAction()
     
+    // SMB
+    sealed class SmbAction : AppAction() {
+        data class AddConnection(val connection: SmbConnection, val password: String) : SmbAction()
+        data class Connect(val connectionId: String) : SmbAction()
+        data class Disconnect(val connectionId: String) : SmbAction()
+        data class NavigateTo(val path: String) : SmbAction()
+        data class DeleteConnection(val connectionId: String) : SmbAction()
+        object ConnectSucceeded : SmbAction()
+        data class ConnectFailed(val error: SmbError) : SmbAction()
+    }
+    
     // Music Player Actions
     data class PlayAudio(val file: FileItem) : AppAction()
     object ToggleAudioPlayback : AppAction()
@@ -88,7 +101,6 @@ sealed class AppAction {
     data class SetCornerRoundness(val roundness: Float) : AppAction()
     data class SetGridColumns(val columns: Int) : AppAction()
 
-    
     // Cleaner Screen
     data class SetCleanerCategory(val category: String?) : AppAction()
     data class SelectAllCleanerFiles(val ids: List<Int>) : AppAction()
@@ -98,9 +110,12 @@ sealed class AppAction {
 
     // General
     object Reload : AppAction()
-    data class SetErrorMessage(val message: String) : AppAction()
+    data class SetErrorMessage(val message: String?) : AppAction()
     data class LoadFileDetails(val path: String, val onLoaded: (FileDetails) -> Unit) : AppAction()
     
+    // Bottom Navigation
+    data class SelectNavTab(val tab: com.ripple.filemanager.NavTab) : AppAction()
+
     // Trash Screen Operations
     object RefreshTrash : AppAction()
     data class RestoreTrashFiles(val files: List<String>) : AppAction()
@@ -113,4 +128,7 @@ sealed class AppAction {
     
     // Viewers
     data class SetViewerPreference(val category: String, val preference: String) : AppAction()
+
 }
+
+enum class SmbError { AUTH_FAILED, HOST_UNREACHABLE, TIMEOUT, SHARE_NOT_FOUND, UNKNOWN }

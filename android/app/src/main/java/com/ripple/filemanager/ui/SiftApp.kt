@@ -849,6 +849,7 @@ fun DrawerContent(
     val context = androidx.compose.ui.platform.LocalContext.current
     var showGDrivePopup by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var showDropboxPopup by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showSmbConnections by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     
     val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
@@ -865,8 +866,8 @@ fun DrawerContent(
         showGDrivePopup = false
     }
     ModalDrawerSheet(
-        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        drawerContentColor = MaterialTheme.colorScheme.onSurface,
+        drawerContainerColor = MaterialTheme.colorScheme.background,
+        drawerContentColor = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.width(300.dp)
     ) {
         Column(
@@ -1072,11 +1073,12 @@ fun DrawerContent(
                             }
 
                             // LAN / SMB
+                            val smbIsActive = state.smbState.activeConnectionId != null
                             Surface(
                                 shape = getDynamicCornerShape(12f, cornerRoundness),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                                onClick = { onAction(AppAction.SetErrorMessage("LAN/SMB coming soon")) },
+                                color = if (smbIsActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                border = if (smbIsActive) null else BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                                onClick = { showSmbConnections = true },
                                 modifier = Modifier.size(64.dp)
                             ) {
                                 Column(
@@ -1087,13 +1089,13 @@ fun DrawerContent(
                                     Icon(
                                         Icons.Default.Dns,
                                         contentDescription = "LAN/SMB",
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        tint = if (smbIsActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Text(
                                         "LAN/SMB",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        color = if (smbIsActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -1341,6 +1343,14 @@ fun DrawerContent(
                         }
                     }
                 }
+            )
+        }
+
+        if (showSmbConnections) {
+            SmbConnectionsDialog(
+                state = state.smbState,
+                onAction = onAction,
+                onDismiss = { showSmbConnections = false }
             )
         }
     }
@@ -1798,7 +1808,7 @@ fun MainContent(
 
 
 
-            if (state.location == "drive" && !state.isGoogleDriveAuthenticated && !state.isMegaAuthenticated && !state.isDropboxAuthenticated) {
+            if ((state.location == "drive" || state.location == "cloud") && !state.isGoogleDriveAuthenticated && !state.isMegaAuthenticated && !state.isDropboxAuthenticated && state.smbState.savedConnections.isEmpty()) {
                 var unauthCloudIndex by remember { mutableStateOf(0) }
                 LaunchedEffect(Unit) {
                     while (true) {
@@ -2042,10 +2052,12 @@ Row(
             }
         }
     } else if (!targetLocation.startsWith("/")) {
-        if (targetLocation.startsWith("drive") || targetLocation.startsWith("mega") || targetLocation.startsWith("dropbox")) {
+        if (targetLocation == "cloud" || targetLocation.startsWith("drive") || targetLocation.startsWith("mega") || targetLocation.startsWith("dropbox") || targetLocation.startsWith("smb_")) {
             val currentCloudName = when {
                 targetLocation.startsWith("mega") -> "Mega"
                 targetLocation.startsWith("dropbox") -> "Dropbox"
+                targetLocation.startsWith("smb_") -> "SMB Network"
+                targetLocation == "cloud" -> "Cloud"
                 else -> "Google Drive"
             }
             Icon(Icons.Default.Cloud, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
@@ -2091,12 +2103,22 @@ Row(
                             onClick = { onAction(AppAction.SetLocation("dropbox")); cloudMenuExpanded = false }
                         )
                     }
+                    if (state.smbState.activeConnectionId != null) {
+                        DropdownMenuItem(
+                            text = { Text("SMB Network") },
+                            onClick = { 
+                                val connectionId = state.smbState.activeConnectionId
+                                onAction(AppAction.SetLocation("smb_${connectionId}:/"))
+                                cloudMenuExpanded = false 
+                            }
+                        )
+                    }
                 }
             }
 
-            if (targetLocation != "drive" && targetLocation != "mega" && targetLocation != "dropbox") {
+            if (targetLocation != "cloud" && targetLocation != "drive" && targetLocation != "mega" && targetLocation != "dropbox" && !targetLocation.startsWith("smb_")) {
                 state.driveFolderStack.forEach { (loc, name) ->
-                    if (loc != "drive" && loc != "mega" && loc != "dropbox") {
+                    if (loc != "drive" && loc != "mega" && loc != "dropbox" && !loc.startsWith("smb_")) {
                         Text(" / ", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                         Text(
                             text = name,
@@ -2471,17 +2493,9 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         }
                     },
                     rippleNavContent = {
-                        RippleBottomNav(
-                            currentLocation = state.location,
-                            onLocationSelected = { 
-                                onAction(AppAction.SetLocation(it))
-                                if (it == "drive" && !state.isGoogleDriveAuthenticated && !state.isMegaAuthenticated && !state.isDropboxAuthenticated) {
-                                    onAction(AppAction.SetErrorMessage("Sign in to a cloud server in the menu first."))
-                                }
-                            },
-                            onTabTapped = { onAction(AppAction.NavTabTapped(it)) },
-                            tapCounters = state.navTapCounters,
-                            cornerRoundness = state.cornerRoundness,
+                        OffsetDockNavBar(
+                            selected = state.navBarState.selected,
+                            onTabSelected = { onAction(AppAction.SelectNavTab(it)) },
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
                         )
                     }

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.ripple.filemanager.ui.theme.FrauncesFontFamily
 import com.ripple.filemanager.ui.theme.JetBrainsMonoFamily
 import com.ripple.filemanager.ui.theme.ManropeFontFamily
@@ -776,3 +777,82 @@ fun SkylineFolderListRow(
 // ─────────────────────────────────────────────────────────────────────────────
 // (Bottom Nav removed in favor of BottomNavBar.kt)
 // ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun OffsetDockNavBar(
+    selected: com.ripple.filemanager.NavTab,
+    onTabSelected: (com.ripple.filemanager.NavTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val SkylineInkOnAmber = Color(0xFF1C0F08)
+    
+    Box(
+        modifier = modifier
+            .padding(horizontal = 4.dp)
+            .padding(bottom = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Offset shadow
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .offset(x = 4.dp, y = 4.dp)
+                .background(SkylineColors.AmberDim)
+                .zIndex(-1f)
+        )
+        // Main bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(SkylineColors.Surface)
+                .border(1.dp, SkylineColors.AmberDim, androidx.compose.ui.graphics.RectangleShape)
+        ) {
+            val tabs = listOf(
+                Triple(com.ripple.filemanager.NavTab.HOME, "HOME", Icons.Default.Home),
+                Triple(com.ripple.filemanager.NavTab.RECENT, "RECENT", Icons.Default.Schedule),
+                Triple(com.ripple.filemanager.NavTab.PINNED, "PINNED", Icons.Default.PushPin),
+                Triple(com.ripple.filemanager.NavTab.CLOUD, "CLOUD", Icons.Default.Cloud)
+            )
+            tabs.forEach { (tab, label, icon) ->
+                val isActive = selected == tab
+                val bgColor by androidx.compose.animation.animateColorAsState(
+                    targetValue = if (isActive) SkylineColors.Amber else Color.Transparent,
+                    animationSpec = androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    label = "bg_color"
+                )
+                val contentColor = if (isActive) SkylineInkOnAmber else SkylineColors.TextDim
+                
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp) // min touch target
+                        .background(bgColor)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClick = { onTabSelected(tab) }
+                        )
+                        .padding(top = 13.dp, bottom = 11.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = contentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = label,
+                        color = contentColor,
+                        fontFamily = JetBrainsMonoFamily,
+                        fontSize = 9.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                        letterSpacing = 0.06.sp
+                    )
+                }
+            }
+        }
+    }
+}

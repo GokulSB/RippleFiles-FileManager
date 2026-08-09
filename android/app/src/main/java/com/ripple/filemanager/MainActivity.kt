@@ -112,7 +112,9 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetDropboxAuthStatus -> viewModel.setDropboxAuthStatus(action.isAuthenticated, action.email)
                         is AppAction.AutoRequestAccess -> viewModel.autoRequestAccess(action.path)
                         is AppAction.RequestShizukuAccess -> { /* Shizuku access handled internally by rikka */ }
+                        is AppAction.SmbAction -> viewModel.handleSmbAction(action)
                         is AppAction.Reload -> viewModel.reload()
+                        is AppAction.SelectNavTab -> viewModel.selectNavTab(action.tab)
                         is AppAction.SetErrorMessage -> viewModel.setErrorMessage(action.message)
                         is AppAction.LoadFileDetails -> {
                             lifecycleScope.launch {
