@@ -12,8 +12,8 @@ android {
         applicationId "com.ripple.filemanager"
         minSdk 26
         targetSdk 36
-        versionCode 23
-        versionName "1.0.22"
+        versionCode 24
+        versionName "1.0.23"
     }
 
     signingConfigs {
@@ -109,4 +109,20 @@ dependencies {
 dependencies {
     implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
     implementation 'org.apache.poi:poi-ooxml:5.2.3'
+}
+
+dependencies {
+    // Dropbox
+    implementation 'com.dropbox.core:dropbox-core-sdk:5.4.5'
+
+    // SMB
+    implementation 'com.hierynomus:smbj:0.13.0'
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+    implementation 'com.google.code.gson:gson:2.11.0'
+}
+
+configurations {
+    all {
+        exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
+    }
 }
