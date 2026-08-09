@@ -71,7 +71,7 @@ fun ThemeSettingsContent(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Theme mode", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+                Text(stringResource(R.string.theme_mode_label), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ModeButton("System", Icons.Default.Computer, currentMode == ThemeMode.SYSTEM, cornerRoundness) { onModeChange(ThemeMode.SYSTEM) }
                     ModeButton("Light", Icons.Default.LightMode, currentMode == ThemeMode.LIGHT, cornerRoundness) { onModeChange(ThemeMode.LIGHT) }
@@ -88,13 +88,13 @@ fun ThemeSettingsContent(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Dynamic color", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+                Text(stringResource(R.string.dynamic_color_label), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Use system theme color", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.use_system_theme_color), style = MaterialTheme.typography.bodyMedium)
                     Switch(
                         checked = useDynamicTheme,
                         onCheckedChange = onDynamicThemeChange,
@@ -145,7 +145,7 @@ fun ThemeSettingsContent(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Font style", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+                Text(stringResource(R.string.font_style_label), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -172,7 +172,7 @@ fun ThemeSettingsContent(
                 }
                 
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Text formatting", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+                Text(stringResource(R.string.text_formatting_label), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -213,22 +213,22 @@ fun ThemeSettingsContent(
                 }
                 
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Corner Roundness", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+                Text(stringResource(R.string.corner_roundness_label), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    Text("Square", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(R.string.square_corners), style = MaterialTheme.typography.labelSmall)
                     Slider(
                         value = cornerRoundness,
                         onValueChange = onCornerRoundnessChange,
                         modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
                         valueRange = 0f..1f
                     )
-                    Text("Round", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(R.string.round_corners), style = MaterialTheme.typography.labelSmall)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Grid Columns", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+                Text(stringResource(R.string.grid_columns_label), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    Text("$gridColumns", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
+                    Text(stringResource(R.string.grid_columns_value, gridColumns), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
                     Slider(
                         value = gridColumns.toFloat(),
                         onValueChange = { onGridColumnsChange(it.toInt()) },
@@ -271,8 +271,8 @@ fun SecuritySettingsContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Global Password", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
-            Text("Used for locking and unlocking items. Default is 0000.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.global_password_label), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+            Text(stringResource(R.string.global_password_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             
             if (errorMessage != null) {
                 Text(text = errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -281,7 +281,7 @@ fun SecuritySettingsContent(
             OutlinedTextField(
                 value = oldPassword,
                 onValueChange = { oldPassword = it },
-                label = { Text("Old Password") },
+                label = { Text(stringResource(R.string.old_password_label)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
@@ -290,7 +290,7 @@ fun SecuritySettingsContent(
             OutlinedTextField(
                 value = currentPassword,
                 onValueChange = { currentPassword = it },
-                label = { Text("Set New Password") },
+                label = { Text(stringResource(R.string.set_new_password_label)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
@@ -302,7 +302,7 @@ fun SecuritySettingsContent(
                         oldPassword = ""
                         currentPassword = ""
                     } else {
-                        android.widget.Toast.makeText(context, "Please enter both old and new passwords.", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(context, context.getString(R.string.enter_both_passwords_error), android.widget.Toast.LENGTH_SHORT).show()
                     }
                 },
                 shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
@@ -321,7 +321,7 @@ fun SecuritySettingsContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Biometrics", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
+            Text(stringResource(R.string.biometrics_label), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clickable { 
@@ -336,7 +336,7 @@ fun SecuritySettingsContent(
                         onSetBiometric(it)
                     }
                 )
-                Text("Enable Fingerprint Access", color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
+                Text(stringResource(R.string.enable_fingerprint_access), color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
             }
         }
     }

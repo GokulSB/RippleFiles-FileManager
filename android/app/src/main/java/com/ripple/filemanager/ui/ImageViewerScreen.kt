@@ -75,7 +75,7 @@ fun ImageViewerScreen(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { com.ripple.filemanager.ui.MonoLabel("DELETE IMAGE?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
-            text = { Text("This action cannot be undone.") },
+            text = { Text(stringResource(R.string.delete_warning_undone)) },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
@@ -84,10 +84,10 @@ fun ImageViewerScreen(
                         onDeleteClick(currentFile)
                         onClose() // Close viewer after deletion
                     }
-                }) { Text("DELETE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
+                }) { Text(stringResource(R.string.delete_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
+                TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
             },
             containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
             shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, 0.5f)
@@ -260,7 +260,7 @@ fun TopOverlay(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Color.White)
             }
             
             Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
@@ -313,7 +313,7 @@ fun BottomOverlay(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                ActionButton(icon = Icons.Filled.Edit, label = "Edit", onClick = {
+                ActionButton(icon = Icons.Filled.Edit, label = stringResource(R.string.edit_action), onClick = {
                     val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path))
                     val intent = Intent(Intent.ACTION_EDIT).apply {
                         setDataAndType(uri, "image/*")
@@ -321,7 +321,7 @@ fun BottomOverlay(
                     }
                     try { context.startActivity(Intent.createChooser(intent, "Edit Image")) } catch (e: Exception) {}
                 })
-                ActionButton(icon = Icons.Filled.Share, label = "Share", onClick = {
+                ActionButton(icon = Icons.Filled.Share, label = stringResource(R.string.share), onClick = {
                     val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path))
                     val intent = Intent(Intent.ACTION_SEND).apply {
                         type = "image/*"
@@ -330,10 +330,10 @@ fun BottomOverlay(
                     }
                     context.startActivity(Intent.createChooser(intent, "Share Image"))
                 })
-                ActionButton(icon = Icons.Filled.Star, label = "Favorite", isActive = file.isPinned, onClick = {
+                ActionButton(icon = Icons.Filled.Star, label = stringResource(R.string.favorite_action), isActive = file.isPinned, onClick = {
                     onAction(AppAction.TogglePin(file.path))
                 })
-                ActionButton(icon = Icons.Filled.Delete, label = "Delete", onClick = onDeleteClick)
+                ActionButton(icon = Icons.Filled.Delete, label = stringResource(R.string.delete_label), onClick = onDeleteClick)
             }
             
             Box(
@@ -348,7 +348,7 @@ fun BottomOverlay(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Info, contentDescription = null, tint = Color(0xFFE0AC70), modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Details", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.details_label), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = Color(0xFFE0AC70), modifier = Modifier.size(18.dp))
                 }
@@ -380,9 +380,9 @@ fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: S
 fun ImageDetailsContent(file: FileItem, onClose: () -> Unit, onNavigateToFolder: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Details", fontSize = 19.sp, color = MaterialTheme.colorScheme.onSurface, fontFamily = androidx.compose.ui.text.font.FontFamily.Serif)
+            Text(stringResource(R.string.details_label), fontSize = 19.sp, color = MaterialTheme.colorScheme.onSurface, fontFamily = androidx.compose.ui.text.font.FontFamily.Serif)
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = "Close")
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -391,15 +391,15 @@ fun ImageDetailsContent(file: FileItem, onClose: () -> Unit, onNavigateToFolder:
         val sizeFormatted = formatSize(File(file.path).length())
         val modifiedFormatted = SimpleDateFormat("MMM dd, yyyy, h:mm a", Locale.getDefault()).format(Date(file.lastModified))
         
-        DetailRow(icon = Icons.Filled.PhotoSizeSelectActual, label = "Dimensions", value = exifData.dimensions ?: "Unknown")
-        DetailRow(icon = Icons.Filled.SdStorage, label = "File size", value = sizeFormatted)
-        DetailRow(icon = Icons.Filled.CalendarToday, label = "Date modified", value = modifiedFormatted)
+        DetailRow(icon = Icons.Filled.PhotoSizeSelectActual, label = stringResource(R.string.dimensions_label), value = exifData.dimensions ?: "Unknown")
+        DetailRow(icon = Icons.Filled.SdStorage, label = stringResource(R.string.file_size_label), value = sizeFormatted)
+        DetailRow(icon = Icons.Filled.CalendarToday, label = stringResource(R.string.date_modified_label), value = modifiedFormatted)
         if (exifData.source != null) {
-            DetailRow(icon = Icons.Filled.CameraAlt, label = "Source", value = exifData.source)
+            DetailRow(icon = Icons.Filled.CameraAlt, label = stringResource(R.string.source_label), value = exifData.source)
         }
         
         val folderPath = File(file.path).parent ?: "/"
-        DetailRow(icon = Icons.Filled.Folder, label = "Location", value = folderPath, onClick = { onNavigateToFolder(folderPath) })
+        DetailRow(icon = Icons.Filled.Folder, label = stringResource(R.string.location_label), value = folderPath, onClick = { onNavigateToFolder(folderPath) })
         
         Spacer(modifier = Modifier.height(32.dp))
     }

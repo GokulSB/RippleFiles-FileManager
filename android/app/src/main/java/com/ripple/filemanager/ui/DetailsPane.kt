@@ -15,6 +15,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ripple.filemanager.FileItem
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
 
 @Composable
 fun DetailsPane(
@@ -40,11 +42,11 @@ fun DetailsPane(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Selected item", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.selected_item), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.details_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
                 IconButton(onClick = onClose, modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(16.dp))) {
-                    Icon(Icons.Default.Close, contentDescription = "Close details")
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close_details))
                 }
             }
 
@@ -64,7 +66,7 @@ fun DetailsPane(
                         FileShapeIcon(file.type, size = 78)
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(file.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
-                        Text("${file.size} - ${file.changed}", style = MaterialTheme.typography.bodySmall, color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
+                        Text(stringResource(R.string.file_size_and_date, file.size, file.changed), style = MaterialTheme.typography.bodySmall, color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                     }
                 }
 
@@ -85,7 +87,7 @@ fun DetailsPane(
                     InfoRow("Modified", file.changed)
                 }
 
-                Text("ACTIVITY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                Text(stringResource(R.string.activity_label), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
                 
                 ActivityItem("Shared", "with Design Team yesterday.")
                 ActivityItem("Moved", "from Downloads last week.")

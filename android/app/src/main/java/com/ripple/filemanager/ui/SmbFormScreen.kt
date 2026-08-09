@@ -31,7 +31,7 @@ fun SmbFormDialog(
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add SMB Connection") },
+        title = { Text(stringResource(R.string.add_smb_connection_title)) },
         text = {
             Column(
                 modifier = Modifier
@@ -46,7 +46,7 @@ fun SmbFormDialog(
                 OutlinedTextField(
                     value = displayName,
                     onValueChange = { displayName = it },
-                    label = { Text("Display Name (e.g. My NAS)") },
+                    label = { Text(stringResource(R.string.display_name_hint)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -54,7 +54,7 @@ fun SmbFormDialog(
                 OutlinedTextField(
                     value = host,
                     onValueChange = { host = it },
-                    label = { Text("Host or IP") },
+                    label = { Text(stringResource(R.string.host_ip_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -62,7 +62,7 @@ fun SmbFormDialog(
                 OutlinedTextField(
                     value = port,
                     onValueChange = { port = it },
-                    label = { Text("Port") },
+                    label = { Text(stringResource(R.string.port_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -71,7 +71,7 @@ fun SmbFormDialog(
                 OutlinedTextField(
                     value = shareName,
                     onValueChange = { shareName = it },
-                    label = { Text("Share Name") },
+                    label = { Text(stringResource(R.string.share_name_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -79,7 +79,7 @@ fun SmbFormDialog(
                 OutlinedTextField(
                     value = domain,
                     onValueChange = { domain = it },
-                    label = { Text("Domain (Optional)") },
+                    label = { Text(stringResource(R.string.domain_optional_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -87,7 +87,7 @@ fun SmbFormDialog(
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("Username") },
+                    label = { Text(stringResource(R.string.username_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -95,7 +95,7 @@ fun SmbFormDialog(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password") },
+                    label = { Text(stringResource(R.string.password_label)) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -124,12 +124,12 @@ fun SmbFormDialog(
                     onSave(conn, password)
                 }
             ) {
-                Text("Save")
+                Text(stringResource(R.string.save_action))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

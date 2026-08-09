@@ -244,7 +244,7 @@ fun ViewModeToggle(
                 .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.GridView, contentDescription = "Grid", tint = if (!isListMode) SkylineColors.Amber else SkylineColors.TextDim, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.GridView, contentDescription = stringResource(R.string.grid_view), tint = if (!isListMode) SkylineColors.Amber else SkylineColors.TextDim, modifier = Modifier.size(18.dp))
         }
         // Divider
         Box(modifier = Modifier.width(1.dp).height(34.dp).background(SkylineColors.Border))
@@ -261,7 +261,7 @@ fun ViewModeToggle(
                 .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.ViewList, contentDescription = "List", tint = if (isListMode) SkylineColors.Amber else SkylineColors.TextDim, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.ViewList, contentDescription = stringResource(R.string.list_view), tint = if (isListMode) SkylineColors.Amber else SkylineColors.TextDim, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -355,7 +355,7 @@ fun SkylineTopBar(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = SkylineColors.TextPrimary, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu_content_desc), tint = SkylineColors.TextPrimary, modifier = Modifier.size(20.dp))
         }
 
         Spacer(Modifier.width(8.dp))
@@ -380,7 +380,7 @@ fun SkylineTopBar(
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = SkylineColors.TextDim, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_content_desc), tint = SkylineColors.TextDim, modifier = Modifier.size(16.dp))
                     }
                 } else if (organiseProgress != null) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(24.dp)) {
@@ -394,7 +394,7 @@ fun SkylineTopBar(
                     }
                 } else {
                     IconButton(onClick = onOrganiseClick) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = "Organise Files", tint = SkylineColors.AmberDim, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.AutoAwesome, contentDescription = stringResource(R.string.organise_files), tint = SkylineColors.AmberDim, modifier = Modifier.size(18.dp))
                     }
                 }
             },
@@ -434,7 +434,7 @@ fun SkylineTopBar(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Delete, contentDescription = "Trash", tint = SkylineColors.TextDim, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.trash), tint = SkylineColors.TextDim, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -538,7 +538,7 @@ fun SkylineFolderGridTile(
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.Default.PushPin,
-                        contentDescription = "Pinned",
+                        contentDescription = stringResource(R.string.pinned_badge),
                         tint = SkylineColors.Amber,
                         modifier = Modifier.size(12.dp)
                     )
@@ -570,7 +570,7 @@ fun SkylineFolderGridTile(
                             onClick = { showMenu = true },
                             modifier = Modifier.size(20.dp)
                         ) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More", tint = SkylineColors.TextDim, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), tint = SkylineColors.TextDim, modifier = Modifier.size(16.dp))
                         }
                         if (showMenu) {
                             androidx.compose.ui.window.Popup(alignment = androidx.compose.ui.Alignment.TopEnd, onDismissRequest = { showMenu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
@@ -581,8 +581,8 @@ fun SkylineFolderGridTile(
                                     shadowElevation = 4.dp
                                 ) {
                                     Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                        IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = "Pin", tint = SkylineColors.Amber) }
-                                        IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = "App info", tint = SkylineColors.Amber) }
+                                        IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = stringResource(R.string.pin_file), tint = SkylineColors.Amber) }
+                                        IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = stringResource(R.string.app_info), tint = SkylineColors.Amber) }
                                     }
                                 }
                             }
@@ -706,7 +706,7 @@ fun SkylineFolderListRow(
         if (isPinned) {
             Icon(
                 imageVector = Icons.Default.PushPin,
-                contentDescription = "Pinned",
+                contentDescription = stringResource(R.string.pinned_badge),
                 tint = SkylineColors.Amber,
                 modifier = Modifier.size(14.dp)
             )
@@ -752,7 +752,7 @@ fun SkylineFolderListRow(
                     onClick = { showMenu = true },
                     modifier = Modifier.size(28.dp)
                 ) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "More", tint = SkylineColors.TextDim, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), tint = SkylineColors.TextDim, modifier = Modifier.size(18.dp))
                 }
                 if (showMenu) {
                     androidx.compose.ui.window.Popup(alignment = androidx.compose.ui.Alignment.TopEnd, onDismissRequest = { showMenu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
@@ -763,8 +763,8 @@ fun SkylineFolderListRow(
                             shadowElevation = 4.dp
                         ) {
                             Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = "Pin", tint = SkylineColors.Amber) }
-                                IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = "App info", tint = SkylineColors.Amber) }
+                                IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = stringResource(R.string.pin_file), tint = SkylineColors.Amber) }
+                                IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = stringResource(R.string.app_info), tint = SkylineColors.Amber) }
                             }
                         }
                     }

@@ -59,6 +59,9 @@ import com.ripple.filemanager.AppAction
 import androidx.compose.material3.SnackbarHostState
 import com.ripple.filemanager.CleanerData
 import com.ripple.filemanager.CleanerCategoryData
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.ripple.filemanager.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,11 +87,11 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                         navigationIcon = {
                             if (state.currentCleanerCategory != null) {
                                 IconButton(onClick = { onAction(AppAction.SetCleanerCategory(null)) }) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                                 }
                             } else {
                                 IconButton(onClick = { onAction(AppAction.SetCleanerScreenVisible(false)) }) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                                 }
                             }
                         },
@@ -107,10 +110,10 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                                     }
                                     if (catData != null) onAction(AppAction.SelectAllCleanerFiles(catData.files.map { it.id }))
                                 }) {
-                                    Icon(Icons.Default.SelectAll, contentDescription = "Select All")
+                                    Icon(Icons.Default.SelectAll, contentDescription = stringResource(R.string.select_all))
                                 }
                                 IconButton(onClick = { onAction(AppAction.ClearCleanerSelection) }) {
-                                    Icon(Icons.Default.Deselect, contentDescription = "Select None")
+                                    Icon(Icons.Default.Deselect, contentDescription = stringResource(R.string.select_none))
                                 }
                             }
                         },
@@ -131,7 +134,7 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("${state.cleanerSelectedFiles.size} selected", color = MaterialTheme.colorScheme.onSurface)
+                                Text(pluralStringResource(R.plurals.files_selected, state.cleanerSelectedFiles.size, state.cleanerSelectedFiles.size), color = MaterialTheme.colorScheme.onSurface)
                                 Button(
                                     onClick = { onAction(AppAction.DeleteSelectedCleanerFiles) },
                                     shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
@@ -495,7 +498,7 @@ fun CategoryDetailView(
 ) {
     if (categoryData.files.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No files to clean here!")
+            Text(stringResource(R.string.no_files_to_clean))
         }
         return
     }

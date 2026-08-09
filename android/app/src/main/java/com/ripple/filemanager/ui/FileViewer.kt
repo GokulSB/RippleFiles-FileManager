@@ -48,7 +48,7 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: F
                 title = { Text(fileItem.name, maxLines = 1) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -74,7 +74,7 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: F
                 ZipViewer(file)
             } else {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No viewer available for this file type.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.no_viewer_available), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -128,7 +128,7 @@ fun PdfViewer(file: File, cornerRoundness: Float = 0.5f) {
             title = { com.ripple.filemanager.ui.MonoLabel("PASSWORD REQUIRED", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
             text = {
                 Column {
-                    Text("This PDF is password protected.", color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
+                    Text(stringResource(R.string.pdf_password_protected), color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
                     if (errorMsg != null) {
                         Text(
                             text = errorMsg ?: "",
@@ -141,7 +141,7 @@ fun PdfViewer(file: File, cornerRoundness: Float = 0.5f) {
                     androidx.compose.material3.OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Password") },
+                        label = { Text(stringResource(R.string.password_label)) },
                         visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                         singleLine = true,
                         shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness)
@@ -174,7 +174,7 @@ fun PdfViewer(file: File, cornerRoundness: Float = 0.5f) {
                     },
                     enabled = !isDecrypting && password.isNotEmpty()
                 ) {
-                    Text("UNLOCK", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                    Text(stringResource(R.string.unlock_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                 }
             },
             containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
@@ -184,7 +184,7 @@ fun PdfViewer(file: File, cornerRoundness: Float = 0.5f) {
 
     if (errorMsg != null && !needsPassword) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Error opening PDF: $errorMsg", color = MaterialTheme.colorScheme.error)
+            Text(stringResource(R.string.error_opening_pdf, errorMsg!!), color = MaterialTheme.colorScheme.error)
         }
     } else if (pageCount > 0 && !needsPassword) {
         LazyColumn(
@@ -233,7 +233,7 @@ fun PdfPageImage(pdfRenderer: PdfRenderer?, pageIndex: Int) {
     if (bitmap != null) {
         Image(
             bitmap = bitmap!!.asImageBitmap(),
-            contentDescription = "Page ${pageIndex + 1}",
+            contentDescription = stringResource(R.string.page_number, pageIndex + 1),
             modifier = Modifier.fillMaxWidth(),
             contentScale = ContentScale.FillWidth
         )
@@ -300,7 +300,7 @@ fun ZipViewer(file: File) {
         }
     } else if (errorMsg != null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Error opening Zip: $errorMsg", color = MaterialTheme.colorScheme.error)
+            Text(stringResource(R.string.error_opening_zip, errorMsg!!), color = MaterialTheme.colorScheme.error)
         }
     } else {
         LazyColumn(modifier = Modifier.fillMaxSize()) {

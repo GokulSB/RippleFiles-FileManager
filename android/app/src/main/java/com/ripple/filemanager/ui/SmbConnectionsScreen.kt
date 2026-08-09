@@ -40,7 +40,7 @@ fun SmbConnectionsDialog(
         AlertDialog(
             onDismissRequest = onDismiss,
             title = {
-                Text("SMB Connections", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.smb_connections_title), style = MaterialTheme.typography.titleLarge)
             },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -72,14 +72,14 @@ fun SmbConnectionsDialog(
             },
             confirmButton = {
                 Button(onClick = { showAddForm = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_content_desc))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("New Connection")
+                    Text(stringResource(R.string.new_connection))
                 }
             },
             dismissButton = {
                 TextButton(onClick = onDismiss) {
-                    Text("Close")
+                    Text(stringResource(R.string.close))
                 }
             }
         )
@@ -113,7 +113,7 @@ fun SmbConnectionItem(
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(connection.displayName, style = MaterialTheme.typography.titleMedium)
-                Text("${connection.host}:${connection.port} / ${connection.shareName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.smb_connection_details, connection.host, connection.port, connection.shareName), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (isActive) {
                 Icon(
@@ -130,7 +130,7 @@ fun SmbConnectionItem(
             
             Box {
                 IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "More")
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
                 }
                 DropdownMenu(
                     expanded = showMenu,
@@ -138,7 +138,7 @@ fun SmbConnectionItem(
                 ) {
                     if (isActive) {
                         DropdownMenuItem(
-                            text = { Text("Stop", color = MaterialTheme.colorScheme.onSurface) },
+                            text = { Text(stringResource(R.string.stop_connection), color = MaterialTheme.colorScheme.onSurface) },
                             onClick = {
                                 showMenu = false
                                 onStop()
@@ -146,7 +146,7 @@ fun SmbConnectionItem(
                         )
                     } else {
                         DropdownMenuItem(
-                            text = { Text("Connect", color = MaterialTheme.colorScheme.onSurface) },
+                            text = { Text(stringResource(R.string.connect_action), color = MaterialTheme.colorScheme.onSurface) },
                             onClick = {
                                 showMenu = false
                                 onClick()
@@ -154,7 +154,7 @@ fun SmbConnectionItem(
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(stringResource(R.string.delete_label), color = MaterialTheme.colorScheme.error) },
                         onClick = {
                             showMenu = false
                             onDelete()

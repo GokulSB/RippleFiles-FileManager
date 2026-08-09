@@ -62,7 +62,7 @@ fun FolderPickerDialog(
                             loadFolders(parent)
                         }
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                     }
                 }
                 com.ripple.filemanager.ui.MonoLabel("SELECT LOCATION", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 16)
@@ -78,7 +78,7 @@ fun FolderPickerDialog(
                     }
                 } else if (folders.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No folders here")
+                        Text(stringResource(R.string.no_folders_here))
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -98,12 +98,12 @@ fun FolderPickerDialog(
         },
         confirmButton = {
             TextButton(onClick = { onFolderSelected(currentPath) }) {
-                Text("EXTRACT", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                Text(stringResource(R.string.extract_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
+                Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
             }
         },
         containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,

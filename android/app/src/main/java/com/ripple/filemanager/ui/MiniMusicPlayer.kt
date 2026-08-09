@@ -57,7 +57,7 @@ fun MiniMusicPlayer(
                     val bitmap = android.graphics.BitmapFactory.decodeByteArray(state.audioArtworkData, 0, state.audioArtworkData.size)
                     AsyncImage(
                         model = bitmap,
-                        contentDescription = "Album Art",
+                        contentDescription = stringResource(R.string.album_art),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -99,7 +99,7 @@ fun MiniMusicPlayer(
             // Controls
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { onAction(AppAction.PlayPreviousAudio) }) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = MaterialTheme.colorScheme.onSurface)
+                    Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous_track), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                 }
                 
                 Surface(
@@ -111,14 +111,15 @@ fun MiniMusicPlayer(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = if (state.isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (state.isAudioPlaying) "Pause" else "Play",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            contentDescription = if (state.isAudioPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }
                 
                 IconButton(onClick = { onAction(AppAction.PlayNextAudio) }) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = MaterialTheme.colorScheme.onSurface)
+                    Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next_track), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                 }
             }
         }

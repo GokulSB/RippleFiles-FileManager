@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import com.ripple.filemanager.FileItem
 import com.ripple.filemanager.AppState
 import com.ripple.filemanager.AppAction
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -67,17 +69,17 @@ fun TrashScreen(
                 title = { 
                     Column {
                         if (state.isRecycleBinEnabled) {
-                            Text("Bin (${state.recycleBinRetentionValue} ${state.recycleBinRetentionUnit.uppercase()})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("Files deleted after ${state.recycleBinRetentionValue} ${state.recycleBinRetentionUnit.lowercase()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.bin_retention_title, state.recycleBinRetentionValue, state.recycleBinRetentionUnit.uppercase()), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.bin_retention_desc, state.recycleBinRetentionValue, state.recycleBinRetentionUnit.lowercase()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else {
-                            Text("Bin (DISABLED)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("Files are deleted permanently", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.bin_disabled), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.files_deleted_permanently), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
@@ -89,16 +91,16 @@ fun TrashScreen(
                         }
                     }) {
                         if (selectedFiles.size == state.trashFiles.size && state.trashFiles.isNotEmpty()) {
-                            Icon(Icons.Default.Deselect, contentDescription = "Deselect All")
+                            Icon(Icons.Default.Deselect, contentDescription = stringResource(R.string.deselect_all))
                         } else {
-                            Icon(Icons.Default.SelectAll, contentDescription = "Select All")
+                            Icon(Icons.Default.SelectAll, contentDescription = stringResource(R.string.select_all))
                         }
                     }
                     IconButton(onClick = { onAction(AppAction.ToggleViewMode) }) {
-                        Icon(if (state.isListMode) Icons.Default.GridView else Icons.Default.ViewList, contentDescription = "Toggle View")
+                        Icon(if (state.isListMode) Icons.Default.GridView else Icons.Default.ViewList, contentDescription = stringResource(R.string.toggle_view_content_desc))
                     }
                     IconButton(onClick = { showSettings = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_title))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -131,7 +133,7 @@ fun TrashScreen(
                             shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
                             colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
                         ) {
-                            Icon(androidx.compose.material.icons.Icons.Outlined.Restore, contentDescription = "Restore", modifier = Modifier.size(16.dp))
+                            Icon(androidx.compose.material.icons.Icons.Outlined.Restore, contentDescription = stringResource(R.string.restore_action), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             com.ripple.filemanager.ui.MonoLabel("RESTORE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
                         }
@@ -143,7 +145,7 @@ fun TrashScreen(
                             shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
                             colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
                         ) {
-                            Icon(androidx.compose.material.icons.Icons.Outlined.Delete, contentDescription = "Delete Permanently", modifier = Modifier.size(16.dp))
+                            Icon(androidx.compose.material.icons.Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete_permanently_action), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             com.ripple.filemanager.ui.MonoLabel("DELETE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
                         }
@@ -152,7 +154,7 @@ fun TrashScreen(
                             AlertDialog(
                                 onDismissRequest = { showDeleteConfirm = false },
                                 title = { com.ripple.filemanager.ui.MonoLabel("DELETE PERMANENTLY?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
-                                text = { Text("These files will be deleted forever. This action cannot be undone.") },
+                                text = { Text(stringResource(R.string.delete_forever_warning)) },
                                 confirmButton = {
                                     Button(
                                         onClick = {
@@ -171,7 +173,7 @@ fun TrashScreen(
                                         shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
                                         colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
                                     ) {
-                                        Icon(Icons.Outlined.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete_label), modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
                                         com.ripple.filemanager.ui.MonoLabel("DELETE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
                                     }
@@ -204,7 +206,7 @@ fun TrashScreen(
                     }
                 } else if (state.trashFiles.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Bin is empty", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.bin_is_empty), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -262,7 +264,7 @@ fun TrashScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Enable Bin")
+                        Text(stringResource(R.string.enable_bin))
                         Switch(checked = isEnabled, onCheckedChange = { isEnabled = it })
                     }
                     if (isEnabled) {
@@ -273,7 +275,7 @@ fun TrashScreen(
                             OutlinedTextField(
                                 value = retentionValue,
                                 onValueChange = { if (it.isEmpty() || it.all { char -> char.isDigit() }) retentionValue = it },
-                                label = { Text("Time") },
+                                label = { Text(stringResource(R.string.time_label)) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.weight(1f),
                                 singleLine = true,
@@ -288,7 +290,7 @@ fun TrashScreen(
                                     value = retentionUnit,
                                     onValueChange = {},
                                     readOnly = true,
-                                    label = { Text("Unit") },
+                                    label = { Text(stringResource(R.string.unit_label)) },
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                                     colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                                     modifier = Modifier.menuAnchor(),

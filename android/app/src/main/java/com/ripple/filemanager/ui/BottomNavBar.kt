@@ -35,6 +35,8 @@ import com.ripple.filemanager.ui.theme.JetBrainsMonoFamily
 import com.ripple.filemanager.ui.theme.ManropeFontFamily
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.launch
@@ -390,7 +392,7 @@ fun PastingStatePill(
             Spacer(modifier = Modifier.width(12.dp))
             Icon(
                 Icons.Default.Close,
-                contentDescription = "Cancel",
+                contentDescription = stringResource(R.string.cancel),
                 tint = SkylineColors.TextDim2,
                 modifier = Modifier
                     .size(18.dp)

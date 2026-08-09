@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.FileItem
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -138,7 +140,7 @@ fun DocumentViewerScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
@@ -155,7 +157,7 @@ fun DocumentViewerScreen(
                         }
                         context.startActivity(android.content.Intent.createChooser(intent, "Share Document"))
                     }) {
-                        Icon(Icons.Filled.Share, contentDescription = "Share")
+                        Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.share))
                     }
                 }
             )
@@ -277,7 +279,7 @@ fun ThumbnailItem(
         if (bitmap != null) {
             Image(
                 bitmap = bitmap!!.asImageBitmap(),
-                contentDescription = "Page $index",
+                contentDescription = stringResource(R.string.page_number, index),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
@@ -367,7 +369,7 @@ fun MainPageItem(
             ) {
                 Image(
                     bitmap = bitmap!!.asImageBitmap(),
-                    contentDescription = "Page $index",
+                    contentDescription = stringResource(R.string.page_number, index),
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -397,17 +399,17 @@ fun FloatingPill(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             IconButton(onClick = onZoomIn, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Add, contentDescription = "Zoom In", modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.zoom_in), modifier = Modifier.size(20.dp))
             }
             HorizontalDivider(modifier = Modifier.width(20.dp).padding(vertical = 4.dp))
             IconButton(onClick = onZoomOut, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Remove, contentDescription = "Zoom Out", modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.Remove, contentDescription = stringResource(R.string.zoom_out), modifier = Modifier.size(20.dp))
             }
             HorizontalDivider(modifier = Modifier.width(20.dp).padding(vertical = 4.dp))
             IconButton(onClick = onToggleBookmark, modifier = Modifier.size(32.dp)) {
                 Icon(
                     if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                    contentDescription = "Bookmark",
+                    contentDescription = stringResource(R.string.bookmark),
                     modifier = Modifier.size(20.dp),
                     tint = if (isBookmarked) Color(0xFFE0AC70) else MaterialTheme.colorScheme.onSurface
                 )

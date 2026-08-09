@@ -29,6 +29,7 @@
     <string name="no_matching_files">No matching files</string>
     <string name="try_another_search">Try another search or filter.</string>
     <string name="play">Play</string>
+    <string name="pause">Pause</string>
     <string name="confirm">Confirm</string>
     <string name="more_options">More</string>
     <string name="pin_file">Pin</string>
@@ -212,6 +213,20 @@
     <string name="enable_bin">Enable Bin</string>
     <string name="time_label">Time</string>
     <string name="unit_label">Unit</string>
+
+    <!-- SearchOverlay.kt & FolderScreen.kt -->
+    <string name="search_files_hint">Search files...</string>
+    <string name="filter_all">All</string>
+    <string name="filter_folders">Folders</string>
+    <string name="filter_images">Images</string>
+    <string name="filter_videos">Videos</string>
+    <string name="filter_docs">Docs</string>
+    <string name="filter_media">Media</string>
+    <string name="filter_documents">Documents</string>
+
+    <!-- DriveAuthScreen.kt -->
+    <string name="connect_action_cloud">Connect</string>
+    <string name="disconnect_action_cloud">Disconnect</string>
 
     <!-- ============================================= -->
     <!-- Formats & Plurals (Phase 3)                    -->

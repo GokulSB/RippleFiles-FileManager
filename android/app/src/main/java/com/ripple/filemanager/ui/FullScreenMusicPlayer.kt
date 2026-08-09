@@ -31,10 +31,10 @@ fun FullScreenMusicPlayer(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Now Playing", style = MaterialTheme.typography.titleMedium) },
+                title = { Text(stringResource(R.string.now_playing), style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = { onAction(AppAction.SetShowFullScreenPlayer(false)) }) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close")
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.close))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -67,7 +67,7 @@ fun FullScreenMusicPlayer(
                     val bitmap = android.graphics.BitmapFactory.decodeByteArray(state.audioArtworkData, 0, state.audioArtworkData.size)
                     AsyncImage(
                         model = bitmap,
-                        contentDescription = "Album Art",
+                        contentDescription = stringResource(R.string.album_art),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -139,7 +139,7 @@ fun FullScreenMusicPlayer(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { /* No-op */ }, modifier = Modifier.size(64.dp)) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onBackground)
+                    Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous_track), modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onBackground)
                 }
 
                 Surface(
@@ -151,7 +151,7 @@ fun FullScreenMusicPlayer(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = if (state.isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (state.isAudioPlaying) "Pause" else "Play",
+                            contentDescription = if (state.isAudioPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
                             modifier = Modifier.size(40.dp),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -159,7 +159,7 @@ fun FullScreenMusicPlayer(
                 }
 
                 IconButton(onClick = { /* No-op */ }, modifier = Modifier.size(64.dp)) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Next", modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onBackground)
+                    Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next_track), modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onBackground)
                 }
             }
             

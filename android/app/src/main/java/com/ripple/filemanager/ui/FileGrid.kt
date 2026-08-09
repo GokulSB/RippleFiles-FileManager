@@ -83,6 +83,8 @@ import androidx.compose.ui.window.PopupProperties
 import com.ripple.filemanager.FileItem
 import coil.compose.AsyncImage
 import java.io.File
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
 
 private fun isNativeRootFolder(path: String): Boolean {
     val rootPath = android.os.Environment.getExternalStorageDirectory().path
@@ -182,8 +184,8 @@ fun FileGrid(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 FileShapeIcon("folder", size = 64)
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("No matching files", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Try another search or filter.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.no_matching_files), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.try_another_search), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     },
@@ -403,7 +405,7 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                 if (file.type == "video") {
                     Icon(
                         androidx.compose.material.icons.Icons.Default.PlayArrow,
-                        contentDescription = "Play",
+                        contentDescription = stringResource(R.string.play),
                         tint = Color.White,
                         modifier = Modifier.align(Alignment.Center).size(48.dp)
                     )
@@ -431,7 +433,7 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                                     isEditingName = false
                                     if (editNameValue.isNotBlank() && editNameValue != file.name) onRenameClick(editNameValue)
                                 }, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Default.Check, contentDescription = "Confirm", modifier = Modifier.size(16.dp), tint = Color.White)
+                                    Icon(Icons.Default.Check, contentDescription = stringResource(R.string.confirm), modifier = Modifier.size(16.dp), tint = Color.White)
                                 }
                             }
                         } else {
@@ -462,7 +464,7 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                 
                 Box(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)) {
                     IconButton(onClick = { showMenu = true }, modifier = Modifier.size(34.dp)) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More", modifier = Modifier.size(20.dp), tint = Color.White)
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), modifier = Modifier.size(20.dp), tint = Color.White)
                     }
                     if (showMenu) {
                         val density = LocalDensity.current
@@ -475,11 +477,11 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                                 shadowElevation = 4.dp
                             ) {
                                 Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { showMenu = false; onPinClick() }, modifier = Modifier.size(36.dp)) { Icon(if (file.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin, contentDescription = "Pin", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
-                                    IconButton(onClick = { showMenu = false; if (file.isLocked) onUnlockClick() else onLockClick() }, modifier = Modifier.size(36.dp)) { Icon(if (file.isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (file.isLocked) "Unlock" else "Lock", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
-                                    IconButton(onClick = { showMenu = false; onInfoClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.Info, contentDescription = "Info", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
+                                    IconButton(onClick = { showMenu = false; onPinClick() }, modifier = Modifier.size(36.dp)) { Icon(if (file.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin, contentDescription = stringResource(R.string.pin_file), tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
+                                    IconButton(onClick = { showMenu = false; if (file.isLocked) onUnlockClick() else onLockClick() }, modifier = Modifier.size(36.dp)) { Icon(if (file.isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (file.isLocked) stringResource(R.string.unlock_file) else stringResource(R.string.lock_file), tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
+                                    IconButton(onClick = { showMenu = false; onInfoClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.file_info), tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
                                     if (file.name.endsWith(".zip", ignoreCase = true)) {
-                                        IconButton(onClick = { showMenu = false; onExtractClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.FolderZip, contentDescription = "Extract", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
+                                        IconButton(onClick = { showMenu = false; onExtractClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.FolderZip, contentDescription = stringResource(R.string.extract_archive), tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
                                     }
                                 }
                             }
@@ -491,7 +493,7 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             if (file.isPinned) {
                 Icon(
                     Icons.Default.PushPin,
-                    contentDescription = "Pinned",
+                    contentDescription = stringResource(R.string.pinned_badge),
                     tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
                     modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 2.dp).size(28.dp).graphicsLayer(rotationZ = 45f)
                 )
@@ -499,7 +501,7 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             if (file.isLocked) {
                 Icon(
                     Icons.Outlined.Lock,
-                    contentDescription = "Locked",
+                    contentDescription = stringResource(R.string.locked_badge),
                     tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).size(24.dp)
                 )
@@ -593,7 +595,7 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                                 onRenameClick(editNameValue)
                             }
                         }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Check, contentDescription = "Confirm", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Check, contentDescription = stringResource(R.string.confirm), modifier = Modifier.size(16.dp))
                         }
                     }
                 } else {
@@ -615,7 +617,7 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                     }
                     Box(contentAlignment = Alignment.TopEnd) {
                         IconButton(onClick = { showMenu = true }, modifier = Modifier.size(34.dp)) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More", modifier = Modifier.size(17.dp))
+                            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), modifier = Modifier.size(17.dp))
                         }
                         if (showMenu) {
                             val density = LocalDensity.current
@@ -638,16 +640,16 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         IconButton(onClick = { showMenu = false; onPinClick() }, modifier = Modifier.size(36.dp)) {
-                                            Icon(if (file.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin, contentDescription = "Pin", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                                            Icon(if (file.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin, contentDescription = stringResource(R.string.pin_file), tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                         }
                                         IconButton(onClick = { showMenu = false; if (file.isLocked) onUnlockClick() else onLockClick() }, modifier = Modifier.size(36.dp)) {
-                                            Icon(if (file.isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (file.isLocked) "Unlock" else "Lock", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                                            Icon(if (file.isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (file.isLocked) stringResource(R.string.unlock_file) else stringResource(R.string.lock_file), tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                         }
                                         IconButton(onClick = { showMenu = false; onInfoClick() }, modifier = Modifier.size(36.dp)) {
-                                            Icon(Icons.Outlined.Info, contentDescription = "Info", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                                            Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.file_info), tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                         }
                                         if (file.name.endsWith(".zip", ignoreCase = true)) {
-                                            IconButton(onClick = { showMenu = false; onExtractClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.FolderZip, contentDescription = "Extract", tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
+                                            IconButton(onClick = { showMenu = false; onExtractClick() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.FolderZip, contentDescription = stringResource(R.string.extract_archive), tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
                                         }
                                     }
                                 }
@@ -659,7 +661,7 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             if (file.isPinned) {
                 Icon(
                     Icons.Default.PushPin,
-                    contentDescription = "Pinned",
+                    contentDescription = stringResource(R.string.pinned_badge),
                     tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
                     modifier = Modifier.align(Alignment.TopStart).padding(8.dp).size(24.dp)
                 )
@@ -667,7 +669,7 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             if (file.isLocked) {
                 Icon(
                     Icons.Outlined.Lock,
-                    contentDescription = "Locked",
+                    contentDescription = stringResource(R.string.locked_badge),
                     tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(24.dp)
                 )
@@ -715,7 +717,7 @@ fun FileShapeIcon(type: String, name: String = "", size: Int, path: String = "",
                 if (type == "video") {
                     Icon(
                         androidx.compose.material.icons.Icons.Default.PlayArrow,
-                        contentDescription = "Play",
+                        contentDescription = stringResource(R.string.play),
                         modifier = Modifier.align(Alignment.Center).size((size * 0.4).dp),
                         tint = Color.White
                     )
