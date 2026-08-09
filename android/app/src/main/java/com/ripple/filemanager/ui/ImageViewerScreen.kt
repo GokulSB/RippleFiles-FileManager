@@ -1,5 +1,8 @@
 package com.ripple.filemanager.ui
 
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
+
 import android.content.Context
 import android.content.Intent
 import android.media.ExifInterface

@@ -1,5 +1,8 @@
 package com.ripple.filemanager.ui
 
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
+
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor

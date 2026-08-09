@@ -30,6 +30,8 @@
     <string name="try_another_search">Try another search or filter.</string>
     <string name="play">Play</string>
     <string name="pause">Pause</string>
+    <string name="unlock_file">Unlock</string>
+    <string name="lock_file">Lock</string>
     <string name="confirm">Confirm</string>
     <string name="more_options">More</string>
     <string name="pin_file">Pin</string>

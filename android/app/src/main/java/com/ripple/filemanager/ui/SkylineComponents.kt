@@ -1,5 +1,8 @@
 package com.ripple.filemanager.ui
 
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas

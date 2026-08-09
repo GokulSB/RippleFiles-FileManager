@@ -180,7 +180,7 @@ fun TrashScreen(
                                 },
                                 dismissButton = {
                                     TextButton(onClick = { showDeleteConfirm = false }) {
-                                        Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
+                                        Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                                     }
                                 },
                                 containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
@@ -324,12 +324,12 @@ fun TrashScreen(
                         onAction(AppAction.RefreshTrash)
                     }
                 ) {
-                    Text("SAVE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                    Text(stringResource(R.string.save_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSettings = false }) {
-                    Text("CANCEL", color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
+                    Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                 }
             },
             containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,

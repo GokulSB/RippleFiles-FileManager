@@ -12,6 +12,8 @@ import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.*
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier

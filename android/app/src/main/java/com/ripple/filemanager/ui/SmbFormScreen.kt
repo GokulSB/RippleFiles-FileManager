@@ -1,5 +1,8 @@
 package com.ripple.filemanager.ui
 
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions

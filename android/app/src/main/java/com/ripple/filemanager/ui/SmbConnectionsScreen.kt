@@ -1,5 +1,8 @@
 package com.ripple.filemanager.ui
 
+import androidx.compose.ui.res.stringResource
+import com.ripple.filemanager.R
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
