@@ -526,7 +526,7 @@ fun SiftApp(
                     val absolutePath = "/storage/emulated/0"
                     onAction(AppAction.SetOrganiserPath(currentPickingCategory.value!!, absolutePath))
                 } else {
-                    android.widget.Toast.makeText(context, "Please select a folder on internal storage.", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, context.getString(R.string.select_internal_storage_error), android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
             currentPickingCategory.value = null
@@ -660,19 +660,19 @@ fun SiftApp(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 ViewerPreferenceItem(
-                                    label = "Text / PDF",
+                                    label = stringResource(R.string.text_pdf_viewer),
                                     currentValue = state.viewerTextPdf,
                                     cornerRoundness = state.cornerRoundness,
                                     onValueChange = { onAction(AppAction.SetViewerPreference("Text/PDF", it)) }
                                 )
                                 ViewerPreferenceItem(
-                                    label = "Music",
+                                    label = stringResource(R.string.music_viewer),
                                     currentValue = state.viewerMusic,
                                     cornerRoundness = state.cornerRoundness,
                                     onValueChange = { onAction(AppAction.SetViewerPreference("Music", it)) }
                                 )
                                 ViewerPreferenceItem(
-                                    label = "Image",
+                                    label = stringResource(R.string.image_viewer),
                                     currentValue = state.viewerImage,
                                     cornerRoundness = state.cornerRoundness,
                                     onValueChange = { onAction(AppAction.SetViewerPreference("Image", it)) }
@@ -1168,7 +1168,7 @@ fun DrawerContent(
             Spacer(modifier = Modifier.height(8.dp))
             DrawerMenuItem(
                 icon = Icons.Outlined.CleaningServices,
-                label = "Storage cleaner",
+                label = stringResource(R.string.storage_cleaner_nav),
                 cornerRoundness = cornerRoundness,
                 onClick = {
                     onCloseDrawer()
@@ -1178,7 +1178,7 @@ fun DrawerContent(
             Spacer(modifier = Modifier.height(8.dp))
             DrawerMenuItem(
                 icon = Icons.Outlined.Settings,
-                label = "Settings",
+                label = stringResource(R.string.settings_nav),
                 cornerRoundness = cornerRoundness,
                 onClick = {
                     onCloseDrawer()
@@ -1188,7 +1188,7 @@ fun DrawerContent(
             Spacer(modifier = Modifier.height(8.dp))
             DrawerMenuItem(
                 icon = Icons.Outlined.Info,
-                label = "About",
+                label = stringResource(R.string.about_nav),
                 cornerRoundness = cornerRoundness,
                 onClick = {
                     onCloseDrawer()
@@ -1918,7 +1918,7 @@ if (state.storageTotalGb > 0f && (targetLocation == "home" || targetLocation == 
         StorageCard(
             modifier = cardModifier.fillMaxHeight(),
             icon = Icons.Default.Storage,
-            titleText = "Local",
+            titleText = stringResource(R.string.local_storage),
             usedText = usedText,
             totalText = totalText,
             freeText = freeText,
@@ -1935,7 +1935,7 @@ if (state.storageTotalGb > 0f && (targetLocation == "home" || targetLocation == 
             StorageCard(
                 modifier = cardModifier.fillMaxHeight(),
                 icon = Icons.Default.SdStorage,
-                titleText = "SD Card",
+                titleText = stringResource(R.string.sd_card_storage),
                 usedText = sdUsedText,
                 totalText = sdTotalText,
                 freeText = sdFreeText,
@@ -2300,7 +2300,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                                   try {
                                                                       onAction(AppAction.RequestShizukuAccess) // Try anyway to trigger alternatives
                                                                   } catch (e: Exception) {
-                                                                      android.widget.Toast.makeText(context, "Shizuku service not detected. Ensure it's running.", android.widget.Toast.LENGTH_LONG).show()
+                                                                      android.widget.Toast.makeText(context, context.getString(R.string.shizuku_not_detected), android.widget.Toast.LENGTH_LONG).show()
                                                                   }
                                                               }
                                                           }, modifier = Modifier.fillMaxWidth()) {
@@ -2384,7 +2384,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                             context.startActivity(intent)
                                                         } catch (e: Exception) {
                                                             e.printStackTrace()
-                                                            android.widget.Toast.makeText(context, "Error opening APK: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                                            android.widget.Toast.makeText(context, context.getString(R.string.error_opening_apk, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
                                                         }
                                                     }
                                                     }
@@ -3172,7 +3172,7 @@ fun openFileInExternalApp(context: android.content.Context, file: com.ripple.fil
         context.startActivity(chooser)
     } catch (e: Exception) {
         e.printStackTrace()
-        android.widget.Toast.makeText(context, "No app found to open this file", android.widget.Toast.LENGTH_LONG).show()
+        android.widget.Toast.makeText(context, context.getString(R.string.no_app_found), android.widget.Toast.LENGTH_LONG).show()
     }
 }
 
@@ -3323,7 +3323,7 @@ fun AuthDialog(
                     biometricFailures++
                     if (biometricFailures >= 3) {
                         biometricPrompt?.cancelAuthentication()
-                        android.widget.Toast.makeText(context, "Fingerprint failed 3 times. Please enter password.", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, context.getString(R.string.fingerprint_failed_fallback), android.widget.Toast.LENGTH_LONG).show()
                         showPasswordField = true
                     }
                 }
