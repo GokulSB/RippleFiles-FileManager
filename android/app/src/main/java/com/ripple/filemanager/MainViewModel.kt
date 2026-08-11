@@ -168,6 +168,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = FileRepository(application)
     private var rawFiles: List<FileItem> = emptyList()
     private var loadJob: kotlinx.coroutines.Job? = null
+    private var searchJob: kotlinx.coroutines.Job? = null
 
     private val prefs = application.getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE)
 
@@ -426,7 +427,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setQuery(query: String) {
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), query = query) }
-        updateFilteredFiles()
+        searchJob?.cancel()
+        
+        if (query.isEmpty()) {
+            updateFilteredFiles()
+        } else {
+            _state.update { it.copy(isLoading = true, files = kotlinx.collections.immutable.persistentListOf()) }
+            searchJob = viewModelScope.launch(Dispatchers.Default) {
+                val st = _state.value
+                val isLocal = !(st.location == "mega" || st.location.startsWith("mega_id:") || st.location.startsWith("smb_") || st.location == "drive" || st.location.startsWith("drive_id:") || st.location == "recent" || st.location == "pinned")
+                
+                val results = if (isLocal) {
+                    repository.searchLocalFiles(st.location, query)
+                } else {
+                    rawFiles.filter { it.name.contains(query, ignoreCase = true) }
+                }
+                
+                val filtered = applyFiltersAndSort(results, st)
+                _state.update { it.copy(isLoading = false, files = filtered.toImmutableList()) }
+            }
+        }
     }
 
     fun toggleViewMode() {

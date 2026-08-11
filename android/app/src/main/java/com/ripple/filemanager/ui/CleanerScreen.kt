@@ -137,7 +137,7 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                                 Text(pluralStringResource(R.plurals.files_selected, state.cleanerSelectedFiles.size, state.cleanerSelectedFiles.size), color = MaterialTheme.colorScheme.onSurface)
                                 Button(
                                     onClick = { onAction(AppAction.DeleteSelectedCleanerFiles) },
-                                    shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
+                                    shape = com.ripple.filemanager.ui.getDynamicCornerShape(24f, state.cornerRoundness),
                                     colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
                                 ) {
                                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -236,7 +236,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                     Column(modifier = Modifier.padding(24.dp)) {
                         // 1. Header
                         Text(
-                            text = "INTERNAL STORAGE",
+                            text = stringResource(R.string.internal_storage).uppercase(),
                             fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
                             fontSize = 11.sp,
                             letterSpacing = 2.sp,
@@ -253,7 +253,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "used of ${formatSize(data.totalStorageBytes)}",
+                                text = stringResource(R.string.used_of_total, formatSize(data.totalStorageBytes)),
                                 fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
                                 fontSize = 16.sp,
                                 color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim,
@@ -356,14 +356,14 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "${formatSize(data.freeStorageBytes)} free",
+                                text = stringResource(R.string.free_storage, formatSize(data.freeStorageBytes)),
                                 fontFamily = MaterialTheme.typography.headlineMedium.fontFamily,
                                 fontSize = 16.sp,
                                 color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary
                             )
                             val freePercent = if (data.totalStorageBytes > 0) (data.freeStorageBytes * 100 / data.totalStorageBytes).toInt() else 0
                             Text(
-                                text = "$freePercent% FREE OF TOTAL STORAGE",
+                                text = stringResource(R.string.free_of_total_storage, freePercent),
                                 fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
                                 fontSize = 10.sp,
                                 color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim
@@ -386,7 +386,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                         modifier = Modifier.padding(horizontal = 8.dp)
                     ) {
                         Text(
-                            text = "MANAGE",
+                            text = stringResource(R.string.manage_action).uppercase(),
                             fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
                             fontWeight = FontWeight.Bold,
                             color = com.ripple.filemanager.ui.theme.SkylineColors.Background,
@@ -400,7 +400,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
         // 5. "Storage breakdown" section label
         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
             Text(
-                text = "STORAGE BREAKDOWN",
+                text = stringResource(R.string.storage_breakdown).uppercase(),
                 fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
                 fontSize = 11.sp,
                 letterSpacing = 2.sp,
@@ -432,7 +432,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
 @Composable
 fun StorageBreakdownCard(title: String, sizeBytes: Long, totalUsedBytes: Long, icon: ImageVector, color: Color, cornerRoundness: Float, onClick: () -> Unit) {
     Surface(
-        shape = getDynamicCornerShape(0f, cornerRoundness),
+        shape = com.ripple.filemanager.ui.getDynamicCornerShape(16f, cornerRoundness),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
         onClick = onClick,

@@ -5,6 +5,9 @@ import com.ripple.filemanager.R
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -461,7 +464,10 @@ fun SkylineFolderGridTile(
     cornerRoundness: Float = 0f,
     onPinClick: (() -> Unit)? = null,
     onInfoClick: (() -> Unit)? = null,
-    isPinned: Boolean = false
+    isPinned: Boolean = false,
+    isLocked: Boolean = false,
+    onLockClick: (() -> Unit)? = null,
+    onUnlockClick: (() -> Unit)? = null
 ) {
     val shape = getDynamicCornerShape(16f, cornerRoundness)
     val baseTone = fileTypeTone(type)
@@ -546,6 +552,15 @@ fun SkylineFolderGridTile(
                         modifier = Modifier.size(12.dp)
                     )
                 }
+                if (isLocked) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = stringResource(R.string.locked_badge),
+                        tint = SkylineColors.Rust,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
                 Spacer(Modifier.width(6.dp))
                 Box(
                     modifier = Modifier
@@ -585,6 +600,11 @@ fun SkylineFolderGridTile(
                                 ) {
                                     Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                         IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = stringResource(R.string.pin_file), tint = SkylineColors.Amber) }
+                                        if (onLockClick != null || onUnlockClick != null) {
+                                            IconButton(onClick = { showMenu = false; if (isLocked) onUnlockClick?.invoke() else onLockClick?.invoke() }, modifier = Modifier.size(36.dp)) {
+                                                Icon(if (isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (isLocked) stringResource(R.string.unlock_file) else stringResource(R.string.lock_file), tint = SkylineColors.Amber)
+                                            }
+                                        }
                                         IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = stringResource(R.string.app_info), tint = SkylineColors.Amber) }
                                     }
                                 }
@@ -645,7 +665,10 @@ fun SkylineFolderListRow(
     cornerRoundness: Float = 0f,
     onPinClick: (() -> Unit)? = null,
     onInfoClick: (() -> Unit)? = null,
-    isPinned: Boolean = false
+    isPinned: Boolean = false,
+    isLocked: Boolean = false,
+    onLockClick: (() -> Unit)? = null,
+    onUnlockClick: (() -> Unit)? = null
 ) {
     val shape = getDynamicCornerShape(16f, cornerRoundness)
     val baseTone = fileTypeTone(type)
@@ -715,6 +738,15 @@ fun SkylineFolderListRow(
             )
             Spacer(Modifier.width(6.dp))
         }
+        if (isLocked) {
+            Icon(
+                imageVector = Icons.Outlined.Lock,
+                contentDescription = stringResource(R.string.locked_badge),
+                tint = SkylineColors.Rust,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+        }
 
         Column(modifier = Modifier.weight(1f).padding(vertical = 10.dp)) {
             Text(
@@ -767,6 +799,11 @@ fun SkylineFolderListRow(
                         ) {
                             Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                 IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = stringResource(R.string.pin_file), tint = SkylineColors.Amber) }
+                                if (onLockClick != null || onUnlockClick != null) {
+                                    IconButton(onClick = { showMenu = false; if (isLocked) onUnlockClick?.invoke() else onLockClick?.invoke() }, modifier = Modifier.size(36.dp)) {
+                                        Icon(if (isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (isLocked) stringResource(R.string.unlock_file) else stringResource(R.string.lock_file), tint = SkylineColors.Amber)
+                                    }
+                                }
                                 IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = stringResource(R.string.app_info), tint = SkylineColors.Amber) }
                             }
                         }
@@ -782,78 +819,298 @@ fun SkylineFolderListRow(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun OffsetDockNavBar(
+fun ExpandingPillNav(
     selected: com.ripple.filemanager.NavTab,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onTabSelected: (com.ripple.filemanager.NavTab) -> Unit,
+    onNewFile: () -> Unit,
+    onNewFolder: () -> Unit,
+    cornerRoundness: Float = 0f,
     modifier: Modifier = Modifier
 ) {
-    val SkylineInkOnAmber = Color(0xFF1C0F08)
-    
-    Box(
-        modifier = modifier
-            .padding(horizontal = 4.dp)
-            .padding(bottom = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        // Offset shadow
+    val pillColor = SkylineColors.Amber
+    val pillBgExpanded = SkylineColors.Surface
+    val strokeColor = SkylineColors.Border
+    val iconActiveColor = SkylineColors.Background
+    val iconInactiveColor = SkylineColors.TextDim
+    val shadowColor = SkylineColors.Border
+
+    val currentTabIcon = when(selected) {
+        com.ripple.filemanager.NavTab.HOME -> Icons.Default.Home
+        com.ripple.filemanager.NavTab.RECENT -> Icons.Default.Schedule
+        com.ripple.filemanager.NavTab.PINNED -> Icons.Default.PushPin
+        com.ripple.filemanager.NavTab.CLOUD -> Icons.Default.Cloud
+        else -> Icons.Default.Home
+    }
+
+    Box(modifier = modifier) {
+        val pillShape = getDynamicCornerShape(25f, cornerRoundness)
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .offset(x = 4.dp, y = 4.dp)
-                .background(SkylineColors.AmberDim)
+                .background(shadowColor, pillShape)
                 .zIndex(-1f)
         )
-        // Main bar
+        
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(SkylineColors.Surface)
-                .border(1.dp, SkylineColors.AmberDim, androidx.compose.ui.graphics.RectangleShape)
+                .height(50.dp)
+                .background(if (expanded) pillBgExpanded else pillColor, pillShape)
+                .then(if (expanded) Modifier.border(1.dp, strokeColor, pillShape) else Modifier)
+                .clip(pillShape)
+                .animateContentSize(animationSpec = tween(320, easing = FastOutSlowInEasing))
+                .padding(start = if (expanded) 8.dp else 0.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End
         ) {
             val tabs = listOf(
-                Triple(com.ripple.filemanager.NavTab.HOME, "HOME", Icons.Default.Home),
-                Triple(com.ripple.filemanager.NavTab.RECENT, "RECENT", Icons.Default.Schedule),
-                Triple(com.ripple.filemanager.NavTab.PINNED, "PINNED", Icons.Default.PushPin),
-                Triple(com.ripple.filemanager.NavTab.CLOUD, "CLOUD", Icons.Default.Cloud)
+                com.ripple.filemanager.NavTab.HOME to Icons.Default.Home,
+                com.ripple.filemanager.NavTab.RECENT to Icons.Default.Schedule,
+                com.ripple.filemanager.NavTab.PINNED to Icons.Default.PushPin,
+                com.ripple.filemanager.NavTab.CLOUD to Icons.Default.Cloud
             )
-            tabs.forEach { (tab, label, icon) ->
-                val isActive = selected == tab
-                val bgColor by androidx.compose.animation.animateColorAsState(
-                    targetValue = if (isActive) SkylineColors.Amber else Color.Transparent,
-                    animationSpec = androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                    label = "bg_color"
-                )
-                val contentColor = if (isActive) SkylineInkOnAmber else SkylineColors.TextDim
-                
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp) // min touch target
-                        .background(bgColor)
-                        .clickable(
-                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onTabSelected(tab) }
-                        )
-                        .padding(top = 13.dp, bottom = 11.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+            
+            tabs.forEachIndexed { index, (tab, icon) ->
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = fadeIn(tween(200, delayMillis = 60 + (index * 25))),
+                    exit = fadeOut(tween(50))
                 ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = label,
-                        tint = contentColor,
-                        modifier = Modifier.size(20.dp)
+                    val isActive = selected == tab
+                    val activeShape = getDynamicCornerShape(17f, cornerRoundness)
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(if (isActive) pillColor else Color.Transparent, activeShape)
+                            .clip(activeShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                onTabSelected(tab)
+                                onExpandedChange(false)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, contentDescription = null, tint = if (isActive) iconActiveColor else iconInactiveColor, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+            
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(tween(200, delayMillis = 60 + (4 * 25))),
+                exit = fadeOut(tween(50))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp)
+                        .width(1.dp)
+                        .height(22.dp)
+                        .background(strokeColor)
+                )
+            }
+            
+            val actions = listOf(
+                Icons.Outlined.InsertDriveFile to onNewFile,
+                Icons.Default.CreateNewFolder to onNewFolder
+            )
+            actions.forEachIndexed { index, (icon, onClick) ->
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = fadeIn(tween(200, delayMillis = 60 + ((5 + index) * 25))),
+                    exit = fadeOut(tween(50))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                onClick()
+                                onExpandedChange(false)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, contentDescription = null, tint = iconInactiveColor, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+            
+            if (expanded) Spacer(modifier = Modifier.width(8.dp))
+            
+            val rotation by animateFloatAsState(
+                targetValue = if (expanded) 45f else 0f, 
+                animationSpec = tween(200)
+            )
+            val toggleShape = getDynamicCornerShape(25f, cornerRoundness)
+            Box(
+                modifier = Modifier
+                    .size(if (expanded) 48.dp else 50.dp)
+                    .background(if (expanded) Color.Transparent else pillColor, toggleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() }, indication = null
+                    ) { onExpandedChange(!expanded) },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(modifier = Modifier.graphicsLayer(rotationZ = rotation)) {
+                    AnimatedContent(
+                        targetState = expanded,
+                        transitionSpec = {
+                            (fadeIn(tween(160, delayMillis = 60)) + scaleIn(initialScale = 0.6f, animationSpec = tween(200, delayMillis = 60))) togetherWith
+                            (fadeOut(tween(160)) + scaleOut(targetScale = 0.6f, animationSpec = tween(200)))
+                        },
+                        label = "toggle_icon"
+                    ) { isExp ->
+                        if (isExp) {
+                            Icon(Icons.Default.Add, contentDescription = "Close", tint = pillColor, modifier = Modifier.size(16.dp))
+                        } else {
+                            Icon(currentTabIcon, contentDescription = "Current Tab", tint = iconActiveColor, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+                
+                if (!expanded && selected != com.ripple.filemanager.NavTab.HOME) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .size(6.dp)
+                            .background(iconActiveColor.copy(alpha = 0.7f))
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = label,
-                        color = contentColor,
-                        fontFamily = JetBrainsMonoFamily,
-                        fontSize = 9.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                        letterSpacing = 0.06.sp
-                    )
+                }
+            }
+        }
+    }
+}
+
+data class StorageSourceUi(
+    val key: String,
+    val displayName: String,
+    val freeLabel: String?,
+    val totalLabel: String?,
+    val usedPercent: Int?,
+    val barColor: Color
+)
+
+@Composable
+fun ConnectedStorageCard(
+    sources: List<StorageSourceUi>,
+    cornerRoundness: Float = 0f,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    val borderColor = SkylineColors.Border
+    val bgColor = SkylineColors.Surface
+    
+    // Fallback if empty (shouldn't happen on Home screen, but just in case)
+    if (sources.isEmpty()) return
+    
+    val cardShape = getDynamicCornerShape(12f, cornerRoundness)
+    
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(bgColor, cardShape)
+            .border(1.dp, borderColor, cardShape)
+            .clip(cardShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { expanded = !expanded }
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "STORAGE · ${sources.size} CONNECTED",
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 9.sp,
+                    letterSpacing = 0.8.sp,
+                    color = SkylineColors.AmberDim
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = sources.joinToString(" · ") { it.displayName },
+                    fontFamily = FrauncesFontFamily,
+                    fontSize = 15.sp,
+                    color = SkylineColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            
+            val rotation by animateFloatAsState(
+                targetValue = if (expanded) 180f else 0f, 
+                animationSpec = tween(120),
+                label = "chevron_rotation"
+            )
+            
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = "Expand",
+                tint = SkylineColors.Amber,
+                modifier = Modifier.size(24.dp).graphicsLayer(rotationZ = rotation)
+            )
+        }
+        
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(tween(320, easing = FastOutSlowInEasing)) + fadeIn(tween(320)),
+            exit = shrinkVertically(tween(320, easing = FastOutSlowInEasing)) + fadeOut(tween(320))
+        ) {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp)
+                        .height(1.dp)
+                        .background(SkylineColors.Border)
+                )
+                
+                sources.forEach { source ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = source.displayName,
+                            fontFamily = JetBrainsMonoFamily,
+                            fontSize = 10.sp,
+                            color = SkylineColors.TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.width(84.dp)
+                        )
+                        
+                        Box(
+                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (source.usedPercent != null) {
+                                Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(SkylineColors.TextDim.copy(alpha = 0.2f)))
+                                Box(modifier = Modifier.fillMaxWidth(source.usedPercent / 100f).height(6.dp).background(source.barColor))
+                            }
+                        }
+                        
+                        Text(
+                            text = if (source.freeLabel != null && source.totalLabel != null) "${source.freeLabel} / ${source.totalLabel}" else "not synced",
+                            fontFamily = JetBrainsMonoFamily,
+                            fontSize = 10.sp,
+                            color = SkylineColors.TextDim,
+                            textAlign = TextAlign.End,
+                            maxLines = 1,
+                            modifier = Modifier.width(120.dp)
+                        )
+                    }
                 }
             }
         }

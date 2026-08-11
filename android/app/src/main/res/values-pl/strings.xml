@@ -221,4 +221,49 @@
     <string name="grid_columns_value">%1$d</string>
     <string name="bin_retention_title">Kosz (%1$d %2$s)</string>
     <string name="bin_retention_desc">Pliki usuwane po %1$d %2$s</string>
+
+    <!-- New Strings -->
+    <plurals name="items_ready">
+        <item quantity="one">%1$d ELEMENT GOTOWY</item>
+        <item quantity="few">%1$d ELEMENTY GOTOWE</item>
+        <item quantity="many">%1$d ELEMENTÓW GOTOWYCH</item>
+        <item quantity="other">%1$d ELEMENTU GOTOWEGO</item>
+    </plurals>
+    <string name="app_name_brand" translatable="false">Ripple Files</string>
+    <string name="app_tagline" translatable="false">Every file, in flow.</string>
+    <string name="developer_name" translatable="false">GokuCruz</string>
+    <string name="developer_email" translatable="false">gokulsb009@gmail.com</string>
+    <string name="provider_gdrive" translatable="false">GDrive</string>
+    <string name="provider_mega" translatable="false">Mega</string>
+    <string name="provider_dropbox" translatable="false">Dropbox</string>
+    <string name="provider_lan_smb" translatable="false">LAN/SMB</string>
+    <string name="provider_ftp" translatable="false">FTP</string>
+    <string name="provider_sftp" translatable="false">SFTP</string>
+    <string name="version_label">Wersja %1$s</string>
+    <string name="about_app_title">O Ripple Files</string>
+    <string name="app_description">Ripple Files to nowoczesny, potężny i pięknie zaprojektowany menedżer plików stworzony dla Androida.</string>
+    <string name="developer_label">Programista</string>
+    <string name="lead_developer_title">Główny Programista</string>
+    <string name="made_with_love">Zrobione z ❤️ w Indiach</string>
+    <string name="copyright_notice">© %1$d GokuCruz. Wszelkie prawa zastrzeżone.</string>
+    <string name="paste_here">WKLEJ TUTAJ</string>
+    <string name="status_and_filename">%1$s · %2$s</string>
+    <string name="into_target">DO %1$s</string>
+    <string name="paused">WSTRZYMANO</string>
+    <string name="moving">PRZENOSZENIE</string>
+    <string name="copying">KOPIOWANIE</string>
+    <string name="percentage">%1$d%%</string>
+    <string name="internal_storage">Pamięć wewnętrzna</string>
+    <string name="used_of_total">wykorzystano z %1$s</string>
+    <string name="free_storage">%1$s wolne</string>
+    <string name="free_of_total_storage">%1$d%% WOLNEJ PAMIĘCI CAŁKOWITEJ</string>
+    <string name="manage_action">ZARZĄDZAJ</string>
+    <string name="storage_breakdown">PODZIAŁ PAMIĘCI</string>
+    <string name="page_of_total">Strona %1$d z %2$d</string>
+    <string name="index_of_total">%1$d z %2$d</string>
+    <string name="live_preview">Podgląd na żywo</string>
+    <string name="and_more_files">I %1$d więcej...</string>
+    <string name="no_saved_connections">Brak zapisanych połączeń</string>
+    <string name="item_count_and_date">%1$s · %2$s</string>
+
 </resources>

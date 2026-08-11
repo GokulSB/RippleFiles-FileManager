@@ -221,4 +221,49 @@
     <string name="grid_columns_value">%1$d</string>
     <string name="bin_retention_title">Корзина (%1$d %2$s)</string>
     <string name="bin_retention_desc">Файлы удаляются через %1$d %2$s</string>
+
+    <!-- New Strings -->
+    <plurals name="items_ready">
+        <item quantity="one">%1$d ЭЛЕМЕНТ ГОТОВ</item>
+        <item quantity="few">%1$d ЭЛЕМЕНТА ГОТОВЫ</item>
+        <item quantity="many">%1$d ЭЛЕМЕНТОВ ГОТОВЫ</item>
+        <item quantity="other">%1$d ЭЛЕМЕНТА ГОТОВО</item>
+    </plurals>
+    <string name="app_name_brand" translatable="false">Ripple Files</string>
+    <string name="app_tagline" translatable="false">Every file, in flow.</string>
+    <string name="developer_name" translatable="false">GokuCruz</string>
+    <string name="developer_email" translatable="false">gokulsb009@gmail.com</string>
+    <string name="provider_gdrive" translatable="false">GDrive</string>
+    <string name="provider_mega" translatable="false">Mega</string>
+    <string name="provider_dropbox" translatable="false">Dropbox</string>
+    <string name="provider_lan_smb" translatable="false">LAN/SMB</string>
+    <string name="provider_ftp" translatable="false">FTP</string>
+    <string name="provider_sftp" translatable="false">SFTP</string>
+    <string name="version_label">Версия %1$s</string>
+    <string name="about_app_title">О Ripple Files</string>
+    <string name="app_description">Ripple Files — это современный, мощный и красиво оформленный файловый менеджер для Android.</string>
+    <string name="developer_label">Разработчик</string>
+    <string name="lead_developer_title">Ведущий Разработчик</string>
+    <string name="made_with_love">Сделано с ❤️ в Индии</string>
+    <string name="copyright_notice">© %1$d GokuCruz. Все права защищены.</string>
+    <string name="paste_here">ВСТАВИТЬ СЮДА</string>
+    <string name="status_and_filename">%1$s · %2$s</string>
+    <string name="into_target">В %1$s</string>
+    <string name="paused">ПАУЗА</string>
+    <string name="moving">ПЕРЕМЕЩЕНИЕ</string>
+    <string name="copying">КОПИРОВАНИЕ</string>
+    <string name="percentage">%1$d%%</string>
+    <string name="internal_storage">Внутренняя память</string>
+    <string name="used_of_total">использовано из %1$s</string>
+    <string name="free_storage">%1$s свободно</string>
+    <string name="free_of_total_storage">%1$d%% СВОБОДНО ОТ ОБЩЕГО ОБЪЕМА</string>
+    <string name="manage_action">УПРАВЛЕНИЕ</string>
+    <string name="storage_breakdown">СТРУКТУРА ПАМЯТИ</string>
+    <string name="page_of_total">Страница %1$d из %2$d</string>
+    <string name="index_of_total">%1$d из %2$d</string>
+    <string name="live_preview">Предпросмотр</string>
+    <string name="and_more_files">И еще %1$d...</string>
+    <string name="no_saved_connections">Нет сохраненных соединений</string>
+    <string name="item_count_and_date">%1$s · %2$s</string>
+
 </resources>

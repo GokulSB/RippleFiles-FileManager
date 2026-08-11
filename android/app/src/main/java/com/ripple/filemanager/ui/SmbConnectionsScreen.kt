@@ -2,6 +2,8 @@ package com.ripple.filemanager.ui
 
 import androidx.compose.ui.res.stringResource
 import com.ripple.filemanager.R
+import com.ripple.filemanager.ui.theme.JetBrainsMonoFamily
+import com.ripple.filemanager.ui.theme.SkylineColors
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -49,7 +51,8 @@ fun SmbConnectionsDialog(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     if (state.savedConnections.isEmpty()) {
                         Text(
-                            "No saved connections",
+                            text = stringResource(R.string.no_saved_connections),
+                            fontFamily = JetBrainsMonoFamily,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(vertical = 16.dp)

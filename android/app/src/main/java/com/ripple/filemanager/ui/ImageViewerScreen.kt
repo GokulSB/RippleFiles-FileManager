@@ -14,6 +14,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -52,12 +54,15 @@ import java.util.Locale
 fun ImageViewerScreen(
     files: List<FileItem>,
     initialIndex: Int,
+    cornerRoundness: Float = 0.5f,
     onAction: (AppAction) -> Unit,
     onClose: () -> Unit,
     onDeleteClick: (FileItem) -> Unit,
     onNavigateToFolder: (String) -> Unit
 ) {
-    val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { files.size })
+    val pageCount = Int.MAX_VALUE
+    val startIndex = if (files.isNotEmpty()) (pageCount / 2) - ((pageCount / 2) % files.size) + initialIndex else 0
+    val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { pageCount })
     var showOverlays by remember { mutableStateOf(true) }
     var showDetailsSheet by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -75,6 +80,7 @@ fun ImageViewerScreen(
     }
 
     if (showDeleteConfirm) {
+        val actualIndex = if (files.isNotEmpty()) pagerState.currentPage % files.size else 0
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { com.ripple.filemanager.ui.MonoLabel("DELETE IMAGE?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
@@ -82,7 +88,7 @@ fun ImageViewerScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
-                    val currentFile = files.getOrNull(pagerState.currentPage)
+                    val currentFile = files.getOrNull(actualIndex)
                     if (currentFile != null) {
                         onDeleteClick(currentFile)
                         onClose() // Close viewer after deletion
@@ -92,98 +98,63 @@ fun ImageViewerScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
             },
-            containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
-            shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, 0.5f)
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness)
         )
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.surface)
     ) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize(),
-            beyondViewportPageCount = 1
-        ) { page ->
-            val file = files[page]
-            ZoomableImage(
-                file = file,
-                onTap = { showOverlays = !showOverlays }
+        val actualIndex = if (files.isNotEmpty()) pagerState.currentPage % files.size else 0
+        val currentFile = files.getOrNull(actualIndex)
+        
+        if (currentFile != null) {
+            TopOverlay(
+                file = currentFile,
+                currentIndex = actualIndex,
+                totalCount = files.size,
+                cornerRoundness = cornerRoundness,
+                onBack = onClose,
+                onAction = onAction,
+                onDeleteClick = { showDeleteConfirm = true }
             )
         }
 
-        // Page Indicator
-        if (files.size > 1) {
-            AnimatedVisibility(
-                visible = showOverlays,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 96.dp)
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for (i in files.indices) {
-                        val isActive = i == pagerState.currentPage
-                        Box(
-                            modifier = Modifier
-                                .height(4.dp)
-                                .width(if (isActive) 14.dp else 4.dp)
-                                .clip(CircleShape)
-                                .background(if (isActive) Color(0xFFE0AC70) else Color.White.copy(alpha = 0.35f))
-                        )
-                    }
-                }
-            }
-        }
-
-        // Overlays
-        AnimatedVisibility(
-            visible = showOverlays,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.fillMaxSize()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(Color(0xFF0D0904)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                val currentFile = files.getOrNull(pagerState.currentPage)
-                if (currentFile != null) {
-                    TopOverlay(
-                        file = currentFile,
-                        currentIndex = pagerState.currentPage,
-                        totalCount = files.size,
-                        onBack = onClose,
-                        onAction = onAction,
-                        onDeleteClick = { showDeleteConfirm = true }
-                    )
-                    BottomOverlay(
-                        file = currentFile,
-                        onAction = onAction,
-                        onDetailsClick = { showDetailsSheet = true },
-                        onDeleteClick = { showDeleteConfirm = true }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                beyondViewportPageCount = 1
+            ) { page ->
+                val loopIndex = if (files.isNotEmpty()) page % files.size else 0
+                if (files.isNotEmpty()) {
+                    val file = files[loopIndex]
+                    ZoomableImage(
+                        file = file,
+                        onTap = { /* Removed overlay toggle */ }
                     )
                 }
             }
         }
-    }
 
-    if (showDetailsSheet) {
-        val currentFile = files.getOrNull(pagerState.currentPage)
         if (currentFile != null) {
-            ModalBottomSheet(
-                onDismissRequest = { showDetailsSheet = false },
-                containerColor = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-            ) {
-                ImageDetailsContent(
-                    file = currentFile,
-                    onClose = { showDetailsSheet = false },
-                    onNavigateToFolder = {
-                        showDetailsSheet = false
-                        onClose()
-                        onNavigateToFolder(it)
-                    }
-                )
-            }
+            BottomOverlay(
+                file = currentFile,
+                cornerRoundness = cornerRoundness,
+                onAction = onAction,
+                onDetailsClick = { showDetailsSheet = !showDetailsSheet },
+                onDeleteClick = { showDeleteConfirm = true },
+                showDetails = showDetailsSheet
+            )
         }
     }
 }
@@ -226,13 +197,21 @@ fun ZoomableImage(file: FileItem, onTap: () -> Unit) {
             model = File(file.path),
             contentDescription = file.name,
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxSize(0.88f)
                 .graphicsLayer(
                     scaleX = scale,
                     scaleY = scale,
                     translationX = offset.x,
                     translationY = offset.y
-                ),
+                )
+                .drawBehind {
+                    drawRect(
+                        color = Color.Black.copy(alpha = 0.55f),
+                        topLeft = Offset(4.dp.toPx(), 4.dp.toPx()),
+                        size = size
+                    )
+                }
+                .border(1.dp, Color(0xFF3a2f24)),
             contentScale = ContentScale.Fit
         )
     }
@@ -243,47 +222,99 @@ fun TopOverlay(
     file: FileItem,
     currentIndex: Int,
     totalCount: Int,
+    cornerRoundness: Float,
     onBack: () -> Unit,
     onAction: (AppAction) -> Unit,
     onDeleteClick: () -> Unit
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(160.dp)
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)
-                )
-            )
-            .padding(top = 48.dp, start = 8.dp, end = 8.dp)
+            .background(MaterialTheme.colorScheme.surface)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 48.dp, start = 16.dp, end = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Color.White)
-            }
+            // Back button
+            LedgerChipButton(
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                cornerRoundness = cornerRoundness,
+                onClick = onBack
+            )
             
-            Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                Text(
-                    text = file.name,
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
-                )
-                if (totalCount > 1) {
+            // Counter
+            Surface(
+                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                     Text(
-                        text = "${currentIndex + 1} of $totalCount",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 11.sp
+                        text = "${currentIndex + 1}",
+                        fontFamily = com.ripple.filemanager.ui.theme.JetBrainsMonoFamily,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = " / $totalCount",
+                        fontFamily = com.ripple.filemanager.ui.theme.JetBrainsMonoFamily,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
+            
+            // Rotate button (FLAGGED: No AppAction.RotateImage exists)
+            LedgerChipButton(
+                icon = Icons.Filled.RotateRight,
+                cornerRoundness = cornerRoundness,
+                onClick = { /* TODO: Missing rotate action */ }
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Progress rule
+        val progress = if (totalCount > 1) (currentIndex.toFloat() / (totalCount - 1).coerceAtLeast(1)) else 1f
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+        }
+    }
+}
 
+@Composable
+fun LedgerChipButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color = MaterialTheme.colorScheme.onSurface,
+    borderColor: Color = MaterialTheme.colorScheme.outlineVariant,
+    cornerRoundness: Float,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.size(44.dp),
+        shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+        onClick = onClick
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -291,149 +322,175 @@ fun TopOverlay(
 @Composable
 fun BottomOverlay(
     file: FileItem,
+    cornerRoundness: Float,
     onAction: (AppAction) -> Unit,
     onDetailsClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    showDetails: Boolean = false
 ) {
     val context = LocalContext.current
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-        Box(
+    val exifData = remember(file) { extractExifData(file.path) }
+    val sizeFormatted = formatSize(File(file.path).length())
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .navigationBarsPadding()
+            .padding(bottom = 24.dp)
+    ) {
+        // Filename block
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
-                    )
-                ),
-            contentAlignment = Alignment.BottomCenter
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp, start = 16.dp, end = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                ActionButton(icon = Icons.Filled.Edit, label = stringResource(R.string.edit_action), onClick = {
-                    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path))
-                    val intent = Intent(Intent.ACTION_EDIT).apply {
-                        setDataAndType(uri, "image/*")
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    try { context.startActivity(Intent.createChooser(intent, "Edit Image")) } catch (e: Exception) {}
-                })
-                ActionButton(icon = Icons.Filled.Share, label = stringResource(R.string.share), onClick = {
-                    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path))
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "image/*"
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(Intent.createChooser(intent, "Share Image"))
-                })
-                ActionButton(icon = Icons.Filled.Star, label = stringResource(R.string.favorite_action), isActive = file.isPinned, onClick = {
-                    onAction(AppAction.TogglePin(file.path))
-                })
-                ActionButton(icon = Icons.Filled.Delete, label = stringResource(R.string.delete_label), onClick = onDeleteClick)
-            }
+            Text(
+                text = file.name,
+                fontFamily = com.ripple.filemanager.ui.theme.FrauncesFontFamily,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 20.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .clickable { onDetailsClick() }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Info, contentDescription = null, tint = Color(0xFFE0AC70), modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.details_label), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = Color(0xFFE0AC70), modifier = Modifier.size(18.dp))
-                }
-            }
-        }
-        }
-    }
-}
-
-@Composable
-fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, isActive: Boolean = false, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(if (isActive) Color(0xFFE0AC70).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.06f))
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = label, tint = if (isActive) Color(0xFFE0AC70) else Color.White, modifier = Modifier.size(20.dp))
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(label, color = Color.White, fontSize = 10.sp)
-    }
-}
-
-@Composable
-fun ImageDetailsContent(file: FileItem, onClose: () -> Unit, onNavigateToFolder: (String) -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.details_label), fontSize = 19.sp, color = MaterialTheme.colorScheme.onSurface, fontFamily = androidx.compose.ui.text.font.FontFamily.Serif)
-            IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        val exifData = remember(file) { extractExifData(file.path) }
-        val sizeFormatted = formatSize(File(file.path).length())
-        val modifiedFormatted = SimpleDateFormat("MMM dd, yyyy, h:mm a", Locale.getDefault()).format(Date(file.lastModified))
-        
-        DetailRow(icon = Icons.Filled.PhotoSizeSelectActual, label = stringResource(R.string.dimensions_label), value = exifData.dimensions ?: "Unknown")
-        DetailRow(icon = Icons.Filled.SdStorage, label = stringResource(R.string.file_size_label), value = sizeFormatted)
-        DetailRow(icon = Icons.Filled.CalendarToday, label = stringResource(R.string.date_modified_label), value = modifiedFormatted)
-        if (exifData.source != null) {
-            DetailRow(icon = Icons.Filled.CameraAlt, label = stringResource(R.string.source_label), value = exifData.source)
+            val dim = exifData.dimensions ?: "—"
+            val src = exifData.source ?: "—"
+            Text(
+                text = "$sizeFormatted · $dim · $src",
+                fontFamily = com.ripple.filemanager.ui.theme.JetBrainsMonoFamily,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         
-        val folderPath = File(file.path).parent ?: "/"
-        DetailRow(icon = Icons.Filled.Folder, label = stringResource(R.string.location_label), value = folderPath, onClick = { onNavigateToFolder(folderPath) })
-        
-        Spacer(modifier = Modifier.height(32.dp))
-    }
-}
-
-@Composable
-fun DetailRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, onClick: (() -> Unit)? = null) {
-    Column {
+        // Toolbar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = onClick != null, onClick = { onClick?.invoke() })
-                .padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFE0AC70).copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = Color(0xFFE0AC70), modifier = Modifier.size(18.dp))
+            LedgerToolbarAction(icon = Icons.Filled.Edit, label = "EDIT", cornerRoundness = cornerRoundness) {
+                val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path))
+                val intent = Intent(Intent.ACTION_EDIT).apply {
+                    setDataAndType(uri, "image/*")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                try { context.startActivity(Intent.createChooser(intent, "Edit Image")) } catch (e: Exception) {}
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(value, fontSize = 13.5.sp, color = MaterialTheme.colorScheme.onSurface)
+            LedgerToolbarAction(icon = Icons.Filled.Share, label = "SHARE", cornerRoundness = cornerRoundness) {
+                val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path))
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "image/*"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(intent, "Share Image"))
+            }
+            val starTint = if (file.isPinned) com.ripple.filemanager.ui.theme.SkylineColors.Amber else MaterialTheme.colorScheme.onSurface
+            LedgerToolbarAction(icon = Icons.Filled.Star, label = "FAV", iconTint = starTint, cornerRoundness = cornerRoundness) {
+                onAction(AppAction.TogglePin(file.path))
+            }
+            LedgerToolbarAction(icon = Icons.Filled.Info, label = "INFO", cornerRoundness = cornerRoundness) {
+                onDetailsClick()
+            }
+            LedgerToolbarAction(
+                icon = Icons.Filled.Delete, 
+                label = "DEL", 
+                iconTint = MaterialTheme.colorScheme.error,
+                borderColor = MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
+                cornerRoundness = cornerRoundness
+            ) {
+                onDeleteClick()
             }
         }
-        HorizontalDivider(color = Color(0xFF2A221A), thickness = 1.dp)
+        
+        // Details Slide-up
+        AnimatedVisibility(
+            visible = showDetails,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        ) {
+            LedgerImageDetails(file = file, exifData = exifData, cornerRoundness = cornerRoundness)
+        }
+    }
+}
+
+@Composable
+fun LedgerToolbarAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    iconTint: Color = MaterialTheme.colorScheme.onSurface,
+    borderColor: Color = MaterialTheme.colorScheme.outlineVariant,
+    cornerRoundness: Float,
+    onClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        LedgerChipButton(icon = icon, iconTint = iconTint, borderColor = borderColor, cornerRoundness = cornerRoundness, onClick = onClick)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = label,
+            fontFamily = com.ripple.filemanager.ui.theme.JetBrainsMonoFamily,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 9.sp,
+            letterSpacing = 0.54.sp
+        )
+    }
+}
+
+@Composable
+fun LedgerImageDetails(file: FileItem, exifData: ExifData, cornerRoundness: Float) {
+    val modifiedFormatted = SimpleDateFormat("MMM dd, yyyy, h:mm a", Locale.getDefault()).format(Date(file.lastModified))
+    val ext = file.name.substringAfterLast('.', "—").uppercase()
+    
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp, start = 16.dp, end = 16.dp),
+        shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                DetailColumn("MODIFIED", modifiedFormatted, modifier = Modifier.weight(1f))
+                DetailColumn("FORMAT", ext, modifier = Modifier.weight(1f))
+            }
+            Row(modifier = Modifier.fillMaxWidth()) {
+                DetailColumn("RESOLUTION", exifData.dimensions ?: "—", modifier = Modifier.weight(1f))
+                val sizeFormatted = formatSize(File(file.path).length())
+                DetailColumn("SIZE", sizeFormatted, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+fun DetailColumn(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            fontFamily = com.ripple.filemanager.ui.theme.JetBrainsMonoFamily,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 9.sp
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = value,
+            fontFamily = com.ripple.filemanager.ui.theme.JetBrainsMonoFamily,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

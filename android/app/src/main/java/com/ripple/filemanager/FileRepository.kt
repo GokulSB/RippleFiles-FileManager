@@ -12,6 +12,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
 import java.io.File
 import java.io.InputStream
 import kotlinx.collections.immutable.ImmutableList
@@ -452,89 +453,136 @@ class FileRepository(private val context: Context) {
         for (file in files) {
             if (file.name.startsWith(".")) continue
 
-            val isFolder = file.isDirectory
-            val ext = file.extension.lowercase(Locale.getDefault())
-
-            val type = when {
-                isFolder -> "folder"
-                ext in listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg") -> "image"
-                ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
-                ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
-                ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
-                ext in listOf("pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx") -> "doc"
-                ext == "apk" -> "apk"
-                else -> "file"
-            }
-
-            val kind = when (type) {
-                "folder" -> "folder"
-                "image", "video", "audio" -> "media"
-                "archive" -> "archive"
-                "doc" -> "doc"
-                else -> "file"
-            }
-
-            var actualSizeBytes = file.length()
-            if (isFolder) {
-                try {
-                    var sum = 0L
-                    file.walkTopDown().onEnter { !it.isHidden && it.name != "Android" }.filter { it.isFile }.take(5000).forEach { sum += it.length() }
-                    if (sum > 0) actualSizeBytes = sum
-                } catch(e: Exception) {}
-            }
-
-            val count = if (isFolder) {
-                file.listFiles()?.count { !it.name.startsWith(".") } ?: 0
-            } else 0
-            
-            val sizeStr = if (isFolder) {
-                "$count items"
-            } else {
-                formatSize(file.length())
-            }
-
-            val changedStr = dateFormat.format(Date(file.lastModified()))
-            
-            var durationStr: String? = null
-            if (type == "video" && file.exists()) {
-                try {
-                    val retriever = android.media.MediaMetadataRetriever()
-                    val fis = java.io.FileInputStream(file)
-                    retriever.setDataSource(fis.fd)
-                    val timeMillis = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-                    fis.close()
-                    if (timeMillis != null) {
-                        val secs = (timeMillis / 1000) % 60
-                        val mins = (timeMillis / (1000 * 60)) % 60
-                        val hours = timeMillis / (1000 * 60 * 60)
-                        durationStr = if (hours > 0) String.format("%02d:%02d:%02d", hours, mins, secs)
-                                      else String.format("%02d:%02d", mins, secs)
-                    }
-                    retriever.release()
-                } catch(e: Exception) {}
-            }
-
-            items.add(
-                FileItem(
-                    id = idCounter++,
-                    path = file.absolutePath,
-                    name = file.name,
-                    type = type,
-                    kind = kind,
-                    size = sizeStr,
-                    changed = changedStr,
-                    owner = "Me",
-                    isPinned = pinned.contains(file.absolutePath),
-                    isLocked = locked.contains(file.absolutePath),
-                    isEmptyFolder = isFolder && count == 0,
-                    sizeBytes = actualSizeBytes,
-                    lastModified = file.lastModified(),
-                    duration = durationStr
-                )
-            )
+            items.add(fileToItem(file, idCounter++, pinned, locked, dateFormat))
         }
 
         items.sortedWith(compareBy({ !it.isPinned }, { !it.type.equals("folder") }, { it.name.lowercase() }))
+    }
+
+    private fun fileToItem(file: File, id: Int, pinned: Set<String>, locked: Set<String>, dateFormat: SimpleDateFormat): FileItem {
+        val isFolder = file.isDirectory
+        val ext = file.extension.lowercase(Locale.getDefault())
+
+        val type = when {
+            isFolder -> "folder"
+            ext in listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg") -> "image"
+            ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
+            ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
+            ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
+            ext in listOf("pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx") -> "doc"
+            ext == "apk" -> "apk"
+            else -> "file"
+        }
+
+        val kind = when (type) {
+            "folder" -> "folder"
+            "image", "video", "audio" -> "media"
+            "archive" -> "archive"
+            "doc" -> "doc"
+            else -> "file"
+        }
+
+        var actualSizeBytes = file.length()
+        if (isFolder) {
+            try {
+                var sum = 0L
+                file.walkTopDown().onEnter { !it.isHidden && it.name != "Android" }.filter { it.isFile }.take(5000).forEach { sum += it.length() }
+                if (sum > 0) actualSizeBytes = sum
+            } catch(e: Exception) {}
+        }
+
+        val count = if (isFolder) {
+            file.listFiles()?.count { !it.name.startsWith(".") } ?: 0
+        } else 0
+        
+        val sizeStr = if (isFolder) {
+            "$count items"
+        } else {
+            formatSize(file.length())
+        }
+
+        val changedStr = dateFormat.format(Date(file.lastModified()))
+        
+        var durationStr: String? = null
+        if (type == "video" && file.exists()) {
+            try {
+                val retriever = android.media.MediaMetadataRetriever()
+                val fis = java.io.FileInputStream(file)
+                retriever.setDataSource(fis.fd)
+                val timeMillis = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                fis.close()
+                if (timeMillis != null) {
+                    val secs = (timeMillis / 1000) % 60
+                    val mins = (timeMillis / (1000 * 60)) % 60
+                    val hours = timeMillis / (1000 * 60 * 60)
+                    durationStr = if (hours > 0) String.format("%02d:%02d:%02d", hours, mins, secs)
+                                  else String.format("%02d:%02d", mins, secs)
+                }
+                retriever.release()
+            } catch(e: Exception) {}
+        }
+
+        return FileItem(
+            id = id,
+            path = file.absolutePath,
+            name = file.name,
+            type = type,
+            kind = kind,
+            size = sizeStr,
+            changed = changedStr,
+            owner = "Me",
+            isPinned = pinned.contains(file.absolutePath),
+            isLocked = locked.contains(file.absolutePath),
+            isEmptyFolder = isFolder && count == 0,
+            sizeBytes = actualSizeBytes,
+            lastModified = file.lastModified(),
+            duration = durationStr
+        )
+    }
+
+    suspend fun searchLocalFiles(baseLocation: String, query: String): List<FileItem> = withContext(Dispatchers.IO) {
+        if (baseLocation == "mega" || baseLocation.startsWith("mega_id:") || baseLocation.startsWith("smb_") || baseLocation == "drive" || baseLocation.startsWith("drive_id:") || baseLocation == "recent" || baseLocation == "pinned") {
+            return@withContext emptyList()
+        }
+
+        val pinned = getPinnedFiles()
+        val locked = getLockedFiles()
+        val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+        
+        val rootPath = if (baseLocation == "home") Environment.getExternalStorageDirectory().absolutePath else baseLocation
+        val rootDir = File(rootPath)
+        val extStorageRoot = Environment.getExternalStorageDirectory().absolutePath
+        
+        val stack = java.util.Stack<File>()
+        stack.push(rootDir)
+        
+        val results = mutableListOf<FileItem>()
+        var idCounter = 1
+
+        while (stack.isNotEmpty() && isActive) {
+            val dir = stack.pop()
+            val children = dir.listFiles() ?: continue
+            
+            for (child in children) {
+                if (!isActive) break
+                if (child.name.startsWith(".")) continue
+                
+                // Exclude Android folder at the root of internal storage
+                if (child.name == "Android" && child.parentFile?.absolutePath == extStorageRoot) {
+                    continue
+                }
+                
+                if (child.name.contains(query, ignoreCase = true)) {
+                    results.add(fileToItem(child, idCounter++, pinned, locked, dateFormat))
+                }
+                
+                if (child.isDirectory) {
+                    stack.push(child)
+                }
+            }
+        }
+        
+        results
     }
 
     suspend fun getFileDetails(path: String): FileDetails = withContext(Dispatchers.IO) {

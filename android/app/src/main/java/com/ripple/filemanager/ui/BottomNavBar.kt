@@ -35,6 +35,8 @@ import com.ripple.filemanager.ui.theme.JetBrainsMonoFamily
 import com.ripple.filemanager.ui.theme.ManropeFontFamily
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.ripple.filemanager.R
 import kotlinx.collections.immutable.ImmutableMap
@@ -253,7 +255,7 @@ fun ClipboardArmedPill(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "$fileCount ITEMS READY",
+                        text = pluralStringResource(R.plurals.items_ready, fileCount, fileCount).uppercase(),
                         fontFamily = JetBrainsMonoFamily,
                         fontSize = 11.sp,
                         letterSpacing = 0.5.sp,
@@ -279,7 +281,7 @@ fun ClipboardArmedPill(
                 contentPadding = PaddingValues(0.dp)
             ) {
                 Text(
-                    text = "CANCEL",
+                    text = stringResource(R.string.cancel).uppercase(),
                     fontFamily = JetBrainsMonoFamily,
                     fontSize = 10.sp,
                     color = SkylineColors.TextDim
@@ -301,7 +303,7 @@ fun ClipboardArmedPill(
                 Icon(Icons.Default.ContentPaste, contentDescription = null, tint = SkylineColors.Background, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "PASTE HERE",
+                    text = stringResource(R.string.paste_here).uppercase(),
                     fontFamily = JetBrainsMonoFamily,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -346,9 +348,9 @@ fun PastingStatePill(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                val statusText = if (state.isPastePaused) "PAUSED" else if (state.clipboardAction == "cut") "MOVING" else "COPYING"
+                val statusText = if (state.isPastePaused) stringResource(R.string.paused) else if (state.clipboardAction == "cut") stringResource(R.string.moving) else stringResource(R.string.copying)
                 Text(
-                    text = "$statusText · $currentFileName",
+                    text = stringResource(R.string.status_and_filename, statusText, currentFileName),
                     fontFamily = JetBrainsMonoFamily,
                     fontSize = 10.5.sp,
                     color = SkylineColors.TextPrimary,
@@ -356,7 +358,7 @@ fun PastingStatePill(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "INTO $targetName",
+                    text = stringResource(R.string.into_target, targetName),
                     fontFamily = JetBrainsMonoFamily,
                     fontSize = 9.sp,
                     color = SkylineColors.TextDim2,
@@ -366,7 +368,7 @@ fun PastingStatePill(
             }
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "${(progress * 100).roundToInt()}%",
+                text = stringResource(R.string.percentage, (progress * 100).roundToInt()),
                 fontFamily = JetBrainsMonoFamily,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,

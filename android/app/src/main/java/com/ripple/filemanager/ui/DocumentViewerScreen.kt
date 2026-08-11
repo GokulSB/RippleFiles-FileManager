@@ -131,7 +131,7 @@ fun DocumentViewerScreen(
                         )
                         if (pageCount > 0) {
                             Text(
-                                text = "Page ${pagerState.currentPage + 1} of $pageCount",
+                                text = stringResource(R.string.page_of_total, pagerState.currentPage + 1, pageCount),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

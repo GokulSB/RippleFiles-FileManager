@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.filled.Check
@@ -363,7 +364,10 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             cornerRoundness = cornerRoundness,
             onPinClick = onPinClick,
             onInfoClick = onInfoClick,
-            isPinned = file.isPinned
+            isPinned = file.isPinned,
+            isLocked = file.isLocked,
+            onLockClick = onLockClick,
+            onUnlockClick = onUnlockClick
         )
         return
     }
@@ -492,10 +496,10 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             
             if (file.isPinned) {
                 Icon(
-                    Icons.Default.PushPin,
+                    Icons.Filled.Star,
                     contentDescription = stringResource(R.string.pinned_badge),
                     tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
-                    modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 2.dp).size(28.dp).graphicsLayer(rotationZ = 45f)
+                    modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 2.dp).size(28.dp)
                 )
             }
             if (file.isLocked) {
@@ -554,7 +558,10 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             cornerRoundness = cornerRoundness,
             onPinClick = onPinClick,
             onInfoClick = onInfoClick,
-            isPinned = file.isPinned
+            isPinned = file.isPinned,
+            isLocked = file.isLocked,
+            onLockClick = onLockClick,
+            onUnlockClick = onUnlockClick
         )
         return
     }

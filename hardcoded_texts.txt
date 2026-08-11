@@ -1,0 +1,44 @@
+BottomNavBar.kt: $fileCount ITEMS READY
+BottomNavBar.kt: CANCEL
+BottomNavBar.kt: PASTE HERE
+BottomNavBar.kt: $statusText · $currentFileName
+BottomNavBar.kt: INTO $targetName
+BottomNavBar.kt: ${(progress * 100).roundToInt()}%
+CleanerScreen.kt: INTERNAL STORAGE
+CleanerScreen.kt: used of ${formatSize(data.totalStorageBytes)}
+CleanerScreen.kt: ${formatSize(data.freeStorageBytes)} free
+CleanerScreen.kt: $freePercent% FREE OF TOTAL STORAGE
+CleanerScreen.kt: MANAGE
+CleanerScreen.kt: STORAGE BREAKDOWN
+CleanerScreen.kt: $pct%
+DocumentViewerScreen.kt: Page ${pagerState.currentPage + 1} of $pageCount
+ImageViewerScreen.kt: ${currentIndex + 1} of $totalCount
+SiftApp.kt: Ripple Files
+SiftApp.kt: Every file, in flow.
+SiftApp.kt: Connections
+SiftApp.kt: GDrive
+SiftApp.kt: Mega
+SiftApp.kt: Dropbox
+SiftApp.kt: LAN/SMB
+SiftApp.kt: FTP
+SiftApp.kt: SFTP
+SiftApp.kt: About
+SiftApp.kt: Ripple Files
+SiftApp.kt: Every file, in flow.
+SiftApp.kt: Version 1.0.12
+SiftApp.kt: About Ripple Files
+SiftApp.kt: Ripple Files is a modern, powerful, and beautifully designed file manager built for Android. 
+SiftApp.kt: Developer
+SiftApp.kt: GokuCruz
+SiftApp.kt: Lead Developer
+SiftApp.kt: gokulsb009@gmail.com
+SiftApp.kt: Made with ❤\uFE0F in India
+SiftApp.kt: © 2025 GokuCruz. All rights reserved.
+SiftApp.kt: Internal storage
+SiftApp.kt: Internal storage
+SiftApp.kt: CLOSE
+SiftApp.kt: Live Preview
+SiftApp.kt: And ${selectedFileNames.size - 5} more...
+SiftApp.kt: ${selectedFileNames.size} files selected
+SkylineComponents.kt: $itemCountOrMeta · $date
+SmbConnectionsScreen.kt: No saved connections

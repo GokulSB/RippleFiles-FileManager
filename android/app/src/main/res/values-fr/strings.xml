@@ -219,4 +219,47 @@
     <string name="grid_columns_value">%1$d</string>
     <string name="bin_retention_title">Corbeille (%1$d %2$s)</string>
     <string name="bin_retention_desc">Fichiers supprimés après %1$d %2$s</string>
+
+    <!-- New Strings -->
+    <plurals name="items_ready">
+        <item quantity="one">%1$d ÉLÉMENT PRÊT</item>
+        <item quantity="other">%1$d ÉLÉMENTS PRÊTS</item>
+    </plurals>
+    <string name="app_name_brand" translatable="false">Ripple Files</string>
+    <string name="app_tagline" translatable="false">Every file, in flow.</string>
+    <string name="developer_name" translatable="false">GokuCruz</string>
+    <string name="developer_email" translatable="false">gokulsb009@gmail.com</string>
+    <string name="provider_gdrive" translatable="false">GDrive</string>
+    <string name="provider_mega" translatable="false">Mega</string>
+    <string name="provider_dropbox" translatable="false">Dropbox</string>
+    <string name="provider_lan_smb" translatable="false">LAN/SMB</string>
+    <string name="provider_ftp" translatable="false">FTP</string>
+    <string name="provider_sftp" translatable="false">SFTP</string>
+    <string name="version_label">Version %1$s</string>
+    <string name="about_app_title">À propos de Ripple Files</string>
+    <string name="app_description">Ripple Files est un gestionnaire de fichiers moderne, puissant et magnifiquement conçu pour Android.</string>
+    <string name="developer_label">Développeur</string>
+    <string name="lead_developer_title">Développeur Principal</string>
+    <string name="made_with_love">Fait avec ❤️ en Inde</string>
+    <string name="copyright_notice">© %1$d GokuCruz. Tous droits réservés.</string>
+    <string name="paste_here">COLLER ICI</string>
+    <string name="status_and_filename">%1$s · %2$s</string>
+    <string name="into_target">DANS %1$s</string>
+    <string name="paused">EN PAUSE</string>
+    <string name="moving">DÉPLACEMENT</string>
+    <string name="copying">COPIE</string>
+    <string name="percentage">%1$d%%</string>
+    <string name="internal_storage">Stockage interne</string>
+    <string name="used_of_total">utilisés sur %1$s</string>
+    <string name="free_storage">%1$s libres</string>
+    <string name="free_of_total_storage">%1$d%% LIBRE DU STOCKAGE TOTAL</string>
+    <string name="manage_action">GÉRER</string>
+    <string name="storage_breakdown">RÉPARTITION DU STOCKAGE</string>
+    <string name="page_of_total">Page %1$d sur %2$d</string>
+    <string name="index_of_total">%1$d sur %2$d</string>
+    <string name="live_preview">Aperçu en direct</string>
+    <string name="and_more_files">Et %1$d autres...</string>
+    <string name="no_saved_connections">Aucune connexion enregistrée</string>
+    <string name="item_count_and_date">%1$s · %2$s</string>
+
 </resources>

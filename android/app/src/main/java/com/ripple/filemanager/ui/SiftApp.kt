@@ -66,6 +66,8 @@ import com.ripple.filemanager.ui.theme.SkylineColors
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import android.os.Environment
 import java.io.File
 import android.content.Intent
@@ -784,6 +786,7 @@ fun SiftApp(
                         ImageViewerScreen(
                             files = imageFiles,
                             initialIndex = initialIndex,
+                            cornerRoundness = state.cornerRoundness,
                             onAction = onAction,
                             onClose = { onAction(AppAction.CloseFileViewer) },
                             onDeleteClick = { file -> 
@@ -1659,6 +1662,7 @@ fun MainContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var extractTargetFile by remember { mutableStateOf<FileItem?>(null) }
     var isExtracting by remember { mutableStateOf(false) }
@@ -1669,6 +1673,9 @@ fun MainContent(
     var backProgress by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
 
     var capturedTargetFolderName by remember { mutableStateOf<String?>(null) }
+    var pillNavExpanded by remember { mutableStateOf(false) }
+    var showCreateFolderDialog by remember { mutableStateOf(false) }
+    var showCreateFileDialog by remember { mutableStateOf(false) }
     
     LaunchedEffect(state.isPasteComplete) {
         if (state.isPasteComplete) {
@@ -1713,6 +1720,7 @@ fun MainContent(
     }
     
     BackHandler(enabled = state.query.isNotEmpty()) {
+        focusManager.clearFocus()
         onAction(AppAction.SetQuery(""))
     }
 
@@ -1799,6 +1807,9 @@ fun MainContent(
             modifier = Modifier
                 .padding(paddingValues)
                 .padding(horizontal = 24.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures(onPress = { focusManager.clearFocus() })
+                }
                 .graphicsLayer {
                     val scale = 1f - (backProgress * 0.1f)
                     scaleX = scale
@@ -1899,82 +1910,44 @@ fun MainContent(
 var showSortMenu by remember { mutableStateOf(false) }
 Column {
 if (state.storageTotalGb > 0f && (targetLocation == "home" || targetLocation == "drive" || targetLocation == "recent" || targetLocation == "pinned" || targetLocation.startsWith("drive_id:") || targetLocation.startsWith(android.os.Environment.getExternalStorageDirectory().absolutePath))) {
-    val isScrollable = (state.sdCardStorageTotalGb > 0 && state.isGoogleDriveAuthenticated)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(90.dp)
-            .then(if (isScrollable) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        val usedText = "%.1f GB".format(state.storageTotalGb - state.storageFreeGb)
-        val totalText = "%.1f GB".format(state.storageTotalGb)
-        val freeText = "%.1f GB free".format(state.storageFreeGb)
-        val progress = if (state.storageTotalGb > 0) ((state.storageTotalGb - state.storageFreeGb) / state.storageTotalGb) else 0f
+    val storageSources = buildList {
+        // Local storage
+        val localFree = "%.1f GB".format(state.storageFreeGb)
+        val localTotal = "%.1f GB".format(state.storageTotalGb)
+        val localPercent = if (state.storageTotalGb > 0) ((state.storageTotalGb - state.storageFreeGb) / state.storageTotalGb * 100).toInt() else 0
+        add(StorageSourceUi("local", "Local", localFree, localTotal, localPercent, SkylineColors.Amber))
         
-        val cardModifier = if (isScrollable) Modifier.width(180.dp) else Modifier.weight(1f)
-
-
-        StorageCard(
-            modifier = cardModifier.fillMaxHeight(),
-            icon = Icons.Default.Storage,
-            titleText = stringResource(R.string.local_storage),
-            usedText = usedText,
-            totalText = totalText,
-            freeText = freeText,
-            progress = progress,
-            cornerRoundness = state.cornerRoundness,
-            onClick = { onAction(AppAction.SetCleanerScreenVisible(true)) }
-        )
-        
+        // SD Card
         if (state.sdCardStorageTotalGb > 0) {
-            val sdUsedText = "%.1f GB".format(state.sdCardStorageTotalGb - state.sdCardStorageFreeGb)
-            val sdTotalText = "%.1f GB".format(state.sdCardStorageTotalGb)
-            val sdFreeText = "%.1f GB free".format(state.sdCardStorageFreeGb)
-            val sdProgress = if (state.sdCardStorageTotalGb > 0) ((state.sdCardStorageTotalGb - state.sdCardStorageFreeGb) / state.sdCardStorageTotalGb) else 0f
-            StorageCard(
-                modifier = cardModifier.fillMaxHeight(),
-                icon = Icons.Default.SdStorage,
-                titleText = stringResource(R.string.sd_card_storage),
-                usedText = sdUsedText,
-                totalText = sdTotalText,
-                freeText = sdFreeText,
-                progress = sdProgress,
-                cornerRoundness = state.cornerRoundness,
-                onClick = { /* Navigate to SD card if possible */ }
-            )
+            val sdFree = "%.1f GB".format(state.sdCardStorageFreeGb)
+            val sdTotal = "%.1f GB".format(state.sdCardStorageTotalGb)
+            val sdPercent = ((state.sdCardStorageTotalGb - state.sdCardStorageFreeGb) / state.sdCardStorageTotalGb * 100).toInt()
+            add(StorageSourceUi("sd", "SD Card", sdFree, sdTotal, sdPercent, SkylineColors.Dust))
         }
-
-        data class CloudData(val name: String, val used: String, val total: String, val free: String, val progress: Float, val icon: androidx.compose.ui.graphics.vector.ImageVector)
-        val activeClouds = mutableListOf<CloudData>()
-        if (state.isGoogleDriveAuthenticated) {
-            activeClouds.add(CloudData("GDrive", formatSize(state.driveStorageTotalBytes - state.driveStorageFreeBytes), formatSize(state.driveStorageTotalBytes), "${formatSize(state.driveStorageFreeBytes)} free", if (state.driveStorageTotalBytes > 0L) ((state.driveStorageTotalBytes - state.driveStorageFreeBytes).toFloat() / state.driveStorageTotalBytes.toFloat()) else 0f, Icons.Default.Cloud))
+        
+        // Google Drive
+        if (state.isGoogleDriveAuthenticated && state.driveStorageTotalBytes > 0L) {
+            val driveFree = formatSize(state.driveStorageFreeBytes)
+            val driveTotal = formatSize(state.driveStorageTotalBytes)
+            val drivePercent = ((state.driveStorageTotalBytes - state.driveStorageFreeBytes).toFloat() / state.driveStorageTotalBytes.toFloat() * 100).toInt()
+            add(StorageSourceUi("gdrive", "GDrive", driveFree, driveTotal, drivePercent, com.ripple.filemanager.ui.theme.SkylineColors.TextDim))
         }
+        
+        // Mega
         if (state.isMegaAuthenticated) {
-            activeClouds.add(CloudData("Mega", "0 B", "15 GB", "15.0 GB free", 0f, Icons.Default.Cloud))
+            add(StorageSourceUi("mega", "Mega", "15.0 GB", "15 GB", 0, SkylineColors.TextDim))
         }
+        
+        // Dropbox
         if (state.isDropboxAuthenticated) {
-            activeClouds.add(CloudData("Dropbox", "0 B", "2 GB", "2.0 GB free", 0f, Icons.Default.Cloud))
-        }
-
-        if (activeClouds.isNotEmpty()) {
-            val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { activeClouds.size })
-            androidx.compose.foundation.pager.VerticalPager(state = pagerState, modifier = cardModifier.fillMaxHeight()) { page ->
-                val cloud = activeClouds[page]
-                StorageCard(
-                    modifier = Modifier.fillMaxSize(),
-                    icon = cloud.icon,
-                    titleText = cloud.name,
-                    usedText = cloud.used,
-                    totalText = cloud.total,
-                    freeText = cloud.free,
-                    progress = cloud.progress,
-                    cornerRoundness = state.cornerRoundness,
-                    onClick = { /* Navigate to drive */ }
-                )
-            }
+            add(StorageSourceUi("dropbox", "Dropbox", "2.0 GB", "2 GB", 0, SkylineColors.TextDim))
         }
     }
+    
+    ConnectedStorageCard(
+        sources = storageSources,
+        cornerRoundness = state.cornerRoundness
+    )
     Spacer(modifier = Modifier.height(8.dp))
 }
 Spacer(modifier = Modifier.height(8.dp))
@@ -2327,22 +2300,24 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 if (file.isLocked) {
                                                     onAction(AppAction.RequestAuth(com.ripple.filemanager.AuthReason.OPEN_FILE, file.path, fileId = file.id, folderName = file.name))
                                                 } else {
-                                                    if (state.query.isNotEmpty()) {
-                                                        onAction(AppAction.SetQuery(""))
-                                                    }
                                                     if (state.isSelectionMode) {
                                                         onAction(AppAction.ToggleSelection(file.id))
                                                     } else {
                                                     if (file.type == "folder") {
+                                                        if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
                                                         onAction(AppAction.SetLocation(file.path, file.name))
                                                     } else if (file.name.endsWith(".pdf", ignoreCase = true) || file.type == "image" || file.type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { file.name.endsWith(it, ignoreCase = true) }) {
                                                         if (file.type == "image" && state.viewerImage == "Device default") {
+                                                            if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
                                                             openFileInExternalApp(context, file, "image/*")
                                                         } else if (file.type != "image" && state.viewerTextPdf == "Device default") {
                                                             val defaultMime = if (file.name.endsWith(".pdf", ignoreCase = true)) "application/pdf" else "text/plain"
+                                                            if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
                                                             openFileInExternalApp(context, file, defaultMime)
                                                         } else {
+                                                            focusManager.clearFocus()
                                                             onAction(AppAction.OpenFileViewer(file.id))
+                                                            if (state.query.isNotEmpty()) { onAction(AppAction.SetQuery("")) }
                                                         }
                                                     } else if (file.path.startsWith("drive_id:")) {
                                                         val id = file.path.removePrefix("drive_id:")
@@ -2429,7 +2404,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             }
         }
         
-        Box(modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 24.dp), contentAlignment = Alignment.BottomCenter) {
+        Box(modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 24.dp, end = 24.dp), contentAlignment = Alignment.BottomEnd) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2495,13 +2470,89 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         }
                     },
                     rippleNavContent = {
-                        OffsetDockNavBar(
+                        ExpandingPillNav(
                             selected = state.navBarState.selected,
+                            expanded = pillNavExpanded,
+                            onExpandedChange = { pillNavExpanded = it },
                             onTabSelected = { onAction(AppAction.SelectNavTab(it)) },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                            onNewFile = { showCreateFileDialog = true; pillNavExpanded = false },
+                            onNewFolder = { showCreateFolderDialog = true; pillNavExpanded = false },
+                            cornerRoundness = state.cornerRoundness
                         )
                     }
                 )
+
+                if (showCreateFolderDialog) {
+                    var folderName by remember { mutableStateOf("") }
+                    AlertDialog(
+                        onDismissRequest = { showCreateFolderDialog = false },
+                        title = { MonoLabel("NEW FOLDER", color = SkylineColors.Amber, fontSize = 14) },
+                        text = {
+                            OutlinedTextField(
+                                value = folderName,
+                                onValueChange = { folderName = it },
+                                label = { Text(stringResource(R.string.folder_name_label)) },
+                                singleLine = true,
+                                shape = getDynamicCornerShape(12f, state.cornerRoundness)
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    if (folderName.isNotBlank()) {
+                                        onAction(AppAction.CreateFolder(folderName))
+                                    }
+                                    showCreateFolderDialog = false
+                                }
+                            ) {
+                                Text(stringResource(R.string.save_action), color = SkylineColors.Amber)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showCreateFolderDialog = false }) {
+                                Text(stringResource(R.string.cancel), color = SkylineColors.TextDim)
+                            }
+                        },
+                        containerColor = SkylineColors.Surface,
+                        shape = getDynamicCornerShape(12f, state.cornerRoundness)
+                    )
+                }
+
+                if (showCreateFileDialog) {
+                    var fileName by remember { mutableStateOf("") }
+                    AlertDialog(
+                        onDismissRequest = { showCreateFileDialog = false },
+                        title = { MonoLabel("NEW FILE", color = SkylineColors.Amber, fontSize = 14) },
+                        text = {
+                            OutlinedTextField(
+                                value = fileName,
+                                onValueChange = { fileName = it },
+                                label = { Text(stringResource(R.string.file_name_label)) },
+                                singleLine = true,
+                                shape = getDynamicCornerShape(12f, state.cornerRoundness)
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    if (fileName.isNotBlank()) {
+                                        onAction(AppAction.CreateFile(fileName))
+                                    }
+                                    showCreateFileDialog = false
+                                }
+                            ) {
+                                Text(stringResource(R.string.save_action), color = SkylineColors.Amber)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showCreateFileDialog = false }) {
+                                Text(stringResource(R.string.cancel), color = SkylineColors.TextDim)
+                            }
+                        },
+                        containerColor = SkylineColors.Surface,
+                        shape = getDynamicCornerShape(12f, state.cornerRoundness)
+                    )
+                }
 
             }
         }
@@ -3389,3 +3440,4 @@ fun AuthDialog(
         )
     }
 }
+
