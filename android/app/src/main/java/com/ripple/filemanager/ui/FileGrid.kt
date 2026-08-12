@@ -1,5 +1,6 @@
 package com.ripple.filemanager.ui
 
+import com.ripple.filemanager.ui.theme.ProvideSkylineLedgerColors
 import kotlinx.collections.immutable.persistentListOf
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloat
@@ -202,6 +203,8 @@ fun FileGrid(
         }.build()
     }
     
+    var showFullNameSheetFor by remember { mutableStateOf<MediaFileUiModel?>(null) }
+    
     val currentFiles = if (folderState is FolderListUiState.Loaded) folderState.items else persistentListOf()
     val currentIsLoading = folderState is FolderListUiState.Loading
 
@@ -236,23 +239,42 @@ fun FileGrid(
                                 ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
                                 modifier = Modifier.animateItem()
                             ) {
-                                FileListCard(
-                                    modifier = Modifier.depthStackEffect(index = index, listState = listState),
-                            imageLoader = customImageLoader,
-                            file = file,
-                            isSelected = selectedFiles.contains(file.id),
-                            iconShape = iconShape,
-                            cornerRoundness = cornerRoundness,
-                            searchQuery = searchQuery,
-                            onClick = { onFileClick(file) },
-                            onLongClick = { onFileLongClick(file) },
-                            onPinClick = { onPinClick(file) },
-                            onInfoClick = { onInfoClick(file) },
-                            onRenameClick = { name -> onRenameClick(file, name) },
-                            onExtractClick = { onExtractClick(file) },
-                            onLockClick = { onLockClick(file) },
-                            onUnlockClick = { onUnlockClick(file) }
-                        )
+                                if (file.type == "video" || file.type == "audio" || file.type == "image" || file.type == "doc") {
+                                    ProvideSkylineLedgerColors {
+                                        MediaFileListCard(
+                                            modifier = Modifier.depthStackEffect(index = index, listState = listState),
+                                            file = file.toMediaFileUiModel(),
+                                            isSelected = selectedFiles.contains(file.id),
+                                            imageLoader = customImageLoader,
+                                            cornerRoundness = cornerRoundness,
+                                            onExpandFullName = { showFullNameSheetFor = it },
+                                            onClick = { onFileClick(file) },
+                                            onLongClick = { onFileLongClick(file) },
+                                            onPinClick = { onPinClick(file) },
+                                            onLockClick = { onLockClick(file) },
+                                            onUnlockClick = { onUnlockClick(file) },
+                                            onInfoClick = { onInfoClick(file) }
+                                        )
+                                    }
+                                } else {
+                                    FileListCard(
+                                        modifier = Modifier.depthStackEffect(index = index, listState = listState),
+                                        imageLoader = customImageLoader,
+                                        file = file,
+                                        isSelected = selectedFiles.contains(file.id),
+                                        iconShape = iconShape,
+                                        cornerRoundness = cornerRoundness,
+                                        searchQuery = searchQuery,
+                                        onClick = { onFileClick(file) },
+                                        onLongClick = { onFileLongClick(file) },
+                                        onPinClick = { onPinClick(file) },
+                                        onInfoClick = { onInfoClick(file) },
+                                        onRenameClick = { name -> onRenameClick(file, name) },
+                                        onExtractClick = { onExtractClick(file) },
+                                        onLockClick = { onLockClick(file) },
+                                        onUnlockClick = { onUnlockClick(file) }
+                                    )
+                                }
                             }
                         } else {
                             FolderSkeletonCard(index = index, isListMode = true, cornerRoundness = cornerRoundness, gridColumns = gridColumns)
@@ -261,15 +283,15 @@ fun FileGrid(
                 }
             }
         } else {
-            val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+            val gridState = androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState()
             val gridSpacing = if (gridColumns > 2) 8.dp else 12.dp
-            LazyVerticalGrid(
+            androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid(
                 state = gridState,
-                columns = GridCells.Fixed(gridColumns),
+                columns = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells.Fixed(gridColumns),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(bottom = 96.dp, top = 8.dp, start = 8.dp, end = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(gridSpacing),
-                verticalArrangement = Arrangement.spacedBy(gridSpacing)
+                verticalItemSpacing = gridSpacing
             ) {
                 
                 if (currentIsLoading) {
@@ -277,7 +299,7 @@ fun FileGrid(
                         FolderSkeletonCard(index = index, isListMode = false, cornerRoundness = cornerRoundness, gridColumns = gridColumns)
                     }
                 } else if (currentFiles.isEmpty() && pasteLoadingCount == null) {
-                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { emptyState() }
+                    item(span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) { emptyState() }
                 } else {
                     val skeletonCount = pasteLoadingCount ?: 0
                     items(count = currentFiles.size + skeletonCount, key = { if (it < currentFiles.size) "${currentFiles[it].path}_$it" else "skeleton_$it" }, contentType = { if (it < currentFiles.size) (if (currentFiles[it].type == "folder") 1 else 0) else 2 }) { index ->
@@ -291,24 +313,44 @@ fun FileGrid(
                                 ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
                                 modifier = Modifier.animateItem()
                             ) {
-                                FileGridCard(
-                                    modifier = Modifier.gridDepthStackEffect(index = index, gridState = gridState),
-                                    imageLoader = customImageLoader,
-                                    file = file,
-                                    isSelected = selectedFiles.contains(file.id),
-                                    iconShape = iconShape,
-                                    cornerRoundness = cornerRoundness,
-                                    gridColumns = gridColumns,
-                                    searchQuery = searchQuery,
-                                    onClick = { onFileClick(file) },
-                                    onLongClick = { onFileLongClick(file) },
-                                    onPinClick = { onPinClick(file) },
-                                    onInfoClick = { onInfoClick(file) },
-                                    onRenameClick = { name -> onRenameClick(file, name) },
-                                    onExtractClick = { onExtractClick(file) },
-                                    onLockClick = { onLockClick(file) },
-                                    onUnlockClick = { onUnlockClick(file) }
-                                )
+                                if (file.type == "video" || file.type == "audio" || file.type == "image" || file.type == "doc") {
+                                    ProvideSkylineLedgerColors {
+                                        MediaFileGridCard(
+                                            modifier = Modifier.gridDepthStackEffect(index = index, gridState = gridState),
+                                            file = file.toMediaFileUiModel(),
+                                            isSelected = selectedFiles.contains(file.id),
+                                            columns = gridColumns,
+                                            imageLoader = customImageLoader,
+                                            cornerRoundness = cornerRoundness,
+                                            onExpandFullName = { showFullNameSheetFor = it },
+                                            onClick = { onFileClick(file) },
+                                            onLongClick = { onFileLongClick(file) },
+                                            onPinClick = { onPinClick(file) },
+                                            onLockClick = { onLockClick(file) },
+                                            onUnlockClick = { onUnlockClick(file) },
+                                            onInfoClick = { onInfoClick(file) }
+                                        )
+                                    }
+                                } else {
+                                    FileGridCard(
+                                        modifier = Modifier.gridDepthStackEffect(index = index, gridState = gridState),
+                                        imageLoader = customImageLoader,
+                                        file = file,
+                                        isSelected = selectedFiles.contains(file.id),
+                                        iconShape = iconShape,
+                                        cornerRoundness = cornerRoundness,
+                                        gridColumns = gridColumns,
+                                        searchQuery = searchQuery,
+                                        onClick = { onFileClick(file) },
+                                        onLongClick = { onFileLongClick(file) },
+                                        onPinClick = { onPinClick(file) },
+                                        onInfoClick = { onInfoClick(file) },
+                                        onRenameClick = { name -> onRenameClick(file, name) },
+                                        onExtractClick = { onExtractClick(file) },
+                                        onLockClick = { onLockClick(file) },
+                                        onUnlockClick = { onUnlockClick(file) }
+                                    )
+                                }
                             }
                         } else {
                             FolderSkeletonCard(index = index, isListMode = false, cornerRoundness = cornerRoundness, gridColumns = gridColumns)
@@ -316,6 +358,16 @@ fun FileGrid(
                     }
                 }
             }
+        }
+    }
+    
+    showFullNameSheetFor?.let { model ->
+        ProvideSkylineLedgerColors {
+            FullFileNameSheet(
+                file = model,
+                cornerRoundness = cornerRoundness,
+                onDismiss = { showFullNameSheetFor = null }
+            )
         }
     }
 }
@@ -910,7 +962,7 @@ fun Modifier.depthStackEffect(
 @Composable
 fun Modifier.gridDepthStackEffect(
     index: Int,
-    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    gridState: androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState,
     topPaddingPx: Float = with(androidx.compose.ui.platform.LocalDensity.current) { 8.dp.toPx() },
     edgeZonePx: Float = with(androidx.compose.ui.platform.LocalDensity.current) { 60.dp.toPx() },
     maxScaleDrop: Float = 0.12f,

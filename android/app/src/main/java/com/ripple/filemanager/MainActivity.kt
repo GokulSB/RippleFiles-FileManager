@@ -91,6 +91,7 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SelectNone -> viewModel.selectNone()
                         is AppAction.OpenFileViewer -> viewModel.openFileViewer(action.id)
                         is AppAction.CloseFileViewer -> viewModel.closeFileViewer()
+                        is AppAction.ClearUnlockedFileToOpen -> viewModel.clearUnlockedFileToOpen()
                         is AppAction.CreateFolder -> viewModel.createFolder(action.name)
                         is AppAction.CreateFile -> viewModel.createFile(action.name)
                         is AppAction.TogglePin -> viewModel.togglePin(action.path)

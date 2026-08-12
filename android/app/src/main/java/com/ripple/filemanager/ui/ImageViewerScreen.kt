@@ -12,7 +12,11 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.drawBehind
@@ -60,9 +64,7 @@ fun ImageViewerScreen(
     onDeleteClick: (FileItem) -> Unit,
     onNavigateToFolder: (String) -> Unit
 ) {
-    val pageCount = Int.MAX_VALUE
-    val startIndex = if (files.isNotEmpty()) (pageCount / 2) - ((pageCount / 2) % files.size) + initialIndex else 0
-    val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { pageCount })
+    val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { files.size })
     var showOverlays by remember { mutableStateOf(true) }
     var showDetailsSheet by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -88,10 +90,10 @@ fun ImageViewerScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
-                    val currentFile = files.getOrNull(actualIndex)
+                    val currentFile = files.getOrNull(pagerState.currentPage)
                     if (currentFile != null) {
                         onDeleteClick(currentFile)
-                        onClose() // Close viewer after deletion
+                        // Note: We don't close here anymore. LaunchedEffect below handles closing if no files remain.
                     }
                 }) { Text(stringResource(R.string.delete_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
             },
@@ -103,18 +105,23 @@ fun ImageViewerScreen(
         )
     }
 
+    LaunchedEffect(files) {
+        if (files.isEmpty()) {
+            onClose()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
     ) {
-        val actualIndex = if (files.isNotEmpty()) pagerState.currentPage % files.size else 0
-        val currentFile = files.getOrNull(actualIndex)
+        val currentFile = files.getOrNull(pagerState.currentPage)
         
         if (currentFile != null) {
             TopOverlay(
                 file = currentFile,
-                currentIndex = actualIndex,
+                currentIndex = pagerState.currentPage,
                 totalCount = files.size,
                 cornerRoundness = cornerRoundness,
                 onBack = onClose,
@@ -135,9 +142,8 @@ fun ImageViewerScreen(
                 modifier = Modifier.fillMaxSize(),
                 beyondViewportPageCount = 1
             ) { page ->
-                val loopIndex = if (files.isNotEmpty()) page % files.size else 0
                 if (files.isNotEmpty()) {
-                    val file = files[loopIndex]
+                    val file = files[page]
                     ZoomableImage(
                         file = file,
                         onTap = { /* Removed overlay toggle */ }
@@ -177,18 +183,37 @@ fun ZoomableImage(file: FileItem, onTap: () -> Unit) {
                 )
             }
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(1f, 5f)
-                    if (scale == 1f) {
-                        offset = Offset.Zero
-                    } else {
-                        val maxPanX = (scale - 1) * size.width.toFloat() / 2
-                        val maxPanY = (scale - 1) * size.height.toFloat() / 2
-                        offset = Offset(
-                            x = (offset.x + pan.x * scale).coerceIn(-maxPanX, maxPanX),
-                            y = (offset.y + pan.y * scale).coerceIn(-maxPanY, maxPanY)
-                        )
-                    }
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        
+                        // Let HorizontalPager handle standard swipes when not zoomed
+                        if (scale == 1f && event.changes.size == 1) {
+                            continue
+                        }
+                        
+                        val zoom = event.calculateZoom()
+                        val pan = event.calculatePan()
+                        
+                        val newScale = (scale * zoom).coerceIn(1f, 5f)
+                        scale = newScale
+                        
+                        if (scale > 1f) {
+                            val maxPanX = (scale - 1) * size.width.toFloat() / 2
+                            val maxPanY = (scale - 1) * size.height.toFloat() / 2
+                            offset = Offset(
+                                x = (offset.x + pan.x * scale).coerceIn(-maxPanX, maxPanX),
+                                y = (offset.y + pan.y * scale).coerceIn(-maxPanY, maxPanY)
+                            )
+                            // Consume pointer position changes so HorizontalPager doesn't swipe while zoomed
+                            event.changes.forEach { 
+                                if (it.positionChanged()) it.consume() 
+                            }
+                        } else {
+                            offset = Offset.Zero
+                        }
+                    } while (event.changes.any { it.pressed })
                 }
             },
         contentAlignment = Alignment.Center

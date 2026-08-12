@@ -29,6 +29,7 @@ sealed class AppAction {
     // File Operations
     data class OpenFileViewer(val id: Int) : AppAction()
     object CloseFileViewer : AppAction()
+    object ClearUnlockedFileToOpen : AppAction()
     data class CreateFolder(val name: String) : AppAction()
     data class CreateFile(val name: String) : AppAction()
     data class TogglePin(val path: String) : AppAction()

@@ -1649,6 +1649,73 @@ fun AboutScreen(
     }
 }
 
+fun handleFileOpen(
+    file: FileItem,
+    context: android.content.Context,
+    state: AppState,
+    focusManager: androidx.compose.ui.focus.FocusManager,
+    onAction: (AppAction) -> Unit
+) {
+    if (file.name.endsWith(".pdf", ignoreCase = true) || file.type == "image" || file.type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { file.name.endsWith(it, ignoreCase = true) }) {
+        if (file.type == "image" && state.viewerImage == "Device default") {
+            if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
+            openFileInExternalApp(context, file, "image/*")
+        } else if (file.type != "image" && state.viewerTextPdf == "Device default") {
+            val defaultMime = if (file.name.endsWith(".pdf", ignoreCase = true)) "application/pdf" else "text/plain"
+            if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
+            openFileInExternalApp(context, file, defaultMime)
+        } else {
+            focusManager.clearFocus()
+            onAction(AppAction.OpenFileViewer(file.id))
+            if (state.query.isNotEmpty()) { onAction(AppAction.SetQuery("")) }
+        }
+    } else if (file.path.startsWith("drive_id:")) {
+        val id = file.path.removePrefix("drive_id:")
+        val url = "https://drive.google.com/file/d/$id/view"
+        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    } else if (file.type == "audio") {
+        if (state.viewerMusic == "Device default") {
+            openFileInExternalApp(context, file, "audio/*")
+        } else {
+            onAction(AppAction.PlayAudio(file))
+        }
+    } else if (file.type == "video") {
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", java.io.File(file.path))
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "video/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    } else if (file.name.endsWith(".apk", ignoreCase = true)) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", java.io.File(file.path))
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            android.widget.Toast.makeText(context, context.getString(R.string.error_opening_apk, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
+        }
+    } else {
+        openFileInExternalApp(context, file, "*/*")
+    }
+}
+
 @androidx.compose.runtime.Immutable
 data class FabMenuAction(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val onClick: () -> Unit)
 
@@ -1676,6 +1743,13 @@ fun MainContent(
     var pillNavExpanded by remember { mutableStateOf(false) }
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var showCreateFileDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.unlockedFileToOpen) {
+        state.unlockedFileToOpen?.let { file ->
+            handleFileOpen(file, context, state, focusManager, onAction)
+            onAction(AppAction.ClearUnlockedFileToOpen)
+        }
+    }
     
     LaunchedEffect(state.isPasteComplete) {
         if (state.isPasteComplete) {
@@ -2302,66 +2376,11 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 } else {
                                                     if (state.isSelectionMode) {
                                                         onAction(AppAction.ToggleSelection(file.id))
-                                                    } else {
-                                                    if (file.type == "folder") {
+                                                    } else if (file.type == "folder") {
                                                         if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
                                                         onAction(AppAction.SetLocation(file.path, file.name))
-                                                    } else if (file.name.endsWith(".pdf", ignoreCase = true) || file.type == "image" || file.type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { file.name.endsWith(it, ignoreCase = true) }) {
-                                                        if (file.type == "image" && state.viewerImage == "Device default") {
-                                                            if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
-                                                            openFileInExternalApp(context, file, "image/*")
-                                                        } else if (file.type != "image" && state.viewerTextPdf == "Device default") {
-                                                            val defaultMime = if (file.name.endsWith(".pdf", ignoreCase = true)) "application/pdf" else "text/plain"
-                                                            if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
-                                                            openFileInExternalApp(context, file, defaultMime)
-                                                        } else {
-                                                            focusManager.clearFocus()
-                                                            onAction(AppAction.OpenFileViewer(file.id))
-                                                            if (state.query.isNotEmpty()) { onAction(AppAction.SetQuery("")) }
-                                                        }
-                                                    } else if (file.path.startsWith("drive_id:")) {
-                                                        val id = file.path.removePrefix("drive_id:")
-                                                        val url = "https://drive.google.com/file/d/$id/view"
-                                                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
-                                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                        }
-                                                        try {
-                                                            context.startActivity(intent)
-                                                        } catch (e: Exception) {
-                                                            e.printStackTrace()
-                                                        }
-                                                    } else if (file.type == "audio") {
-                                                        if (state.viewerMusic == "Device default") {
-                                                            openFileInExternalApp(context, file, "audio/*")
-                                                        } else {
-                                                            onAction(AppAction.PlayAudio(file))
-                                                        }
-                                                    } else if (file.type == "video") {
-                                                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path))
-                                                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                                                            setDataAndType(uri, "video/*")
-                                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                        }
-                                                        try {
-                                                            context.startActivity(intent)
-                                                        } catch (e: Exception) {
-                                                            e.printStackTrace()
-                                                        }
-                                                    } else if (file.name.endsWith(".apk", ignoreCase = true)) {
-                                                        try {
-                                                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path))
-                                                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                                                setDataAndType(uri, "application/vnd.android.package-archive")
-                                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                            }
-                                                            context.startActivity(intent)
-                                                        } catch (e: Exception) {
-                                                            e.printStackTrace()
-                                                            android.widget.Toast.makeText(context, context.getString(R.string.error_opening_apk, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
-                                                        }
-                                                    }
+                                                    } else {
+                                                        handleFileOpen(file, context, state, focusManager, onAction)
                                                     }
                                                 }
                                             },
@@ -2406,7 +2425,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         
         Box(modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 24.dp, end = 24.dp), contentAlignment = Alignment.BottomEnd) {
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+                horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 androidx.compose.animation.AnimatedVisibility(
@@ -2428,13 +2447,21 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                     selectionModeContent = {
                         val shape = getDynamicCornerShape(32f, state.cornerRoundness)
-                        Row(
-                            modifier = Modifier
-                                .height(54.dp)
-                                .border(1.dp, SkylineColors.Amber.copy(alpha = 0.5f), shape)
-                                .clip(shape)
-                                .background(Color.Transparent)
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        Box {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .offset(x = 4.dp, y = 4.dp)
+                                    .background(SkylineColors.Border, shape)
+                                    .zIndex(-1f)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .height(54.dp)
+                                    .background(SkylineColors.Surface, shape)
+                                    .border(1.dp, SkylineColors.Amber.copy(alpha = 0.5f), shape)
+                                    .clip(shape)
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
@@ -2467,6 +2494,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             IconButton(onClick = { onAction(AppAction.SetClipboard("copy")) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.copy_action), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
                             IconButton(onClick = { onAction(AppAction.SetClipboard("cut")) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.ContentCut, contentDescription = stringResource(R.string.cut_action), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
                             IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete_label), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
+                        }
                         }
                     },
                     rippleNavContent = {

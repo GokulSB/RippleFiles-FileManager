@@ -155,7 +155,8 @@ data class AppState(
     val viewerTextPdf: String = "In-app",
     val viewerMusic: String = "In-app",
     val viewerImage: String = "In-app",
-    val pasteLoadingCount: Int? = null
+    val pasteLoadingCount: Int? = null,
+    val unlockedFileToOpen: FileItem? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -1103,6 +1104,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), viewingFile = null) }
     }
 
+    fun clearUnlockedFileToOpen() {
+        _state.update { it.copy(unlockedFileToOpen = null) }
+    }
+
     fun setClipboard(action: String) {
         val selectedIds = _state.value.selectedFiles
         val paths = _state.value.files.filter { it.id in selectedIds }.map { it.path }
@@ -1472,7 +1477,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 AuthReason.OPEN_FILE -> {
                     if (fileId != null) {
-                        openFileViewer(fileId)
+                        val file = _state.value.files.find { it.id == fileId }
+                        _state.update { it.copy(unlockedFileToOpen = file) }
                     } else if (folderName != null) {
                         setLocation(path, folderName)
                     }
