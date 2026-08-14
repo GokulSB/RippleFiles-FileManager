@@ -41,7 +41,7 @@ object SkylineColors {
     var TextDim       by mutableStateOf(Color(0xFF8A7A63))
     var TextDim2      by mutableStateOf(Color(0xFF6F6250))
     
-    fun updateColors(isDark: Boolean, dynamicColor: Boolean, customHue: Float, context: android.content.Context) {
+    fun updateColors(isDark: Boolean, dynamicColor: Boolean, customHue: Float, lightnessOffset: Float, context: android.content.Context) {
         val useSystem = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val effectiveHue = if (useSystem) {
             val scheme = if (isDark) androidx.compose.material3.dynamicDarkColorScheme(context) else androidx.compose.material3.dynamicLightColorScheme(context)
@@ -53,10 +53,10 @@ object SkylineColors {
         }
         
         if (isDark) {
-            Background = hsl(effectiveHue, 41f, 6f)
-            Surface = hsl(effectiveHue, 31f, 9f)
-            Surface2 = hsl(effectiveHue, 30f, 12f)
-            Border = hsl(effectiveHue, 34f, 16f)
+            Background = hsl(effectiveHue, 41f, (13f + lightnessOffset).coerceIn(0f, 100f))
+            Surface = hsl(effectiveHue, 31f, (17f + lightnessOffset).coerceIn(0f, 100f))
+            Surface2 = hsl(effectiveHue, 30f, (22f + lightnessOffset).coerceIn(0f, 100f))
+            Border = hsl(effectiveHue, 34f, (26f + lightnessOffset).coerceIn(0f, 100f))
             Amber = hsl(effectiveHue, 65f, 66f)
             AmberDim = hsl(effectiveHue, 35f, 40f)
             Dust = hsl(effectiveHue + 180f, 20f, 55f) // Complementary / cool
@@ -102,6 +102,7 @@ fun fileTypeCode(type: String): String = when (type) {
     "pdf"     -> "PDF"
     "doc","docx" -> "DOC"
     "txt","md"   -> "TXT"
+    "json"       -> "JSON"
     "zip","rar","7z" -> "ARC"
     "apk"     -> "APK"
     else      -> "SYS"
@@ -112,6 +113,7 @@ fun SiftTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     customHue: Float = 262f,
+    lightnessOffset: Float = 0f,
     fontStyle: String = "System",
     textDecorations: Set<String> = emptySet(),
     mainTextScale: Float = 1.0f,
@@ -119,7 +121,7 @@ fun SiftTheme(
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
-    SkylineColors.updateColors(darkTheme, dynamicColor, customHue, context)
+    SkylineColors.updateColors(darkTheme, dynamicColor, customHue, lightnessOffset, context)
     
     val colorScheme = if (darkTheme) {
         darkColorScheme(

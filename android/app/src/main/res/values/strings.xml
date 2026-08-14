@@ -188,8 +188,9 @@
 
     <!-- ThemeBottomSheet.kt -->
     <string name="theme_mode_label">Theme mode</string>
-    <string name="dynamic_color_label">Dynamic color</string>
-    <string name="use_system_theme_color">Use system theme color</string>
+    <string name="dynamic_color_label">Dynamic Theme</string>
+    <string name="use_system_theme_color">Use System Theme Color</string>
+    <string name="theme_lightness">Theme Lightness (Dark Mode)</string>
     <string name="font_style_label">Font style</string>
     <string name="text_formatting_label">Text formatting</string>
     <string name="corner_roundness_label">Corner Roundness</string>

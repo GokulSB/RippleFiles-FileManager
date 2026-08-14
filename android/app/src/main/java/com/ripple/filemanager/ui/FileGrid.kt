@@ -936,20 +936,15 @@ fun Modifier.depthStackEffect(
     )
     if (durationScale == 0f) return@composed this
 
-    val layoutInfo by androidx.compose.runtime.remember { androidx.compose.runtime.derivedStateOf { listState.layoutInfo } }
-    val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-
-    if (itemInfo == null) {
-        this
-    } else {
-        val distFromTop = itemInfo.offset.toFloat()
-        val t = if (distFromTop < topPaddingPx) {
-            ((topPaddingPx - distFromTop) / edgeZonePx).coerceIn(0f, 1f)
-        } else {
-            0f
-        }
-
-        this.graphicsLayer {
+    this.graphicsLayer {
+        val itemInfo = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+        if (itemInfo != null) {
+            val distFromTop = itemInfo.offset.toFloat()
+            val t = if (distFromTop < topPaddingPx) {
+                ((topPaddingPx - distFromTop) / edgeZonePx).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
             val scale = 1f - (maxScaleDrop * t)
             scaleX = scale
             scaleY = scale

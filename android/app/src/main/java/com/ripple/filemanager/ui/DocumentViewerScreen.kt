@@ -10,10 +10,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -71,6 +74,7 @@ fun DocumentViewerScreen(
             file.name.endsWith(".pdf", true) -> DocumentSource.Pdf(file)
             file.name.endsWith(".docx", true) -> DocumentSource.Docx(file)
             file.name.endsWith(".md", true) -> DocumentSource.Markdown(file)
+            file.name.endsWith(".json", true) -> DocumentSource.Txt(file)
             else -> DocumentSource.Txt(file)
         }
         
@@ -198,7 +202,7 @@ fun DocumentViewerScreen(
             // Main Content
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {
                 if (pageCount > 0) {
-                    HorizontalPager(
+                    VerticalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
                         userScrollEnabled = scale == 1f
@@ -332,24 +336,36 @@ fun MainPageItem(
         }
     }
 
+    val transformableState = rememberTransformableState { zoomChange, _, _ ->
+        val newScale = (currentScale * zoomChange).coerceIn(1f, 5f)
+        onScaleChange(newScale)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .clipToBounds()
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val newScale = (currentScale * zoom).coerceIn(1f, 5f)
-                    onScaleChange(newScale)
-                    if (newScale == 1f) {
-                        onOffsetChange(androidx.compose.ui.geometry.Offset.Zero)
-                    } else {
-                        val maxPanX = (newScale - 1) * size.width.toFloat() / 2
-                        val maxPanY = (newScale - 1) * size.height.toFloat() / 2
-                        onOffsetChange(androidx.compose.ui.geometry.Offset(
-                            (currentOffset.x + pan.x * newScale).coerceIn(-maxPanX, maxPanX),
-                            (currentOffset.y + pan.y * newScale).coerceIn(-maxPanY, maxPanY)
-                        ))
+            .let { modifier ->
+                if (scale > 1f) {
+                    modifier.pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            val newScale = (currentScale * zoom).coerceIn(1f, 5f)
+                            onScaleChange(newScale)
+                            if (newScale <= 1f) {
+                                onScaleChange(1f)
+                                onOffsetChange(androidx.compose.ui.geometry.Offset.Zero)
+                            } else {
+                                val maxPanX = (newScale - 1) * size.width.toFloat() / 2
+                                val maxPanY = (newScale - 1) * size.height.toFloat() / 2
+                                onOffsetChange(androidx.compose.ui.geometry.Offset(
+                                    (currentOffset.x + pan.x * newScale).coerceIn(-maxPanX, maxPanX),
+                                    (currentOffset.y + pan.y * newScale).coerceIn(-maxPanY, maxPanY)
+                                ))
+                            }
+                        }
                     }
+                } else {
+                    modifier.transformable(transformableState)
                 }
             },
         contentAlignment = Alignment.Center

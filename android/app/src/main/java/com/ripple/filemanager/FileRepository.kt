@@ -103,7 +103,7 @@ class FileRepository(private val context: Context) {
                                 "mp4", "mkv", "avi", "mov", "webm" -> "video"
                                 "mp3", "wav", "ogg", "flac", "m4a" -> "audio"
                                 "zip", "rar", "7z", "tar", "gz" -> "archive"
-                                "pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx" -> "doc"
+                                "pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx" -> "doc"
                                 "apk" -> "apk"
                                 else -> "file"
                             }
@@ -193,7 +193,7 @@ class FileRepository(private val context: Context) {
         googleAccountEmail = email
         if (email != null) {
             val credential = GoogleAccountCredential.usingOAuth2(
-                context, listOf(DriveScopes.DRIVE)
+                context, listOf(DriveScopes.DRIVE_FILE)
             )
             credential.selectedAccount = Account(email, "com.google")
             driveService = Drive.Builder(
@@ -385,7 +385,7 @@ class FileRepository(private val context: Context) {
                         ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
                         ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
                         ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
-                        ext in listOf("pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx") -> "doc"
+                        ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx") -> "doc"
                         ext == "apk" -> "apk"
                         else -> "file"
                     }
@@ -469,7 +469,7 @@ class FileRepository(private val context: Context) {
             ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
             ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
             ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
-            ext in listOf("pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx") -> "doc"
+            ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx") -> "doc"
             ext == "apk" -> "apk"
             else -> "file"
         }
@@ -998,10 +998,12 @@ class FileRepository(private val context: Context) {
             }
         }
     }
+    var currentDrivePickedIds: Set<String>? = null
+
     private suspend fun fetchDriveFiles(pinned: Set<String>, location: String): List<FileItem> = withContext(Dispatchers.IO) {
         val locked = getLockedFiles()
         val query = if (location == "drive") {
-            "trashed = false and 'root' in parents"
+            "trashed = false"
         } else {
             val folderId = location.removePrefix("drive_id:")
             "trashed = false and '$folderId' in parents"
@@ -1012,7 +1014,10 @@ class FileRepository(private val context: Context) {
             .setQ(query)
             .setFields("nextPageToken, files(id, name, mimeType, size, modifiedTime, owners, thumbnailLink)")
             .execute()
-            val driveFiles = result.files ?: emptyList()
+            var driveFiles = result.files ?: emptyList()
+            if (location == "drive" && currentDrivePickedIds != null) {
+                driveFiles = driveFiles.filter { it.id in currentDrivePickedIds!! }
+            }
             val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
             
             val items = mutableListOf<FileItem>()
@@ -1034,7 +1039,7 @@ class FileRepository(private val context: Context) {
                     ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
                     ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
                     ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
-                    ext in listOf("pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx") -> "doc"
+                    ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx") -> "doc"
                     ext == "apk" -> "apk"
                     else -> "file"
                 }
@@ -1155,7 +1160,7 @@ class FileRepository(private val context: Context) {
         var audioSize = 0L
         var appSize = 0L
         
-        val docExts = setOf("pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx", "csv")
+        val docExts = setOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "csv")
         val imgExts = setOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic")
         val vidExts = setOf("mp4", "mkv", "avi", "mov", "wmv", "flv")
         val audioExts = setOf("mp3", "wav", "flac", "ogg", "m4a", "aac")
@@ -1207,7 +1212,7 @@ class FileRepository(private val context: Context) {
                         ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm") -> "video"
                         ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac") -> "audio"
                         ext in setOf("zip", "rar", "7z", "tar", "gz") -> "archive"
-                        ext in setOf("pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx", "csv") -> "doc"
+                        ext in setOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "csv") -> "doc"
                         ext in setOf("apk", "xapk", "aab") -> "apk"
                         else -> "file"
                     }
@@ -1469,7 +1474,7 @@ suspend fun moveToTrash(paths: List<String>) = withContext(Dispatchers.IO) {
                             ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
                             ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
                             ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
-                            ext in listOf("pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx") -> "doc"
+                            ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx") -> "doc"
                             ext == "apk" -> "apk"
                             else -> "file"
                         }

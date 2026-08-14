@@ -316,21 +316,27 @@ fun SiftApp(
 
                     val animEnabled = android.animation.ValueAnimator.getDurationScale() > 0f
 
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = fabMenuExpanded,
-                        enter = if (animEnabled) androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180)) else androidx.compose.animation.fadeIn(androidx.compose.animation.core.snap()),
-                        exit = if (animEnabled) androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150)) else androidx.compose.animation.fadeOut(androidx.compose.animation.core.snap()),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.35f))
-                                .clickable(
-                                    indication = null,
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                                ) { fabMenuExpanded = false }
-                        )
-                    }
+                    val scrimAlpha by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = if (fabMenuExpanded) 0.35f else 0f,
+                        animationSpec = if (animEnabled) androidx.compose.animation.core.tween(if (fabMenuExpanded) 180 else 150) else androidx.compose.animation.core.snap(),
+                        label = "scrim_alpha"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = scrimAlpha }
+                            .background(androidx.compose.ui.graphics.Color.Black)
+                            .then(
+                                if (fabMenuExpanded) {
+                                    Modifier.clickable(
+                                        indication = null,
+                                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                    ) { fabMenuExpanded = false }
+                                } else {
+                                    Modifier
+                                }
+                            )
+                    )
 
                     if (!state.isSelectionMode) {
                           val navBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -805,6 +811,7 @@ fun SiftApp(
                         val isDocument = state.viewingFile!!.name.endsWith(".pdf", true) ||
                                          state.viewingFile!!.name.endsWith(".docx", true) ||
                                          state.viewingFile!!.name.endsWith(".txt", true) ||
+                                         state.viewingFile!!.name.endsWith(".json", true) ||
                                          state.viewingFile!!.name.endsWith(".md", true) ||
                                          state.viewingFile!!.type == "doc"
                         if (isDocument) {
@@ -2306,41 +2313,11 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     contentKey = { it.location },
                     modifier = Modifier.weight(1f),
                     transitionSpec = {
-                        val duration = if (android.animation.ValueAnimator.getDurationScale() == 0f) 0 else 300
-                        val fadeDuration = if (android.animation.ValueAnimator.getDurationScale() == 0f) 0 else 200
-                        val easing = androidx.compose.animation.core.FastOutSlowInEasing
-                        
-                        val tabs = listOf("home", "recent", "favorites", "cloud")
-                        val initialIndex = tabs.indexOf(initialState.location)
-                        val targetIndex = tabs.indexOf(targetState.location)
-
-                        val isForward = when {
-                            initialIndex != -1 && targetIndex != -1 -> targetIndex > initialIndex
-                            initialState.location == "home" && targetState.location != "home" -> true
-                            targetState.location == "home" && initialState.location != "home" -> false
-                            initialState.location.startsWith("/") && targetState.location.startsWith("/") -> targetState.location.length > initialState.location.length
-                            initialState.driveFolderStack.size != targetState.driveFolderStack.size -> targetState.driveFolderStack.size > initialState.driveFolderStack.size
-                            else -> true
-                        }
-
-                        val slideInOffset = if (isForward) { fullWidth: Int -> fullWidth } else { fullWidth: Int -> -(fullWidth * 0.3f).toInt() }
-                        val slideOutOffset = if (isForward) { fullWidth: Int -> -(fullWidth * 0.3f).toInt() } else { fullWidth: Int -> fullWidth }
-
-                        (androidx.compose.animation.slideInHorizontally(
-                            animationSpec = androidx.compose.animation.core.tween(duration, easing = easing),
-                            initialOffsetX = slideInOffset
-                        ) + androidx.compose.animation.fadeIn(
-                            animationSpec = androidx.compose.animation.core.tween(fadeDuration)
-                        )).togetherWith(
-                            androidx.compose.animation.slideOutHorizontally(
-                                animationSpec = androidx.compose.animation.core.tween(duration, easing = easing),
-                                targetOffsetX = slideOutOffset
-                            ) + androidx.compose.animation.scaleOut(
-                                targetScale = 0.94f,
-                                animationSpec = androidx.compose.animation.core.tween(duration)
-                            ) + androidx.compose.animation.fadeOut(
-                                targetAlpha = 0.5f,
-                                animationSpec = androidx.compose.animation.core.tween(duration)
+                        androidx.compose.animation.fadeIn(
+                            animationSpec = androidx.compose.animation.core.tween(200)
+                        ).togetherWith(
+                            androidx.compose.animation.fadeOut(
+                                animationSpec = androidx.compose.animation.core.tween(150)
                             )
                         ).using(androidx.compose.animation.SizeTransform(clip = false))
                     },
@@ -2484,6 +2461,8 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 
                 UnifiedBottomPill(
                     state = state,
+                    archiveProgress = archiveProgress,
+                    onCancelExtract = { archiveViewModel.cancelExtraction() },
                     onAction = onAction,
                     capturedTargetFolderName = capturedTargetFolderName,
                     onCaptureTargetFolder = { capturedTargetFolderName = it },
@@ -2715,24 +2694,36 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             com.ripple.filemanager.ui.ArchiveViewerDialog(
                 archiveFile = viewingArchive!!,
                 onDismiss = { viewingArchive = null },
-                onExtractSuccess = {
+                onExtractRequest = {
+                    fileForSafExtraction = viewingArchive
+                    safExtractLauncher.launch(null)
                     viewingArchive = null
-                    onAction(AppAction.Reload)
                 }
             )
         }
         
         if (showArchiveOptionsFor != null) {
             val file = showArchiveOptionsFor!!
-            val isRar = file.name.lowercase().endsWith(".rar")
+            // Detect format via magic bytes; fall back to extension while async detection runs
+            var isRar by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(file.name.lowercase().endsWith(".rar")) }
+            androidx.compose.runtime.LaunchedEffect(file.path) {
+                val sourceUri = if (file.path.startsWith("content://")) android.net.Uri.parse(file.path) else android.net.Uri.fromFile(File(file.path))
+                isRar = archiveViewModel.detectIsRar(sourceUri)
+            }
             com.ripple.filemanager.ui.ArchiveExtractDialog(
+                cornerRoundness = state.cornerRoundness,
                 archiveName = file.name,
                 itemCount = file.size,
                 isRar = isRar,
                 onExtractHere = {
                     val sourceUri = if (file.path.startsWith("content://")) android.net.Uri.parse(file.path) else android.net.Uri.fromFile(File(file.path))
-                    val destUri = android.net.Uri.fromFile(File(file.path).parentFile)
-                    archiveViewModel.extract(sourceUri, destUri)
+                    if (file.path.startsWith("content://")) {
+                        fileForSafExtraction = file
+                        safExtractLauncher.launch(null)
+                    } else {
+                        val destUri = android.net.Uri.fromFile(File(file.path).parentFile)
+                        archiveViewModel.extract(sourceUri, destUri)
+                    }
                     showArchiveOptionsFor = null
                 },
                 onExtractTo = {
@@ -2754,27 +2745,15 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         }
 
         val progressState = archiveProgress
-        if (progressState is com.ripple.filemanager.archive.ArchiveProgress.Running) {
-            com.ripple.filemanager.ui.ArchiveExtractProgressDialog(
-                archiveName = progressState.currentEntryName,
-                progress = if (progressState.filesTotal > 0) progressState.filesDone.toFloat() / progressState.filesTotal else 0f,
-                filesDone = progressState.filesDone,
-                filesTotal = progressState.filesTotal,
-                onDismissWhenComplete = { archiveViewModel.resetState() }
-            )
-        } else if (progressState is com.ripple.filemanager.archive.ArchiveProgress.Complete) {
-            com.ripple.filemanager.ui.ArchiveExtractProgressDialog(
-                archiveName = "Completed",
-                progress = 1f,
-                filesDone = 1,
-                filesTotal = 1,
-                onDismissWhenComplete = { 
-                    archiveViewModel.resetState()
-                    onAction(AppAction.Reload)
-                }
-            )
+        if (progressState is com.ripple.filemanager.archive.ArchiveProgress.Complete) {
+            androidx.compose.runtime.LaunchedEffect(progressState) {
+                kotlinx.coroutines.delay(1500)
+                archiveViewModel.resetState()
+                onAction(AppAction.Reload)
+            }
         } else if (progressState is com.ripple.filemanager.archive.ArchiveProgress.NeedsPassword) {
             com.ripple.filemanager.ui.ArchivePasswordDialog(
+                cornerRoundness = state.cornerRoundness,
                 archiveName = "Encrypted Archive",
                 attemptFailed = progressState.attemptFailed,
                 onSubmit = { password -> archiveViewModel.submitPassword(password) },
@@ -2782,6 +2761,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             )
         } else if (progressState is com.ripple.filemanager.archive.ArchiveProgress.Failed) {
             com.ripple.filemanager.ui.ArchiveFailedDialog(
+                cornerRoundness = state.cornerRoundness,
                 archiveName = "Extraction Error",
                 reason = progressState.reason,
                 onDismiss = { archiveViewModel.resetState() }
@@ -3359,7 +3339,7 @@ fun openFileInExternalApp(context: android.content.Context, file: com.ripple.fil
             file.name.endsWith(".csv", ignoreCase = true) -> "text/csv"
             file.name.endsWith(".json", ignoreCase = true) -> "application/json"
             file.name.endsWith(".xml", ignoreCase = true) -> "text/xml"
-            file.name.endsWith(".txt", ignoreCase = true) || file.name.endsWith(".md", ignoreCase = true) || file.name.endsWith(".log", ignoreCase = true) || file.name.endsWith(".kt", ignoreCase = true) || file.name.endsWith(".java", ignoreCase = true) || file.name.endsWith(".py", ignoreCase = true) -> "text/plain"
+            file.name.endsWith(".txt", ignoreCase = true) || file.name.endsWith(".json", ignoreCase = true) || file.name.endsWith(".md", ignoreCase = true) || file.name.endsWith(".log", ignoreCase = true) || file.name.endsWith(".kt", ignoreCase = true) || file.name.endsWith(".java", ignoreCase = true) || file.name.endsWith(".py", ignoreCase = true) -> "text/plain"
             else -> defaultMime
         }
         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {

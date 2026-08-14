@@ -71,6 +71,7 @@ data class AppState(
     val sortMode: SortMode = SortMode.ALPHABETICAL,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val themeHue: Float = 262f,
+    val themeLightnessOffset: Float = 0f,
     val showThemeSheet: Boolean = false,
     val showSettingsScreen: Boolean = false,
     val useDynamicSystemTheme: Boolean = true,
@@ -83,6 +84,7 @@ data class AppState(
     val isDropboxAuthenticated: Boolean = false,
     val dropboxAccountEmail: String? = null,
     val files: ImmutableList<FileItem> = persistentListOf(),
+    val folderCache: kotlinx.collections.immutable.PersistentMap<String, ImmutableList<FileItem>> = kotlinx.collections.immutable.persistentMapOf(),
     val isLoading: Boolean = false,
     val viewingFile: FileItem? = null,
     val storageFreeGb: Float = 0f,
@@ -181,6 +183,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         val savedTheme = prefs.getString("theme_mode", "SYSTEM") ?: "SYSTEM"
         val savedHue = prefs.getFloat("theme_hue", 262f)
+        val savedThemeLightness = prefs.getFloat("theme_lightness", 0f)
         val savedDynamic = prefs.getBoolean("theme_dynamic", true)
         val savedIconShape = prefs.getString("icon_shape", "SYSTEM") ?: "SYSTEM"
         val savedFontStyle = prefs.getString("font_style", "System") ?: "System"
@@ -208,6 +211,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             isLoading = true,
             themeMode = try { ThemeMode.valueOf(savedTheme) } catch(e: Exception) { ThemeMode.SYSTEM },
             themeHue = savedHue,
+            themeLightnessOffset = savedThemeLightness,
             useDynamicSystemTheme = savedDynamic,
             iconShapeSetting = try { IconShapeType.valueOf(savedIconShape) } catch(e: Exception) { IconShapeType.SYSTEM },
             activeIconShape = try { IconShapeType.valueOf(savedIconShape) } catch(e: Exception) { IconShapeType.SYSTEM },
@@ -337,7 +341,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val st = _state.value
                 val filtered = applyFiltersAndSort(fetched, st)
                 
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), isLoading = false, files = filtered.toImmutableList()) }
+                _state.update { 
+                    val newFiles = filtered.toImmutableList()
+                    val newCache = if (it.query.isEmpty()) it.folderCache.put(it.location, newFiles) else it.folderCache
+                    it.copy(hasShizuku = repository.hasShizuku(), isLoading = false, files = newFiles, folderCache = newCache)
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException) {
@@ -400,7 +408,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> current.driveFolderStack
         }
 
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), location = location, currentFolderName = folderName, driveFolderStack = newStack, isLoading = true, files = kotlinx.collections.immutable.persistentListOf()) }
+        val cachedFiles = current.folderCache[location] ?: kotlinx.collections.immutable.persistentListOf()
+        _state.update { it.copy(hasShizuku = repository.hasShizuku(), location = location, currentFolderName = folderName, driveFolderStack = newStack, isLoading = true, files = cachedFiles) }
         repository.logRecentAction(location, "Explored")
         loadFiles(location)
     }
@@ -409,7 +418,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val stack = _state.value.driveFolderStack
         if (stack.isNotEmpty()) {
             val (prevLocation, prevName) = stack.last()
-            _state.update { it.copy(location = prevLocation, currentFolderName = prevName, driveFolderStack = stack.dropLast(1), isLoading = true, files = kotlinx.collections.immutable.persistentListOf()) }
+            val cachedFiles = _state.value.folderCache[prevLocation] ?: kotlinx.collections.immutable.persistentListOf()
+            _state.update { it.copy(location = prevLocation, currentFolderName = prevName, driveFolderStack = stack.dropLast(1), isLoading = true, files = cachedFiles) }
             loadFiles(prevLocation)
         } else {
             setLocation("home")
@@ -463,7 +473,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.Default) {
             val st = _state.value
             val filtered = applyFiltersAndSort(rawFiles, st)
-            _state.update { it.copy(hasShizuku = repository.hasShizuku(), files = filtered.toImmutableList()) }
+            _state.update { 
+                val newFiles = filtered.toImmutableList()
+                val newCache = if (it.query.isEmpty()) it.folderCache.put(it.location, newFiles) else it.folderCache
+                it.copy(hasShizuku = repository.hasShizuku(), files = newFiles, folderCache = newCache) 
+            }
         }
     }
 
@@ -760,7 +774,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             for (file in filesToOrganise) {
                 val ext = file.name.substringAfterLast('.', "").lowercase(java.util.Locale.getDefault())
                 when (ext) {
-                    "pdf", "doc", "docx", "txt", "xls", "xlsx", "ppt", "pptx", "html", "htm" -> docsFiles.add(file.path)
+                    "pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "html", "htm" -> docsFiles.add(file.path)
                     "jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg" -> imagesFiles.add(file.path)
                     "apk", "apks", "apkm", "xapk" -> apksFiles.add(file.path)
                     "mp3", "wav", "ogg", "flac", "m4a", "opus", "aac" -> musicFiles.add(file.path)
@@ -997,6 +1011,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), themeHue = hue, useDynamicSystemTheme = false) }
     }
 
+    fun setThemeLightnessOffset(offset: Float) {
+        prefs.edit().putFloat("theme_lightness", offset).apply()
+        _state.update { it.copy(hasShizuku = repository.hasShizuku(), themeLightnessOffset = offset) }
+    }
+
     fun setGoogleDriveAuthStatus(isAuthenticated: Boolean, email: String?) {
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), isGoogleDriveAuthenticated = isAuthenticated, googleDriveAccountEmail = email, errorMessage = null) }
     }
@@ -1036,6 +1055,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setDropboxAuthStatus(isAuthenticated: Boolean, email: String?) {
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), isDropboxAuthenticated = isAuthenticated, dropboxAccountEmail = email, errorMessage = null) }
+    }
+
+    fun setDrivePickedIds(ids: List<String>) {
+        repository.currentDrivePickedIds = ids.toSet()
     }
 
     fun updateGoogleDriveAuthStatus(isAuthenticated: Boolean, email: String?) {

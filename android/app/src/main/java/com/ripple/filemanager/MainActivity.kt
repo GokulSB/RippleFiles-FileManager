@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import androidx.compose.ui.unit.sp
 import android.provider.Settings
 import android.provider.DocumentsContract
 import androidx.lifecycle.lifecycleScope
@@ -40,6 +41,45 @@ class MainActivity : FragmentActivity() {
 
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        val crashLogPath = intent.getStringExtra("CRASH_LOG")
+        if (crashLogPath != null) {
+            super.onCreate(savedInstanceState)
+            setContent {
+                val text = java.io.File(crashLogPath).readText()
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = {},
+                    title = { androidx.compose.material3.Text("App Crashed!") },
+                    text = { 
+                        androidx.compose.foundation.lazy.LazyColumn { 
+                            item { androidx.compose.material3.Text(text, style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)) } 
+                        } 
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = { finish() }) {
+                            androidx.compose.material3.Text("Close")
+                        }
+                    }
+                )
+            }
+            return
+        }
+
+        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
+            try {
+                val crashLog = java.io.File(getExternalFilesDir(null), "crash_log.txt")
+                crashLog.writeText(android.util.Log.getStackTraceString(throwable))
+                val intent = Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    putExtra("CRASH_LOG", crashLog.absolutePath)
+                }
+                startActivity(intent)
+                android.os.Process.killProcess(android.os.Process.myPid())
+                System.exit(10)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -108,6 +148,7 @@ class MainActivity : FragmentActivity() {
                         is AppAction.CancelExtract -> viewModel.cancelExtract()
                         is AppAction.ClearExtractResult -> viewModel.clearExtractResult()
                         is AppAction.SetGoogleDriveAuthStatus -> viewModel.updateGoogleDriveAuthStatus(action.isAuthenticated, action.email)
+                        is AppAction.SetDrivePickedIds -> viewModel.setDrivePickedIds(action.ids)
                         is AppAction.SetMegaAuthStatus -> viewModel.setMegaAuthStatus(action.isAuthenticated, action.email, action.password)
                         is AppAction.SetShowMegaPopup -> viewModel.setShowMegaPopup(action.show)
                         is AppAction.SetDropboxAuthStatus -> viewModel.setDropboxAuthStatus(action.isAuthenticated, action.email)
@@ -129,6 +170,7 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetRecycleBinSettings -> viewModel.setRecycleBinSettings(action.enabled, action.retentionValue, action.retentionUnit)
                         is AppAction.SetThemeMode -> viewModel.setThemeMode(action.mode)
                         is AppAction.SetThemeHue -> viewModel.setThemeHue(action.hue)
+                        is AppAction.SetThemeLightnessOffset -> viewModel.setThemeLightnessOffset(action.offset)
                         is AppAction.SetDynamicSystemTheme -> viewModel.setDynamicSystemTheme(action.dynamic)
                         is AppAction.SetIconShape -> viewModel.setIconShape(action.shape)
                         is AppAction.SetFontStyle -> viewModel.setFontStyle(action.style)

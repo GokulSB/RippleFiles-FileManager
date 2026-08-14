@@ -39,9 +39,11 @@ fun ThemeSettingsContent(
     currentMode: ThemeMode,
     currentHue: Float,
     useDynamicTheme: Boolean,
+    themeLightnessOffset: Float,
     onModeChange: (ThemeMode) -> Unit,
     onHueChange: (Float) -> Unit,
     onDynamicThemeChange: (Boolean) -> Unit,
+    onThemeLightnessChange: (Float) -> Unit,
     currentIconShape: IconShapeType,
     onIconShapeChange: (IconShapeType) -> Unit,
     fontStyle: String,
@@ -114,6 +116,16 @@ fun ThemeSettingsContent(
                     colors = SliderDefaults.colors(
                         thumbColor = if (useDynamicTheme) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else hsl(currentHue, 65f, 66f),
                         activeTrackColor = if (useDynamicTheme) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else hsl(currentHue, 65f, 66f)
+                    )
+                )
+                Text(stringResource(R.string.theme_lightness), style = MaterialTheme.typography.bodyMedium)
+                Slider(
+                    value = themeLightnessOffset,
+                    onValueChange = onThemeLightnessChange,
+                    valueRange = 0f..20f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.onPrimary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary
                     )
                 )
                 Row(

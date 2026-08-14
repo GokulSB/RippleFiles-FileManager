@@ -102,7 +102,7 @@ class SmbStorageProvider {
                         "jpg", "jpeg", "png", "gif", "webp" -> "image"
                         "mp4", "mkv", "avi", "mov" -> "video"
                         "mp3", "wav", "flac", "m4a", "ogg" -> "music"
-                        "pdf", "txt", "doc", "docx" -> "document"
+                        "pdf", "txt", "json", "doc", "docx" -> "document"
                         "zip", "rar", "7z", "tar", "gz" -> "archive"
                         "apk" -> "apk"
                         else -> "unknown"

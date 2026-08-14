@@ -148,6 +148,8 @@ private fun NavTab(
 @Composable
 fun UnifiedBottomPill(
     state: AppState,
+    archiveProgress: com.ripple.filemanager.archive.ArchiveProgress?,
+    onCancelExtract: () -> Unit,
     onAction: (AppAction) -> Unit,
     capturedTargetFolderName: String?,
     onCaptureTargetFolder: (String?) -> Unit,
@@ -156,6 +158,7 @@ fun UnifiedBottomPill(
     modifier: Modifier = Modifier
 ) {
     val bottomState = when {
+        archiveProgress is com.ripple.filemanager.archive.ArchiveProgress.Running || archiveProgress is com.ripple.filemanager.archive.ArchiveProgress.Complete -> 4
         state.pasteProgress != null -> 0
         state.isSelectionMode -> 1
         state.clipboardPaths.isNotEmpty() -> 2
@@ -168,6 +171,7 @@ fun UnifiedBottomPill(
         label = "unified_pill"
     ) { target ->
         when (target) {
+            4 -> if (archiveProgress != null) ExtractingStatePill(archiveProgress, onCancelExtract, modifier)
             0 -> PastingStatePill(state, onAction, capturedTargetFolderName, modifier)
             1 -> selectionModeContent()
             2 -> ClipboardArmedPill(state, onAction, onCaptureTargetFolder, modifier)
@@ -423,6 +427,105 @@ fun PastingStatePill(
                     .fillMaxWidth(animatedProgress)
                     .clip(RoundedCornerShape(999.dp))
                     .background(if (state.isPastePaused) SkylineColors.TextDim2 else SkylineColors.Amber)
+            )
+        }
+    }
+}
+
+@Composable
+fun ExtractingStatePill(
+    progressState: com.ripple.filemanager.archive.ArchiveProgress,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isComplete = progressState is com.ripple.filemanager.archive.ArchiveProgress.Complete
+    val runningState = progressState as? com.ripple.filemanager.archive.ArchiveProgress.Running
+    val progress = if (isComplete) 1f else if (runningState != null && runningState.filesTotal > 0) runningState.filesDone.toFloat() / runningState.filesTotal else 0f
+    
+    val statusText = if (isComplete) "COMPLETED" else "UNZIPPING..."
+    val entryName = if (isComplete) "All files extracted" else runningState?.currentEntryName ?: ""
+    
+    Column(
+        modifier = modifier
+            .border(1.dp, SkylineColors.Border, RoundedCornerShape(999.dp))
+            .clip(RoundedCornerShape(999.dp))
+            .background(SkylineColors.Surface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.ContentCopy,
+                contentDescription = null,
+                tint = SkylineColors.Amber,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = statusText,
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 10.5.sp,
+                    color = SkylineColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = entryName,
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 9.sp,
+                    color = SkylineColors.TextDim2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "${(progress * 100).roundToInt()}%",
+                fontFamily = JetBrainsMonoFamily,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = SkylineColors.Amber
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            if (!isComplete) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.cancel),
+                    tint = SkylineColors.TextDim2,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clickable { onCancel() }
+                )
+            } else {
+                Spacer(modifier = Modifier.width(18.dp))
+            }
+        }
+        
+        val animatedProgress by animateFloatAsState(
+            targetValue = progress,
+            animationSpec = tween(120, easing = LinearEasing),
+            label = "extract_prog"
+        )
+        
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 10.dp)
+                .height(5.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(SkylineColors.Surface2)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animatedProgress)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(SkylineColors.Amber)
             )
         }
     }

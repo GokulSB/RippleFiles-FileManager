@@ -64,6 +64,7 @@ sealed class AppAction {
     
     // Auth & Permissions
     data class SetGoogleDriveAuthStatus(val isAuthenticated: Boolean, val email: String?) : AppAction()
+    data class SetDrivePickedIds(val ids: List<String>) : AppAction()
     data class SetMegaAuthStatus(val isAuthenticated: Boolean, val email: String?, val password: String? = null) : AppAction()
     data class SetShowMegaPopup(val show: Boolean) : AppAction()
     data class SetDropboxAuthStatus(val isAuthenticated: Boolean, val email: String?) : AppAction()
@@ -93,6 +94,7 @@ sealed class AppAction {
     // Theme & Customization
     data class SetThemeMode(val mode: ThemeMode) : AppAction()
     data class SetThemeHue(val hue: Float) : AppAction()
+    data class SetThemeLightnessOffset(val offset: Float) : AppAction()
     data class SetDynamicSystemTheme(val dynamic: Boolean) : AppAction()
     data class SetIconShape(val shape: com.ripple.filemanager.IconShapeType) : AppAction()
     data class SetFontStyle(val style: String) : AppAction()

@@ -26,7 +26,7 @@ class DocumentThumbnailFetcher(
         val ext = file.extension.lowercase()
         val bitmap = when (ext) {
             "pdf" -> generatePdfThumbnail()
-            "txt", "csv", "md" -> generateTextThumbnail()
+            "txt", "json", "csv", "md" -> generateTextThumbnail()
             "docx", "pptx", "xlsx" -> generateDocxThumbnail()
             else -> null
         }
@@ -120,7 +120,7 @@ class DocumentThumbnailFetcher(
     class Factory : Fetcher.Factory<File> {
         override fun create(data: File, options: Options, imageLoader: ImageLoader): Fetcher? {
             val ext = data.extension.lowercase()
-            if (ext in listOf("pdf", "txt", "csv", "md", "docx", "pptx", "xlsx")) {
+            if (ext in listOf("pdf", "txt", "json", "csv", "md", "docx", "pptx", "xlsx")) {
                 return DocumentThumbnailFetcher(data, options)
             }
             return null

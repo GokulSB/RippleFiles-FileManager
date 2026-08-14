@@ -12,8 +12,8 @@ android {
         applicationId "com.ripple.filemanager"
         minSdk 26
         targetSdk 36
-        versionCode 29
-        versionName "2.0.5"
+        versionCode 30
+        versionName "2.0.6"
     }
 
     signingConfigs {
@@ -71,6 +71,11 @@ dependencies {
     implementation 'androidx.core:core-splashscreen:1.0.1'
     implementation 'androidx.activity:activity-compose:1.9.3'
     implementation 'androidx.compose.ui:ui'
+    implementation 'com.google.guava:guava:31.1-android'
+    implementation 'androidx.window:window:1.3.0'
+    implementation 'androidx.compose.material3.adaptive:adaptive:1.0.0'
+    implementation 'androidx.compose.material3.adaptive:adaptive-layout:1.0.0'
+    implementation 'androidx.compose.material3.adaptive:adaptive-navigation:1.0.0'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
@@ -78,7 +83,7 @@ dependencies {
     implementation 'androidx.compose.material:material-icons-extended'
     implementation 'androidx.compose.material3:material3-window-size-class'
     implementation 'io.coil-kt:coil-compose:2.6.0'
-    implementation 'com.google.android.gms:play-services-auth:21.0.0'
+    implementation 'com.google.android.gms:play-services-auth:21.6.0'
     implementation 'com.google.api-client:google-api-client-android:1.33.0'
     implementation('com.google.apis:google-api-services-drive:v3-rev20220815-2.0.0') {
         exclude group: 'org.apache.httpcomponents'
@@ -120,6 +125,12 @@ dependencies {
     implementation 'com.hierynomus:smbj:0.13.0'
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
     implementation 'com.google.code.gson:gson:2.11.0'
+    // Archives
+    implementation("io.github.realburst:unrar5j:v2.0.3")
+    implementation 'net.lingala.zip4j:zip4j:2.11.5'
+    
+    // WorkManager
+    implementation 'androidx.work:work-runtime-ktx:2.9.1'
 }
 
 configurations {
