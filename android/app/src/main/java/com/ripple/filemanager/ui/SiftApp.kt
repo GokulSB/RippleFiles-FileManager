@@ -136,6 +136,7 @@ fun SiftApp(
         darkTheme = isDark,
         dynamicColor = state.useDynamicSystemTheme,
         customHue = state.themeHue,
+        lightnessOffset = state.themeLightnessOffset,
         fontStyle = state.fontStyle,
         textDecorations = state.textDecorations,
         mainTextScale = state.mainTextScale,
@@ -576,9 +577,11 @@ fun SiftApp(
                                 currentMode = state.themeMode,
                                 currentHue = state.themeHue,
                                 useDynamicTheme = state.useDynamicSystemTheme,
+                                themeLightnessOffset = state.themeLightnessOffset,
                                 onModeChange = { onAction(AppAction.SetThemeMode(it)) },
                                 onHueChange = { onAction(AppAction.SetThemeHue(it)) },
                                 onDynamicThemeChange = { onAction(AppAction.SetDynamicSystemTheme(it)) },
+                                onThemeLightnessChange = { onAction(AppAction.SetThemeLightnessOffset(it)) },
                                 currentIconShape = state.iconShapeSetting,
                                 onIconShapeChange = { onAction(AppAction.SetIconShape(it)) },
                                 fontStyle = state.fontStyle,
@@ -856,6 +859,15 @@ fun DrawerContent(
     var showDropboxPopup by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var showSmbConnections by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     
+    val launchDrivePicker = rememberDrivePickerLauncher { success, pickedIds ->
+        showGDrivePopup = false
+        if (success) {
+            pickedIds?.let { onAction(AppAction.SetDrivePickedIds(it)) }
+            onCloseDrawer()
+            onAction(AppAction.SetLocation("drive"))
+        }
+    }
+
     val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -864,11 +876,12 @@ fun DrawerContent(
             val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
             if (account?.email != null) {
                 onAction(AppAction.SetGoogleDriveAuthStatus(true, account.email!!))
+                launchDrivePicker()
             }
         } catch (e: Exception) {
             onAction(AppAction.SetErrorMessage("Google Login Failed: ${e.message}"))
+            showGDrivePopup = false
         }
-        showGDrivePopup = false
     }
     ModalDrawerSheet(
         drawerContainerColor = MaterialTheme.colorScheme.background,
@@ -1203,7 +1216,7 @@ fun DrawerContent(
         if (showGDrivePopup) {
             val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestEmail()
-                .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE))
+                .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
                 .build()
             val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
 
@@ -1719,7 +1732,7 @@ fun handleFileOpen(
 @androidx.compose.runtime.Immutable
 data class FabMenuAction(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val onClick: () -> Unit)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun MainContent(
     state: AppState,
@@ -1732,6 +1745,25 @@ fun MainContent(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var extractTargetFile by remember { mutableStateOf<FileItem?>(null) }
+    var viewingArchive by remember { mutableStateOf<FileItem?>(null) }
+    var showArchiveOptionsFor by remember { mutableStateOf<FileItem?>(null) }
+    var fileForSafExtraction by remember { mutableStateOf<FileItem?>(null) }
+    
+    val archiveViewModel: com.ripple.filemanager.archive.ArchiveViewModel = viewModel()
+    val archiveProgress by archiveViewModel.archiveProgress.collectAsState()
+    
+    val safExtractLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null && fileForSafExtraction != null) {
+            val file = fileForSafExtraction!!
+            val sourceUri = if (file.path.startsWith("content://")) android.net.Uri.parse(file.path) else android.net.Uri.fromFile(File(file.path))
+            archiveViewModel.extract(sourceUri, uri)
+            showArchiveOptionsFor = null
+            fileForSafExtraction = null
+        }
+    }
+    
     var isExtracting by remember { mutableStateOf(false) }
     // Search is always visible in the new header design
     var infoDialogFile by remember { mutableStateOf<FileItem?>(null) }
@@ -1759,6 +1791,13 @@ fun MainContent(
         }
     }
 
+    val launchDrivePicker = rememberDrivePickerLauncher { success, pickedIds ->
+        if (success) {
+            pickedIds?.let { onAction(AppAction.SetDrivePickedIds(it)) }
+            onAction(AppAction.SetLocation("drive"))
+        }
+    }
+
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -1767,6 +1806,7 @@ fun MainContent(
             val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
             if (account?.email != null) {
                 onAction(AppAction.SetGoogleDriveAuthStatus(true, account.email!!))
+                launchDrivePicker()
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -1793,7 +1833,8 @@ fun MainContent(
         }
     }
     
-    BackHandler(enabled = state.query.isNotEmpty()) {
+    val isImeVisible = androidx.compose.foundation.layout.WindowInsets.Companion.isImeVisible
+    BackHandler(enabled = state.query.isNotEmpty() && !isImeVisible) {
         focusManager.clearFocus()
         onAction(AppAction.SetQuery(""))
     }
@@ -1932,7 +1973,7 @@ fun MainContent(
                         onClick = {
                             val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                                 .requestEmail()
-                                .requestScopes(Scope(DriveScopes.DRIVE))
+                                .requestScopes(Scope(DriveScopes.DRIVE_FILE))
                                 .build()
                             val googleSignInClient = GoogleSignIn.getClient(context, gso)
                             googleSignInClient.signOut().addOnCompleteListener {
@@ -2379,6 +2420,8 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                     } else if (file.type == "folder") {
                                                         if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
                                                         onAction(AppAction.SetLocation(file.path, file.name))
+                                                    } else if (file.name.lowercase().endsWith(".zip") || file.name.lowercase().endsWith(".rar") || file.name.lowercase().endsWith(".tar") || file.name.lowercase().endsWith(".gz") || file.name.lowercase().endsWith(".bz2") || file.name.lowercase().endsWith(".xz")) {
+                                                        showArchiveOptionsFor = file
                                                     } else {
                                                         handleFileOpen(file, context, state, focusManager, onAction)
                                                     }
@@ -2666,6 +2709,83 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     )
                 }
             }
+        }
+
+        if (viewingArchive != null) {
+            com.ripple.filemanager.ui.ArchiveViewerDialog(
+                archiveFile = viewingArchive!!,
+                onDismiss = { viewingArchive = null },
+                onExtractSuccess = {
+                    viewingArchive = null
+                    onAction(AppAction.Reload)
+                }
+            )
+        }
+        
+        if (showArchiveOptionsFor != null) {
+            val file = showArchiveOptionsFor!!
+            val isRar = file.name.lowercase().endsWith(".rar")
+            com.ripple.filemanager.ui.ArchiveExtractDialog(
+                archiveName = file.name,
+                itemCount = file.size,
+                isRar = isRar,
+                onExtractHere = {
+                    val sourceUri = if (file.path.startsWith("content://")) android.net.Uri.parse(file.path) else android.net.Uri.fromFile(File(file.path))
+                    val destUri = android.net.Uri.fromFile(File(file.path).parentFile)
+                    archiveViewModel.extract(sourceUri, destUri)
+                    showArchiveOptionsFor = null
+                },
+                onExtractTo = {
+                    fileForSafExtraction = file
+                    safExtractLauncher.launch(null)
+                },
+                onViewContents = {
+                    viewingArchive = file
+                    showArchiveOptionsFor = null
+                },
+                onDelete = {
+                    onAction(AppAction.ClearSelection)
+                    onAction(AppAction.ToggleSelection(file.id))
+                    onAction(AppAction.DeleteSelectedFiles)
+                    showArchiveOptionsFor = null
+                },
+                onDismiss = { showArchiveOptionsFor = null }
+            )
+        }
+
+        val progressState = archiveProgress
+        if (progressState is com.ripple.filemanager.archive.ArchiveProgress.Running) {
+            com.ripple.filemanager.ui.ArchiveExtractProgressDialog(
+                archiveName = progressState.currentEntryName,
+                progress = if (progressState.filesTotal > 0) progressState.filesDone.toFloat() / progressState.filesTotal else 0f,
+                filesDone = progressState.filesDone,
+                filesTotal = progressState.filesTotal,
+                onDismissWhenComplete = { archiveViewModel.resetState() }
+            )
+        } else if (progressState is com.ripple.filemanager.archive.ArchiveProgress.Complete) {
+            com.ripple.filemanager.ui.ArchiveExtractProgressDialog(
+                archiveName = "Completed",
+                progress = 1f,
+                filesDone = 1,
+                filesTotal = 1,
+                onDismissWhenComplete = { 
+                    archiveViewModel.resetState()
+                    onAction(AppAction.Reload)
+                }
+            )
+        } else if (progressState is com.ripple.filemanager.archive.ArchiveProgress.NeedsPassword) {
+            com.ripple.filemanager.ui.ArchivePasswordDialog(
+                archiveName = "Encrypted Archive",
+                attemptFailed = progressState.attemptFailed,
+                onSubmit = { password -> archiveViewModel.submitPassword(password) },
+                onDismiss = { archiveViewModel.cancelExtraction() }
+            )
+        } else if (progressState is com.ripple.filemanager.archive.ArchiveProgress.Failed) {
+            com.ripple.filemanager.ui.ArchiveFailedDialog(
+                archiveName = "Extraction Error",
+                reason = progressState.reason,
+                onDismiss = { archiveViewModel.resetState() }
+            )
         }
         
         if (state.extractResultPath != null) {
@@ -3186,7 +3306,8 @@ fun ViewerPreferenceItem(
     var expanded by remember { mutableStateOf(false) }
     Surface(
         shape = getDynamicCornerShape(16f, cornerRoundness),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        color = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
     ) {
         Row(
@@ -3194,11 +3315,12 @@ fun ViewerPreferenceItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
             androidx.compose.foundation.layout.Box {
                 Surface(
                     shape = getDynamicCornerShape(12f, cornerRoundness),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    color = com.ripple.filemanager.ui.theme.SkylineColors.Surface2,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
                     onClick = { expanded = true }
                 ) {
                     Row(
@@ -3206,8 +3328,8 @@ fun ViewerPreferenceItem(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(currentValue, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.select_content_desc), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                        Text(currentValue, style = MaterialTheme.typography.bodyMedium, color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary)
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.select_content_desc), tint = com.ripple.filemanager.ui.theme.SkylineColors.TextDim, modifier = Modifier.size(18.dp))
                     }
                 }
                 androidx.compose.material3.DropdownMenu(
