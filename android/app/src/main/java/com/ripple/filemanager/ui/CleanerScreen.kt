@@ -66,8 +66,10 @@ import com.ripple.filemanager.R
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) -> Unit, snackbarHostState: SnackbarHostState) {
-      val context = androidx.compose.ui.platform.LocalContext.current
-    BackHandler {
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
+
+    BackHandler(enabled = state.currentCleanerCategory != null) {
         if (state.currentCleanerCategory != null) {
             onAction(AppAction.SetCleanerCategory(null))
         } else {
@@ -75,7 +77,7 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().appGradientBackground()) {
         val data = state.cleanerData
         if (data != null) {
             Scaffold(
@@ -86,18 +88,18 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                         },
                         navigationIcon = {
                             if (state.currentCleanerCategory != null) {
-                                IconButton(onClick = { onAction(AppAction.SetCleanerCategory(null)) }) {
+                                IconButton(onClick = { haptics.tap(); onAction(AppAction.SetCleanerCategory(null)) }) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                                 }
                             } else {
-                                IconButton(onClick = { onAction(AppAction.SetCleanerScreenVisible(false)) }) {
+                                IconButton(onClick = { haptics.tap(); onAction(AppAction.SetCleanerScreenVisible(false)) }) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                                 }
                             }
                         },
                         actions = {
                             if (state.currentCleanerCategory != null) {
-                                IconButton(onClick = {
+                                IconButton(onClick = { haptics.tap();
                                     val catData = when (state.currentCleanerCategory) {
                                         "Documents" -> data.documents
                                         "Images" -> data.images
@@ -112,13 +114,13 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                                 }) {
                                     Icon(Icons.Default.SelectAll, contentDescription = stringResource(R.string.select_all))
                                 }
-                                IconButton(onClick = { onAction(AppAction.ClearCleanerSelection) }) {
+                                IconButton(onClick = { haptics.tap(); onAction(AppAction.ClearCleanerSelection) }) {
                                     Icon(Icons.Default.Deselect, contentDescription = stringResource(R.string.select_none))
                                 }
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
+                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
                             titleContentColor = MaterialTheme.colorScheme.onBackground
                         )
                     )
@@ -136,7 +138,10 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                             ) {
                                 Text(pluralStringResource(R.plurals.files_selected, state.cleanerSelectedFiles.size, state.cleanerSelectedFiles.size), color = MaterialTheme.colorScheme.onSurface)
                                 Button(
-                                    onClick = { onAction(AppAction.DeleteSelectedCleanerFiles) },
+                                    onClick = { 
+                                        haptics.delete()
+                                        onAction(AppAction.DeleteSelectedCleanerFiles) 
+                                    },
                                     shape = com.ripple.filemanager.ui.getDynamicCornerShape(24f, state.cornerRoundness),
                                     colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
                                 ) {
@@ -148,11 +153,14 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
                         }
                     }
                 },
-                containerColor = MaterialTheme.colorScheme.background
+                containerColor = androidx.compose.ui.graphics.Color.Transparent
             ) { paddingValues ->
                 Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
                     if (state.currentCleanerCategory == null) {
-                        CleanerOverview(data = data, cornerRoundness = state.cornerRoundness, gridColumns = state.gridColumns, onCategoryClick = { onAction(AppAction.SetCleanerCategory(it)) })
+                        CleanerOverview(data = data, cornerRoundness = state.cornerRoundness, gridColumns = state.gridColumns, onCategoryClick = { 
+                            haptics.cleaner()
+                            onAction(AppAction.SetCleanerCategory(it)) 
+                        })
                     } else {
                         val categoryData = when (state.currentCleanerCategory) {
                             "Documents" -> data.documents
@@ -350,7 +358,7 @@ fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int,
                         Icon(
                             imageVector = Icons.Outlined.SdStorage,
                             contentDescription = null,
-                            tint = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
+                            tint = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -496,6 +504,7 @@ fun CategoryDetailView(
     iconShape: com.ripple.filemanager.IconShapeType,
     onFileToggle: (Int) -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     if (categoryData.files.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(stringResource(R.string.no_files_to_clean))
@@ -528,7 +537,7 @@ fun CategoryDetailView(
                     .aspectRatio(if (gridColumns > 2) 1f else 0.85f)
                     .clip(getDynamicCornerShape(8f, cornerRoundness))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onFileToggle(file.id) }
+                    .clickable { haptics.tap(); onFileToggle(file.id) }
             ) {
                 if (isMedia) {
                     val requestBuilder = remember(file.path) {
@@ -563,7 +572,7 @@ fun CategoryDetailView(
                 
                 RadioButton(
                     selected = isSelected,
-                    onClick = { onFileToggle(file.id) },
+                    onClick = { haptics.tap(); onFileToggle(file.id) },
                     modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
                 )
             }

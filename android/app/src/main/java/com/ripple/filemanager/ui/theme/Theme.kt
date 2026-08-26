@@ -41,7 +41,7 @@ object SkylineColors {
     var TextDim       by mutableStateOf(Color(0xFF8A7A63))
     var TextDim2      by mutableStateOf(Color(0xFF6F6250))
     
-    fun updateColors(isDark: Boolean, dynamicColor: Boolean, customHue: Float, lightnessOffset: Float, context: android.content.Context) {
+    fun updateColors(isDark: Boolean, dynamicColor: Boolean, customHue: Float, lightnessOffset: Float, invertText: Boolean, context: android.content.Context) {
         val useSystem = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val effectiveHue = if (useSystem) {
             val scheme = if (isDark) androidx.compose.material3.dynamicDarkColorScheme(context) else androidx.compose.material3.dynamicLightColorScheme(context)
@@ -53,33 +53,46 @@ object SkylineColors {
         }
         
         if (isDark) {
-            Background = hsl(effectiveHue, 41f, (13f + lightnessOffset).coerceIn(0f, 100f))
-            Surface = hsl(effectiveHue, 31f, (17f + lightnessOffset).coerceIn(0f, 100f))
-            Surface2 = hsl(effectiveHue, 30f, (22f + lightnessOffset).coerceIn(0f, 100f))
-            Border = hsl(effectiveHue, 34f, (26f + lightnessOffset).coerceIn(0f, 100f))
-            Amber = hsl(effectiveHue, 65f, 66f)
-            AmberDim = hsl(effectiveHue, 35f, 40f)
-            Dust = hsl(effectiveHue + 180f, 20f, 55f) // Complementary / cool
-            Sage = hsl(effectiveHue + 90f, 20f, 60f)  // Analogous
-            Rust = hsl(12f, 50f, 52f) // Keep alerts reddish
-            TextPrimary = hsl(effectiveHue, 47f, 87f)
-            TextPrimary2 = hsl(effectiveHue, 47f, 83f)
-            TextDim = hsl(effectiveHue, 25f, 46f)
-            TextDim2 = hsl(effectiveHue, 20f, 37f)
+            // Tonal Expressive: richer, more saturated dark surfaces
+            Background = hsl(effectiveHue, 52f, (11f + lightnessOffset).coerceIn(0f, 100f))
+            Surface = hsl(effectiveHue, 42f, (15f + lightnessOffset).coerceIn(0f, 100f))
+            Surface2 = hsl(effectiveHue, 40f, (20f + lightnessOffset).coerceIn(0f, 100f))
+            Border = hsl(effectiveHue, 44f, (28f + lightnessOffset).coerceIn(0f, 100f))
+            Amber = hsl(effectiveHue, 80f, 68f)
+            AmberDim = hsl(effectiveHue, 50f, 42f)
+            Dust = hsl(effectiveHue + 180f, 35f, 58f)
+            Sage = hsl(effectiveHue + 90f, 35f, 62f)
+            Rust = hsl(12f, 65f, 54f)
         } else {
-            Background = hsl(40f, 65f, 95f)
-            Surface = hsl(40f, 55f, 90f)
-            Surface2 = hsl(40f, 50f, 85f)
-            Border = hsl(effectiveHue, 31f, 71f)
-            Amber = hsl(effectiveHue, 65f, 66f)
-            AmberDim = hsl(effectiveHue, 48f, 48f)
-            Dust = hsl(effectiveHue + 180f, 25f, 45f)
-            Sage = hsl(effectiveHue + 90f, 25f, 45f)
-            Rust = hsl(12f, 55f, 45f)
-            TextPrimary = hsl(effectiveHue, 36f, 12f)
-            TextPrimary2 = hsl(effectiveHue, 35f, 17f)
-            TextDim = hsl(effectiveHue, 23f, 33f)
-            TextDim2 = hsl(effectiveHue, 16f, 46f)
+            // "same dark mode theme with dynamic theme ... with slight less colored" (decreased darkness further)
+            Background = hsl(effectiveHue, 32f, (32f + lightnessOffset).coerceIn(0f, 100f))
+            Surface = hsl(effectiveHue, 28f, (38f + lightnessOffset).coerceIn(0f, 100f))
+            Surface2 = hsl(effectiveHue, 26f, (46f + lightnessOffset).coerceIn(0f, 100f))
+            Border = hsl(effectiveHue, 28f, (56f + lightnessOffset).coerceIn(0f, 100f))
+            Amber = hsl(effectiveHue, 60f, 64f)
+            AmberDim = hsl(effectiveHue, 40f, 44f)
+            Dust = hsl(effectiveHue + 180f, 25f, 55f)
+            Sage = hsl(effectiveHue + 90f, 25f, 60f)
+            Rust = hsl(12f, 55f, 54f)
+        }
+        
+        if (invertText) {
+            TextPrimary = Color.Black
+            TextPrimary2 = Color(0xFF222222)
+            TextDim = Color(0xFF444444)
+            TextDim2 = Color(0xFF666666)
+        } else {
+            if (isDark) {
+                TextPrimary = Color.White
+                TextPrimary2 = Color(0xFFF0F0F0)
+                TextDim = Color(0xFFCCCCCC)
+                TextDim2 = Color(0xFFAAAAAA)
+            } else {
+                TextPrimary = Color.White
+                TextPrimary2 = Color(0xFFFAFAFA)
+                TextDim = Color(0xFFE8E8E8)
+                TextDim2 = Color(0xFFD4D4D4)
+            }
         }
     }
 }
@@ -118,23 +131,24 @@ fun SiftTheme(
     textDecorations: Set<String> = emptySet(),
     mainTextScale: Float = 1.0f,
     subTextScale: Float = 1.0f,
+    invertText: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
-    SkylineColors.updateColors(darkTheme, dynamicColor, customHue, lightnessOffset, context)
+    SkylineColors.updateColors(darkTheme, dynamicColor, customHue, lightnessOffset, invertText, context)
     
     val colorScheme = if (darkTheme) {
         darkColorScheme(
             primary              = SkylineColors.Amber,
-            onPrimary            = SkylineColors.Background,
+            onPrimary            = Color(0xFF111111),
             primaryContainer     = SkylineColors.AmberDim,
             onPrimaryContainer   = SkylineColors.TextPrimary,
             secondary            = SkylineColors.Dust,
-            onSecondary          = SkylineColors.Background,
+            onSecondary          = Color(0xFF111111),
             secondaryContainer   = Color(0xFF2A1F14),
             onSecondaryContainer = SkylineColors.TextPrimary,
             tertiary             = SkylineColors.Sage,
-            onTertiary           = SkylineColors.Background,
+            onTertiary           = Color(0xFF111111),
             error                = SkylineColors.Rust,
             onError              = SkylineColors.TextPrimary,
             errorContainer       = Color(0xFF5A2015),
@@ -150,22 +164,22 @@ fun SiftTheme(
             outline              = SkylineColors.Border,
             outlineVariant       = Color(0xFF2A1F14),
             inverseSurface       = SkylineColors.TextPrimary,
-            inverseOnSurface     = SkylineColors.Background,
+            inverseOnSurface     = Color(0xFF111111),
             inversePrimary       = SkylineColors.AmberDim,
             scrim                = Color(0xCC000000)
         )
     } else {
         lightColorScheme(
             primary              = SkylineColors.Amber,
-            onPrimary            = SkylineColors.Background,
+            onPrimary            = Color(0xFF111111),
             primaryContainer     = SkylineColors.AmberDim,
             onPrimaryContainer   = SkylineColors.TextPrimary,
             secondary            = SkylineColors.Dust,
-            onSecondary          = SkylineColors.Background,
+            onSecondary          = Color(0xFF111111),
             secondaryContainer   = SkylineColors.Surface2,
             onSecondaryContainer = SkylineColors.TextPrimary,
             tertiary             = SkylineColors.Sage,
-            onTertiary           = SkylineColors.Background,
+            onTertiary           = Color(0xFF111111),
             error                = SkylineColors.Rust,
             onError              = SkylineColors.TextPrimary,
             errorContainer       = SkylineColors.Rust.copy(alpha = 0.2f),
@@ -181,7 +195,7 @@ fun SiftTheme(
             outline              = SkylineColors.Border,
             outlineVariant       = SkylineColors.Surface2,
             inverseSurface       = SkylineColors.TextPrimary,
-            inverseOnSurface     = SkylineColors.Background,
+            inverseOnSurface     = Color(0xFF111111),
             inversePrimary       = SkylineColors.AmberDim,
             scrim                = Color(0xCC000000)
         )
@@ -193,8 +207,8 @@ fun SiftTheme(
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
             window.navigationBarColor = Color.Transparent.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
         }
     }
 

@@ -72,7 +72,7 @@ val SkylinePillShape: Shape = RoundedCornerShape(50)
 fun MonoLabel(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = SkylineColors.AmberDim,
+    color: Color = SkylineColors.TextDim,
     fontSize: Int = 10
 ) {
     Text(
@@ -180,7 +180,7 @@ fun StatChip(
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Column {
-            MonoLabel(text = label, fontSize = 9, color = SkylineColors.AmberDim)
+            MonoLabel(text = label, fontSize = 9, color = SkylineColors.TextDim)
             Text(
                 text = value,
                 fontFamily = JetBrainsMonoFamily,
@@ -204,6 +204,7 @@ fun TypeFilterChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val bg     = if (selected) toneColor else Color.Transparent
     val fg     = if (selected) MaterialTheme.colorScheme.background else toneColor
     val border = toneColor
@@ -215,7 +216,7 @@ fun TypeFilterChip(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
+                onClick = { haptics.tap(); onClick() }
             )
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
@@ -234,6 +235,7 @@ fun ViewModeToggle(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     Row(
         modifier = modifier.border(1.dp, SkylineColors.Border, SkylineShape)
     ) {
@@ -245,7 +247,7 @@ fun ViewModeToggle(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = { if (isListMode) onToggle() }
+                    onClick = { haptics.tap(); if (isListMode) onToggle() }
                 )
                 .padding(8.dp),
             contentAlignment = Alignment.Center
@@ -262,7 +264,7 @@ fun ViewModeToggle(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = { if (!isListMode) onToggle() }
+                    onClick = { haptics.tap(); if (!isListMode) onToggle() }
                 )
                 .padding(8.dp),
             contentAlignment = Alignment.Center
@@ -289,6 +291,7 @@ fun OffsetFab(
     width: androidx.compose.ui.unit.Dp? = 48.dp,
     content: (@Composable BoxScope.() -> Unit)? = null
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val shadowColor = SkylineColors.AmberDim
     val shape = getDynamicCornerShape(16f, cornerRoundness)
 
@@ -302,7 +305,7 @@ fun OffsetFab(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
+                onClick = { haptics.fab(); onClick() }
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -336,13 +339,12 @@ fun SkylineTopBar(
     cornerRoundness: Float = 0f,
     organiseProgress: Float? = null
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val shape = getDynamicCornerShape(12f, cornerRoundness)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.statusBars)
-            .background(MaterialTheme.colorScheme.background)
-            .border(width = 0.dp, color = Color.Transparent)  // no top border on outermost
             .padding(horizontal = 12.dp)
             .padding(top = 8.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -357,7 +359,7 @@ fun SkylineTopBar(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onMenuClick
+                    onClick = { haptics.tap(); onMenuClick() }
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -381,7 +383,7 @@ fun SkylineTopBar(
                 )
             },
             leadingIcon = {
-                Icon(Icons.Default.Search, contentDescription = null, tint = SkylineColors.AmberDim, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Search, contentDescription = null, tint = SkylineColors.TextPrimary, modifier = Modifier.size(18.dp))
             },
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -392,15 +394,15 @@ fun SkylineTopBar(
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(24.dp)) {
                         CircularProgressIndicator(
                             progress = { organiseProgress },
-                            color = SkylineColors.Amber,
-                            trackColor = SkylineColors.Amber.copy(alpha = 0.2f),
+                            color = SkylineColors.TextPrimary,
+                            trackColor = SkylineColors.TextPrimary.copy(alpha = 0.2f),
                             strokeWidth = 2.dp,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
                 } else {
                     IconButton(onClick = onOrganiseClick) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = stringResource(R.string.organise_files), tint = SkylineColors.AmberDim, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.AutoAwesome, contentDescription = stringResource(R.string.organise_files), tint = SkylineColors.TextPrimary, modifier = Modifier.size(18.dp))
                     }
                 }
             },
@@ -436,7 +438,7 @@ fun SkylineTopBar(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onTrashClick
+                    onClick = { haptics.tap(); onTrashClick() }
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -469,6 +471,7 @@ fun SkylineFolderGridTile(
     onLockClick: (() -> Unit)? = null,
     onUnlockClick: (() -> Unit)? = null
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val shape = getDynamicCornerShape(16f, cornerRoundness)
     val baseTone = fileTypeTone(type)
     val toneColor = when {
@@ -515,7 +518,7 @@ fun SkylineFolderGridTile(
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick,
+                onClick = { haptics.tap(); onClick() },
                 onLongClick = onLongClick
             )
     ) {
@@ -670,6 +673,7 @@ fun SkylineFolderListRow(
     onLockClick: (() -> Unit)? = null,
     onUnlockClick: (() -> Unit)? = null
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val shape = getDynamicCornerShape(16f, cornerRoundness)
     val baseTone = fileTypeTone(type)
     val toneColor = when {
@@ -714,7 +718,7 @@ fun SkylineFolderListRow(
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick,
+                onClick = { haptics.tap(); onClick() },
                 onLongClick = onLongClick
             ),
         verticalAlignment = Alignment.CenterVertically
@@ -829,6 +833,7 @@ fun ExpandingPillNav(
     cornerRoundness: Float = 0f,
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val pillColor = SkylineColors.Amber
     val pillBgExpanded = SkylineColors.Surface
     val strokeColor = SkylineColors.Border
@@ -889,6 +894,7 @@ fun ExpandingPillNav(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) {
+                                haptics.tap()
                                 onTabSelected(tab)
                                 onExpandedChange(false)
                             },
@@ -930,6 +936,7 @@ fun ExpandingPillNav(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) {
+                                haptics.fab()
                                 onClick()
                                 onExpandedChange(false)
                             },
@@ -953,7 +960,7 @@ fun ExpandingPillNav(
                     .background(if (expanded) Color.Transparent else pillColor, toggleShape)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() }, indication = null
-                    ) { onExpandedChange(!expanded) },
+                    ) { haptics.fab(); onExpandedChange(!expanded) },
                 contentAlignment = Alignment.Center
             ) {
                 Box(modifier = Modifier.graphicsLayer(rotationZ = rotation)) {
@@ -1002,6 +1009,7 @@ fun ConnectedStorageCard(
     cornerRoundness: Float = 0f,
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var expanded by remember { mutableStateOf(false) }
     
     val borderColor = SkylineColors.Border
@@ -1021,7 +1029,7 @@ fun ConnectedStorageCard(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = { expanded = !expanded }
+                onClick = { haptics.tap(); expanded = !expanded }
             )
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
@@ -1035,7 +1043,7 @@ fun ConnectedStorageCard(
                     fontFamily = JetBrainsMonoFamily,
                     fontSize = 9.sp,
                     letterSpacing = 0.8.sp,
-                    color = SkylineColors.AmberDim
+                    color = SkylineColors.TextDim
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -1057,7 +1065,7 @@ fun ConnectedStorageCard(
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
                 contentDescription = "Expand",
-                tint = SkylineColors.Amber,
+                tint = SkylineColors.TextPrimary,
                 modifier = Modifier.size(24.dp).graphicsLayer(rotationZ = rotation)
             )
         }

@@ -46,6 +46,8 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: F
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().appGradientBackground(),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(fileItem.name, maxLines = 1) },
@@ -55,7 +57,7 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: F
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = Color.Transparent,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                     navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
@@ -66,7 +68,6 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: F
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.surface)
         ) {
             val file = File(fileItem.path)
             if (fileItem.name.endsWith(".pdf", ignoreCase = true)) {
@@ -126,7 +127,7 @@ fun PdfViewer(file: File, cornerRoundness: Float = 0.5f) {
     }
 
     if (needsPassword) {
-        androidx.compose.material3.AlertDialog(
+        com.ripple.filemanager.ui.GradientAlertDialog(
             onDismissRequest = { /* Cannot dismiss */ },
             title = { com.ripple.filemanager.ui.MonoLabel("PASSWORD REQUIRED", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
             text = {

@@ -66,7 +66,7 @@ class MainActivity : FragmentActivity() {
 
         Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
             try {
-                val crashLog = java.io.File(getExternalFilesDir(null), "crash_log.txt")
+                val crashLog = java.io.File(filesDir, "crash_log.txt")
                 crashLog.writeText(android.util.Log.getStackTraceString(throwable))
                 val intent = Intent(this, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -155,6 +155,9 @@ class MainActivity : FragmentActivity() {
                         is AppAction.AutoRequestAccess -> viewModel.autoRequestAccess(action.path)
                         is AppAction.RequestShizukuAccess -> { /* Shizuku access handled internally by rikka */ }
                         is AppAction.SmbAction -> viewModel.handleSmbAction(action)
+                        is AppAction.FtpAction -> viewModel.handleFtpAction(action)
+                        is AppAction.SftpAction -> viewModel.handleSftpAction(action)
+                        is AppAction.WebDavAction -> viewModel.handleWebDavAction(action)
                         is AppAction.Reload -> viewModel.reload()
                         is AppAction.SelectNavTab -> viewModel.selectNavTab(action.tab)
                         is AppAction.SetErrorMessage -> viewModel.setErrorMessage(action.message)
@@ -177,6 +180,7 @@ class MainActivity : FragmentActivity() {
                         is AppAction.ToggleTextDecoration -> viewModel.toggleTextDecoration(action.decoration)
                         is AppAction.SetMainTextScale -> viewModel.setMainTextScale(action.scale)
                         is AppAction.SetSubTextScale -> viewModel.setSubTextScale(action.scale)
+                        is AppAction.SetInvertText -> viewModel.setInvertText(action.invert)
                         is AppAction.SetCornerRoundness -> viewModel.setCornerRoundness(action.roundness)
                         is AppAction.SetGridColumns -> viewModel.setGridColumns(action.columns)
                         is AppAction.SetCleanerCategory -> viewModel.setCleanerCategory(action.category)
@@ -193,19 +197,23 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetShowFullScreenPlayer -> viewModel.setShowFullScreenPlayer(action.show)
                         is AppAction.SetOrganiserPath -> viewModel.setOrganiserPath(action.category, action.path)
                         is AppAction.OrganiseDownloads -> viewModel.organiseDownloads()
+                        is AppAction.ConfirmOrganiseDownloads -> viewModel.confirmOrganiseDownloads()
+                        is AppAction.CancelOrganiseDownloads -> viewModel.cancelOrganiseDownloads()
                         is AppAction.SetViewerPreference -> viewModel.setViewerPreference(action.category, action.preference)
                         is AppAction.RequestAuth -> viewModel.requestAuth(action.reason, action.path, action.fileId, action.folderName)
                         is AppAction.CancelAuth -> viewModel.cancelAuth()
                         is AppAction.AuthSuccess -> viewModel.authSuccess(action.reason, action.path, action.fileId, action.folderName, action.password)
                         is AppAction.UpdateGlobalPassword -> viewModel.updateGlobalPassword(action.oldPassword, action.newPassword)
                         is AppAction.SetBiometricEnabled -> viewModel.setBiometricEnabled(action.enabled)
+                        is AppAction.ToggleHapticsMaster -> viewModel.toggleHapticsMaster(action.enabled)
+                        is AppAction.ToggleHapticsOption -> viewModel.toggleHapticsOption(action.key, action.enabled)
                     }
                 }
             }
 
             SiftApp(
                 state = state,
-                onAction = onAction,
+                onActionOrig = onAction,
                 snackbarHostState = snackbarHostState,
                 windowWidthSizeClass = windowSizeClass.widthSizeClass
             )

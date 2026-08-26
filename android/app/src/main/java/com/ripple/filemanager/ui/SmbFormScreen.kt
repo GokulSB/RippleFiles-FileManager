@@ -22,6 +22,7 @@ fun SmbFormDialog(
     onSave: (SmbConnection, String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var displayName by remember { mutableStateOf("") }
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("445") }
@@ -32,7 +33,7 @@ fun SmbFormDialog(
     
     var error by remember { mutableStateOf<String?>(null) }
     
-    AlertDialog(
+    com.ripple.filemanager.ui.GradientAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.add_smb_connection_title)) },
         text = {
@@ -131,7 +132,7 @@ fun SmbFormDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = { haptics.tap(); onDismiss() }) {
                 Text(stringResource(R.string.cancel))
             }
         }

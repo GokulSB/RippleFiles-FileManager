@@ -195,6 +195,15 @@ fun FileGrid(
     gridColumns: Int = 2,
     onItemPositioned: (Int, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> }
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
+    val hapticOnFileClick: (FileItem) -> Unit = { file ->
+        haptics.fileOpen()
+        onFileClick(file)
+    }
+    val hapticOnFileLongClick: (FileItem) -> Unit = { file ->
+        haptics.tap()
+        onFileLongClick(file)
+    }
     val context = LocalContext.current
     val customImageLoader = remember(context) {
         coil.ImageLoader.Builder(context).components {
@@ -248,8 +257,8 @@ fun FileGrid(
                                             imageLoader = customImageLoader,
                                             cornerRoundness = cornerRoundness,
                                             onExpandFullName = { showFullNameSheetFor = it },
-                                            onClick = { onFileClick(file) },
-                                            onLongClick = { onFileLongClick(file) },
+                                            onClick = { hapticOnFileClick(file) },
+                                            onLongClick = { hapticOnFileLongClick(file) },
                                             onPinClick = { onPinClick(file) },
                                             onLockClick = { onLockClick(file) },
                                             onUnlockClick = { onUnlockClick(file) },
@@ -265,8 +274,8 @@ fun FileGrid(
                                         iconShape = iconShape,
                                         cornerRoundness = cornerRoundness,
                                         searchQuery = searchQuery,
-                                        onClick = { onFileClick(file) },
-                                        onLongClick = { onFileLongClick(file) },
+                                        onClick = { hapticOnFileClick(file) },
+                                        onLongClick = { hapticOnFileLongClick(file) },
                                         onPinClick = { onPinClick(file) },
                                         onInfoClick = { onInfoClick(file) },
                                         onRenameClick = { name -> onRenameClick(file, name) },
@@ -323,8 +332,8 @@ fun FileGrid(
                                             imageLoader = customImageLoader,
                                             cornerRoundness = cornerRoundness,
                                             onExpandFullName = { showFullNameSheetFor = it },
-                                            onClick = { onFileClick(file) },
-                                            onLongClick = { onFileLongClick(file) },
+                                            onClick = { hapticOnFileClick(file) },
+                                            onLongClick = { hapticOnFileLongClick(file) },
                                             onPinClick = { onPinClick(file) },
                                             onLockClick = { onLockClick(file) },
                                             onUnlockClick = { onUnlockClick(file) },
@@ -341,8 +350,8 @@ fun FileGrid(
                                         cornerRoundness = cornerRoundness,
                                         gridColumns = gridColumns,
                                         searchQuery = searchQuery,
-                                        onClick = { onFileClick(file) },
-                                        onLongClick = { onFileLongClick(file) },
+                                        onClick = { hapticOnFileClick(file) },
+                                        onLongClick = { hapticOnFileLongClick(file) },
                                         onPinClick = { onPinClick(file) },
                                         onInfoClick = { onInfoClick(file) },
                                         onRenameClick = { name -> onRenameClick(file, name) },

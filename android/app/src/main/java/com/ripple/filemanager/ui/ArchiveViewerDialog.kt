@@ -22,6 +22,7 @@ fun ArchiveViewerDialog(
     onDismiss: () -> Unit,
     onExtractRequest: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val coroutineScope = rememberCoroutineScope()
     var fileList by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -41,7 +42,7 @@ fun ArchiveViewerDialog(
         }
     }
 
-    AlertDialog(
+    com.ripple.filemanager.ui.GradientAlertDialog(
         onDismissRequest = { if (!isExtracting) onDismiss() },
         title = {
             Text(text = archiveFile.name)
@@ -73,7 +74,7 @@ fun ArchiveViewerDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = onExtractRequest,
+                onClick = { haptics.tap(); onExtractRequest() },
                 enabled = !isLoading && errorMessage == null
             ) {
                 Text("Extract")
@@ -81,7 +82,7 @@ fun ArchiveViewerDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = onDismiss,
+                onClick = { haptics.tap(); onDismiss() },
                 enabled = !isExtracting
             ) {
                 Text(stringResource(R.string.cancel))

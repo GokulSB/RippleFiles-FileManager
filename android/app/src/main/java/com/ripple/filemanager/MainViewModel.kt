@@ -50,16 +50,82 @@ data class SmbState(
     val error: SmbError? = null
 )
 
+@androidx.compose.runtime.Immutable
+data class FtpState(
+    val savedConnections: ImmutableList<com.ripple.filemanager.data.ftp.FtpConnection> = persistentListOf(),
+    val activeConnectionId: String? = null,
+    val currentPath: String = "",
+    val connectionStatus: ConnectionStatus = ConnectionStatus.Idle,
+    val error: FtpError? = null
+)
+
+
+@androidx.compose.runtime.Immutable
+data class WebDavState(
+    val savedConnections: kotlinx.collections.immutable.ImmutableList<com.ripple.filemanager.data.webdav.WebDavConnection> = kotlinx.collections.immutable.persistentListOf(),
+    val activeConnectionId: String? = null,
+    val currentPath: String = "",
+    val connectionStatus: ConnectionStatus = ConnectionStatus.Idle,
+    val error: WebDavError? = null
+)
+
+@androidx.compose.runtime.Immutable
+data class SftpState(
+    val savedConnections: ImmutableList<com.ripple.filemanager.data.sftp.SftpConnection> = persistentListOf(),
+    val activeConnectionId: String? = null,
+    val currentPath: String = "",
+    val connectionStatus: ConnectionStatus = ConnectionStatus.Idle,
+    val error: SftpError? = null
+)
+
+
 enum class NavTab { HOME, RECENT, PINNED, CLOUD }
 
 @androidx.compose.runtime.Immutable
 data class NavBarState(val selected: NavTab = NavTab.HOME)
+
+enum class HapticEvent {
+    FileOpen,
+    CopyPaste,
+    Delete,
+    Cleaner,
+    SettingsToggle,
+    Fab,
+    General,
+}
+
+@androidx.compose.runtime.Immutable
+data class HapticsSettings(
+    val masterEnabled: Boolean = true,
+    val fileOpen: Boolean = true,
+    val copyPaste: Boolean = true,
+    val delete: Boolean = true,
+    val cleaner: Boolean = true,
+    val settings: Boolean = false,
+    val fab: Boolean = true,
+) {
+    fun isEnabled(event: HapticEvent): Boolean {
+        if (!masterEnabled) return false
+        return when (event) {
+            HapticEvent.FileOpen -> fileOpen
+            HapticEvent.CopyPaste -> copyPaste
+            HapticEvent.Delete -> delete
+            HapticEvent.Cleaner -> cleaner
+            HapticEvent.SettingsToggle -> settings
+            HapticEvent.Fab -> fab
+            HapticEvent.General -> true
+        }
+    }
+}
 
 @androidx.compose.runtime.Immutable
 data class AppState(
     val navBarState: NavBarState = NavBarState(),
     val hasShizuku: Boolean = false,
     val smbState: SmbState = SmbState(),
+    val ftpState: FtpState = FtpState(),
+    val sftpState: SftpState = SftpState(),
+    val webDavState: WebDavState = WebDavState(),
     val location: String = "home",
     val currentFolderName: String? = null,
     val driveFolderStack: List<Pair<String, String>> = emptyList(),
@@ -108,6 +174,7 @@ data class AppState(
     val textDecorations: ImmutableSet<String> = persistentSetOf(),
     val mainTextScale: Float = 1.0f,
     val subTextScale: Float = 1.0f,
+    val invertText: Boolean = false,
     val gridColumns: Int = 2,
     val cornerRoundness: Float = 0.5f,
     val showCleanerScreen: Boolean = false,
@@ -148,6 +215,7 @@ data class AppState(
     val orgDestMusic: String = "",
     val orgDestVideos: String = "",
     val organiseProgress: Float? = null,
+    val organisePendingFiles: List<FileItem> = emptyList(),
 
     val extractProgress: Float? = null,
     val isExtractPaused: Boolean = false,
@@ -158,7 +226,8 @@ data class AppState(
     val viewerMusic: String = "In-app",
     val viewerImage: String = "In-app",
     val pasteLoadingCount: Int? = null,
-    val unlockedFileToOpen: FileItem? = null
+    val unlockedFileToOpen: FileItem? = null,
+    val haptics: HapticsSettings = HapticsSettings()
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -180,6 +249,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val smbStore by lazy { com.ripple.filemanager.data.smb.SmbStore(application) }
     private val smbProvider = com.ripple.filemanager.data.smb.SmbStorageProvider()
 
+    private val ftpStore by lazy { com.ripple.filemanager.data.ftp.FtpStore(application) }
+    private val ftpProvider = com.ripple.filemanager.data.ftp.FtpStorageProvider()
+
+    private val sftpStore by lazy { com.ripple.filemanager.data.sftp.SftpStore(application) }
+    private val sftpProvider = com.ripple.filemanager.data.sftp.SftpStorageProvider()
+
+    private val webDavStore by lazy { com.ripple.filemanager.data.webdav.WebDavStore(application) }
+    private val webDavProvider = com.ripple.filemanager.data.webdav.WebDavStorageProvider()
+
     init {
         val savedTheme = prefs.getString("theme_mode", "SYSTEM") ?: "SYSTEM"
         val savedHue = prefs.getFloat("theme_hue", 262f)
@@ -190,8 +268,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val savedDecorations = prefs.getStringSet("text_decorations", emptySet()) ?: emptySet()
         val savedMainScale = prefs.getFloat("main_text_scale", 1.0f)
         val savedSubScale = prefs.getFloat("sub_text_scale", 1.0f)
+        val savedInvertText = prefs.getBoolean("invert_text", false)
         val savedGridColumns = prefs.getInt("grid_columns", 2)
         val savedCornerRoundness = prefs.getFloat("corner_roundness", 0.5f)
+        
+        val hapticsMaster = prefs.getBoolean("haptics_master", true)
+        val hapticsFileOpen = prefs.getBoolean("haptics_file_open", true)
+        val hapticsCopyPaste = prefs.getBoolean("haptics_copy_paste", true)
+        val hapticsDelete = prefs.getBoolean("haptics_delete", true)
+        val hapticsCleaner = prefs.getBoolean("haptics_cleaner", true)
+        val hapticsSettings = prefs.getBoolean("haptics_settings", true)
+        val hapticsFab = prefs.getBoolean("haptics_fab", true)
         
         val downloadPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path
         val defaultDocs = "$downloadPath/Docs"
@@ -219,6 +306,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             textDecorations = savedDecorations.toImmutableSet(),
             mainTextScale = savedMainScale,
             subTextScale = savedSubScale,
+            invertText = savedInvertText,
             gridColumns = savedGridColumns,
             cornerRoundness = savedCornerRoundness,
             isRecycleBinEnabled = prefs.getBoolean("recycle_bin_enabled", true),
@@ -231,7 +319,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             orgDestVideos = savedVideos,
             viewerTextPdf = prefs.getString("viewer_text_pdf", "In-app") ?: "In-app",
             viewerMusic = prefs.getString("viewer_music", "In-app") ?: "In-app",
-            viewerImage = prefs.getString("viewer_image", "In-app") ?: "In-app"
+            viewerImage = prefs.getString("viewer_image", "In-app") ?: "In-app",
+            haptics = HapticsSettings(
+                masterEnabled = hapticsMaster,
+                fileOpen = hapticsFileOpen,
+                copyPaste = hapticsCopyPaste,
+                delete = hapticsDelete,
+                cleaner = hapticsCleaner,
+                settings = hapticsSettings,
+                fab = hapticsFab
+            )
         ) }
         
         val savedSmbConnectionId = prefs.getString("active_smb_connection", null)
@@ -242,6 +339,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             savedConnections = savedConnectionsList,
             activeConnectionId = validSmbConnection,
             connectionStatus = if (validSmbConnection != null) ConnectionStatus.Connected else ConnectionStatus.Idle
+        )) }
+
+        val savedFtpConnectionId = prefs.getString("active_ftp_connection", null)
+        val savedFtpList = ftpStore.getConnections()
+        val validFtpConnection = if (savedFtpConnectionId != null && savedFtpList.any { it.id == savedFtpConnectionId }) savedFtpConnectionId else null
+
+        _state.update { it.copy(ftpState = it.ftpState.copy(
+            savedConnections = savedFtpList,
+            activeConnectionId = validFtpConnection,
+            connectionStatus = if (validFtpConnection != null) ConnectionStatus.Connected else ConnectionStatus.Idle
+        )) }
+
+        
+        val savedWebDavConnectionId = prefs.getString("active_webdav_connection", null)
+        val savedWebDavList = webDavStore.getConnections()
+        val validWebDavConnection = if (savedWebDavConnectionId != null && savedWebDavList.any { it.id == savedWebDavConnectionId }) savedWebDavConnectionId else null
+
+        _state.update { it.copy(webDavState = it.webDavState.copy(
+            savedConnections = savedWebDavList,
+            activeConnectionId = validWebDavConnection,
+            connectionStatus = if (validWebDavConnection != null) ConnectionStatus.Connected else ConnectionStatus.Idle
+        )) }
+
+        val savedSftpConnectionId = prefs.getString("active_sftp_connection", null)
+        val savedSftpList = sftpStore.getConnections()
+        val validSftpConnection = if (savedSftpConnectionId != null && savedSftpList.any { it.id == savedSftpConnectionId }) savedSftpConnectionId else null
+
+        _state.update { it.copy(sftpState = it.sftpState.copy(
+            savedConnections = savedSftpList,
+            activeConnectionId = validSftpConnection,
+            connectionStatus = if (validSftpConnection != null) ConnectionStatus.Connected else ConnectionStatus.Idle
         )) }
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -333,6 +461,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         res = smbProvider.listFiles(location, connectionId)
                     }
                     res.getOrThrow()
+                } else if (location.startsWith("ftp_")) {
+                    val connectionId = location.substringAfter("ftp_").substringBefore(":")
+                    var res = ftpProvider.listFiles(location, connectionId)
+                    if (res.isFailure) {
+                        val connection = ftpStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
+                        val password = ftpStore.getPassword(connectionId) ?: throw Exception("Password not found")
+                        ftpProvider.connect(connection, password).getOrThrow()
+                        res = ftpProvider.listFiles(location, connectionId)
+                    }
+                    res.getOrThrow()
+                } else if (location.startsWith("sftp_")) {
+                    val connectionId = location.substringAfter("sftp_").substringBefore(":")
+                    var res = sftpProvider.listFiles(location, connectionId)
+                    if (res.isFailure) {
+                        val connection = sftpStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
+                        val password = sftpStore.getPassword(connectionId) ?: throw Exception("Password not found")
+                        sftpProvider.connect(connection, password).getOrThrow()
+                        res = sftpProvider.listFiles(location, connectionId)
+                    }
+                    res.getOrThrow()
+                } else if (location.startsWith("webdav_") || location.startsWith("nextcloud_")) {
+                    val prefix = if (location.startsWith("nextcloud_")) "nextcloud_" else "webdav_"
+                    val connectionId = location.removePrefix(prefix).substringBefore(":")
+                    var res = webDavProvider.listFiles(location, connectionId)
+                    if (res.isFailure) {
+                        val connection = webDavStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
+                        val password = webDavStore.getPassword(connectionId) ?: throw Exception("Password not found")
+                        webDavProvider.connect(connection, password).getOrThrow()
+                        res = webDavProvider.listFiles(location, connectionId)
+                    }
+                    res.getOrThrow()
                 } else {
                     repository.getFiles(location)
                 }
@@ -376,6 +535,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val st = _state.value
             if (st.smbState.activeConnectionId != null) {
                 setLocation("smb_${st.smbState.activeConnectionId}:/")
+            } else if (st.ftpState.activeConnectionId != null) {
+                setLocation("ftp_${st.ftpState.activeConnectionId}:/")
+            } else if (st.sftpState.activeConnectionId != null) {
+                setLocation("sftp_${st.sftpState.activeConnectionId}:/")
+                        } else if (st.webDavState.activeConnectionId != null) {
+                val conn = st.webDavState.savedConnections.find { it.id == st.webDavState.activeConnectionId }
+                val prefix = if (conn?.isNextcloud == true) "nextcloud" else "webdav"
+                setLocation("${prefix}_${st.webDavState.activeConnectionId}:/")
             } else if (st.isGoogleDriveAuthenticated) {
                 setLocation("drive")
             } else if (st.isMegaAuthenticated) {
@@ -398,13 +565,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setLocation(location: String, folderName: String? = null) {
         val current = _state.value
-        val enteringCloudSubfolder = location.startsWith("drive_id:") || location.startsWith("mega_id:") || location.startsWith("dropbox_id:") || location.startsWith("smb_")
-        val wasInCloud = current.location == "drive" || current.location == "mega" || current.location == "dropbox" || current.location.startsWith("drive_id:") || current.location.startsWith("mega_id:") || current.location.startsWith("dropbox_id:") || current.location.startsWith("smb_")
+        val enteringCloudSubfolder = location.startsWith("drive_id:") || location.startsWith("mega_id:") || location.startsWith("dropbox_id:") || location.startsWith("smb_") || location.startsWith("ftp_") || location.startsWith("sftp_") || location.startsWith("webdav_") || location.startsWith("nextcloud_")
+        val wasInCloud = current.location == "drive" || current.location == "mega" || current.location == "dropbox" || current.location.startsWith("drive_id:") || current.location.startsWith("mega_id:") || current.location.startsWith("dropbox_id:") || current.location.startsWith("smb_") || current.location.startsWith("ftp_") || current.location.startsWith("sftp_") || current.location.startsWith("webdav_") || current.location.startsWith("nextcloud_")
 
         val newStack = when {
             enteringCloudSubfolder && wasInCloud ->
                 current.driveFolderStack + (current.location to (current.currentFolderName ?: "Cloud"))
-            location == "drive" || location == "mega" || location == "dropbox" || (location.startsWith("smb_") && location.endsWith(":/")) -> emptyList()
+            location == "drive" || location == "mega" || location == "dropbox" || (location.startsWith("smb_") && location.endsWith(":/")) || (location.startsWith("ftp_") && location.endsWith(":/")) || (location.startsWith("sftp_") && location.endsWith(":/")) || (location.startsWith("webdav_") && location.endsWith(":/")) || (location.startsWith("nextcloud_") && location.endsWith(":/")) -> emptyList()
             else -> current.driveFolderStack
         }
 
@@ -446,7 +613,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(isLoading = true, files = kotlinx.collections.immutable.persistentListOf()) }
             searchJob = viewModelScope.launch(Dispatchers.Default) {
                 val st = _state.value
-                val isLocal = !(st.location == "mega" || st.location.startsWith("mega_id:") || st.location.startsWith("smb_") || st.location == "drive" || st.location.startsWith("drive_id:") || st.location == "recent" || st.location == "pinned")
+                val isLocal = !(st.location == "mega" || st.location.startsWith("mega_id:") || st.location.startsWith("smb_") || st.location.startsWith("ftp_") || st.location.startsWith("sftp_") || st.location.startsWith("webdav_") || st.location.startsWith("nextcloud_") || st.location == "drive" || st.location.startsWith("drive_id:") || st.location == "recent" || st.location == "pinned")
                 
                 val results = if (isLocal) {
                     repository.searchLocalFiles(st.location, query)
@@ -754,9 +921,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!currentPath.lowercase(java.util.Locale.getDefault()).endsWith("download")) return
 
         val filesToOrganise = _state.value.files.filter { !it.isEmptyFolder && it.type != "folder" }
+        if (filesToOrganise.isEmpty()) {
+            viewModelScope.launch { _snackbarMessage.emit("No files to organise") }
+            return
+        }
+
+        // Just populate the pending files state to show the UI
+        _state.update { it.copy(organisePendingFiles = filesToOrganise) }
+    }
+
+    fun cancelOrganiseDownloads() {
+        _state.update { it.copy(organisePendingFiles = emptyList()) }
+    }
+
+    fun confirmOrganiseDownloads() {
+        val filesToOrganise = _state.value.organisePendingFiles
         if (filesToOrganise.isEmpty()) return
 
-        _state.update { it.copy(organiseProgress = 0f) }
+        val currentPath = _state.value.location
+
+        _state.update { it.copy(organisePendingFiles = emptyList(), organiseProgress = 0f) }
 
         viewModelScope.launch(Dispatchers.IO) {
             val docsDest = _state.value.orgDestDocs
@@ -906,6 +1090,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSubTextScale(scale: Float) {
         prefs.edit().putFloat("sub_text_scale", scale).apply()
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), subTextScale = scale) }
+    }
+
+    fun setInvertText(invert: Boolean) {
+        prefs.edit().putBoolean("invert_text", invert).apply()
+        _state.update { it.copy(hasShizuku = repository.hasShizuku(), invertText = invert) }
     }
 
     fun setGridColumns(columns: Int) {
@@ -1527,6 +1716,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setBiometricEnabled(enabled: Boolean) {
         repository.setBiometricEnabled(enabled)
     }
+    
+    fun toggleHapticsMaster(enabled: Boolean) {
+        prefs.edit().putBoolean("haptics_master", enabled).apply()
+        _state.update { it.copy(haptics = it.haptics.copy(masterEnabled = enabled)) }
+    }
+
+    fun toggleHapticsOption(key: String, enabled: Boolean) {
+        prefs.edit().putBoolean(key, enabled).apply()
+        _state.update { 
+            val haptics = it.haptics
+            val updated = when (key) {
+                "haptics_file_open" -> haptics.copy(fileOpen = enabled)
+                "haptics_copy_paste" -> haptics.copy(copyPaste = enabled)
+                "haptics_delete" -> haptics.copy(delete = enabled)
+                "haptics_cleaner" -> haptics.copy(cleaner = enabled)
+                "haptics_settings" -> haptics.copy(settings = enabled)
+                "haptics_fab" -> haptics.copy(fab = enabled)
+                else -> haptics
+            }
+            it.copy(haptics = updated)
+        }
+    }
 
     fun handleSmbAction(action: AppAction.SmbAction) {
         when (action) {
@@ -1608,10 +1819,247 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun handleFtpAction(action: AppAction.FtpAction) {
+        when (action) {
+            is AppAction.FtpAction.AddConnection -> {
+                ftpStore.saveConnection(action.connection, action.password)
+                _state.update { it.copy(ftpState = it.ftpState.copy(savedConnections = ftpStore.getConnections())) }
+            }
+            is AppAction.FtpAction.DeleteConnection -> {
+                ftpStore.deleteConnection(action.connectionId)
+                _state.update { it.copy(ftpState = it.ftpState.copy(savedConnections = ftpStore.getConnections())) }
+                if (_state.value.ftpState.activeConnectionId == action.connectionId) {
+                    handleFtpAction(AppAction.FtpAction.Disconnect(action.connectionId))
+                }
+            }
+            is AppAction.FtpAction.Connect -> {
+                val connection = ftpStore.getConnections().find { it.id == action.connectionId } ?: return
+                val password = ftpStore.getPassword(action.connectionId) ?: return
+
+                _state.update { it.copy(ftpState = it.ftpState.copy(connectionStatus = ConnectionStatus.Connecting, error = null)) }
+
+                viewModelScope.launch {
+                    val result = ftpProvider.connect(connection, password)
+                    if (result.isSuccess) {
+                        _state.update { it.copy(
+                            ftpState = it.ftpState.copy(
+                                activeConnectionId = action.connectionId,
+                                connectionStatus = ConnectionStatus.Connected,
+                                error = null
+                            )
+                        )}
+                        prefs.edit().putString("active_ftp_connection", action.connectionId).apply()
+                        setLocation("ftp_${action.connectionId}:/")
+                    } else {
+                        val e = result.exceptionOrNull()
+                        val ftpError = when (e) {
+                            is java.net.UnknownHostException, is java.net.ConnectException -> FtpError.HOST_UNREACHABLE
+                            is java.net.SocketTimeoutException, is java.util.concurrent.TimeoutException -> FtpError.TIMEOUT
+                            else -> {
+                                val msg = e?.message ?: ""
+                                if (msg.contains("Authentication") || msg.contains("Login") || msg.contains("530")) FtpError.AUTH_FAILED
+                                else FtpError.UNKNOWN
+                            }
+                        }
+                        _state.update { it.copy(ftpState = it.ftpState.copy(connectionStatus = ConnectionStatus.Error, error = ftpError)) }
+                        _snackbarMessage.emit("FTP Error: $ftpError")
+                    }
+                }
+            }
+            is AppAction.FtpAction.Disconnect -> {
+                viewModelScope.launch {
+                    ftpProvider.disconnect()
+                    _state.update { it.copy(ftpState = it.ftpState.copy(
+                        activeConnectionId = null,
+                        connectionStatus = ConnectionStatus.Idle,
+                        error = null,
+                        currentPath = ""
+                    ))}
+                    prefs.edit().remove("active_ftp_connection").apply()
+
+                    val st = _state.value
+                    if (st.isGoogleDriveAuthenticated) {
+                        setLocation("drive")
+                    } else if (st.isMegaAuthenticated) {
+                        setLocation("mega")
+                    } else if (st.isDropboxAuthenticated) {
+                        setLocation("dropbox")
+                    } else {
+                        setLocation("cloud")
+                    }
+                }
+            }
+            is AppAction.FtpAction.NavigateTo -> {
+                setLocation(action.path)
+            }
+        }
+    }
+
+    
+    fun handleWebDavAction(action: AppAction.WebDavAction) {
+        when (action) {
+            is AppAction.WebDavAction.AddConnection -> {
+                webDavStore.saveConnection(action.connection, action.password)
+                _state.update { it.copy(webDavState = it.webDavState.copy(savedConnections = webDavStore.getConnections())) }
+            }
+            is AppAction.WebDavAction.DeleteConnection -> {
+                webDavStore.deleteConnection(action.connectionId)
+                _state.update { it.copy(webDavState = it.webDavState.copy(savedConnections = webDavStore.getConnections())) }
+                if (_state.value.webDavState.activeConnectionId == action.connectionId) {
+                    handleWebDavAction(AppAction.WebDavAction.Disconnect(action.connectionId))
+                }
+            }
+            is AppAction.WebDavAction.Connect -> {
+                val connection = webDavStore.getConnections().find { it.id == action.connectionId } ?: return
+                
+                val password = webDavStore.getPassword(action.connectionId) ?: return
+                
+                _state.update { it.copy(webDavState = it.webDavState.copy(connectionStatus = ConnectionStatus.Connecting, error = null)) }
+
+                viewModelScope.launch {
+                    val result = webDavProvider.connect(connection, password)
+                    if (result.isSuccess) {
+                        _state.update { it.copy(
+                            webDavState = it.webDavState.copy(
+                                activeConnectionId = action.connectionId,
+                                connectionStatus = ConnectionStatus.Connected,
+                                error = null
+                            )
+                        )}
+                        prefs.edit().putString("active_webdav_connection", action.connectionId).apply()
+                        val prefix = if (connection.isNextcloud) "nextcloud" else "webdav"
+                        setLocation("${prefix}_${action.connectionId}:/")
+                    } else {
+                        val e = result.exceptionOrNull()
+                        val err = when (e) {
+                            is java.net.UnknownHostException, is java.net.ConnectException -> WebDavError.HOST_UNREACHABLE
+                            is com.ripple.filemanager.data.webdav.WebDavException.AuthFailed -> WebDavError.AUTH_FAILED
+                            is com.ripple.filemanager.data.webdav.WebDavException.NotFound -> WebDavError.NOT_FOUND
+                            else -> WebDavError.UNKNOWN
+                        }
+                        _state.update { it.copy(webDavState = it.webDavState.copy(connectionStatus = ConnectionStatus.Error, error = err)) }
+                        _snackbarMessage.emit("WebDAV Error: $err")
+                    }
+                }
+            }
+            is AppAction.WebDavAction.Disconnect -> {
+                viewModelScope.launch {
+                    webDavProvider.disconnect()
+                    _state.update { it.copy(webDavState = it.webDavState.copy(
+                        activeConnectionId = null,
+                        connectionStatus = ConnectionStatus.Idle,
+                        error = null,
+                        currentPath = ""
+                    ))}
+                    prefs.edit().remove("active_webdav_connection").apply()
+
+                    val st = _state.value
+                    if (st.isGoogleDriveAuthenticated) {
+                        setLocation("drive")
+                    } else if (st.isMegaAuthenticated) {
+                        setLocation("mega")
+                    } else if (st.isDropboxAuthenticated) {
+                        setLocation("dropbox")
+                    } else {
+                        setLocation("cloud")
+                    }
+                }
+            }
+            is AppAction.WebDavAction.NavigateTo -> {
+                setLocation(action.path)
+            }
+        }
+    }
+
+    fun handleSftpAction(action: AppAction.SftpAction) {
+        when (action) {
+            is AppAction.SftpAction.AddConnection -> {
+                sftpStore.saveConnection(action.connection, action.password)
+                _state.update { it.copy(sftpState = it.sftpState.copy(savedConnections = sftpStore.getConnections())) }
+            }
+            is AppAction.SftpAction.DeleteConnection -> {
+                sftpStore.deleteConnection(action.connectionId)
+                _state.update { it.copy(sftpState = it.sftpState.copy(savedConnections = sftpStore.getConnections())) }
+                if (_state.value.sftpState.activeConnectionId == action.connectionId) {
+                    handleSftpAction(AppAction.SftpAction.Disconnect(action.connectionId))
+                }
+            }
+            is AppAction.SftpAction.Connect -> {
+                val connection = sftpStore.getConnections().find { it.id == action.connectionId } ?: return
+                val password = sftpStore.getPassword(action.connectionId) ?: return
+
+                _state.update { it.copy(sftpState = it.sftpState.copy(connectionStatus = ConnectionStatus.Connecting, error = null)) }
+
+                viewModelScope.launch {
+                    val result = sftpProvider.connect(connection, password)
+                    if (result.isSuccess) {
+                        // Pin host key on first successful connect
+                        val observed = result.getOrNull()?.observedFingerprint
+                        if (connection.hostKeyFingerprint == null && !observed.isNullOrBlank()) {
+                            sftpStore.updateHostKeyFingerprint(action.connectionId, observed)
+                        }
+
+                        _state.update { it.copy(
+                            sftpState = it.sftpState.copy(
+                                activeConnectionId = action.connectionId,
+                                connectionStatus = ConnectionStatus.Connected,
+                                error = null
+                            )
+                        )}
+                        prefs.edit().putString("active_sftp_connection", action.connectionId).apply()
+                        setLocation("sftp_${action.connectionId}:/")
+                    } else {
+                        val e = result.exceptionOrNull()
+                        val sftpError = when (e) {
+                            is java.net.UnknownHostException, is java.net.ConnectException -> SftpError.HOST_UNREACHABLE
+                            is java.net.SocketTimeoutException, is java.util.concurrent.TimeoutException -> SftpError.TIMEOUT
+                            else -> {
+                                val msg = e?.message ?: ""
+                                if (msg.contains("Auth") || msg.contains("password") || msg.contains("publickey")) SftpError.AUTH_FAILED
+                                else if (msg.contains("HostKeyChanged") || msg.contains("fingerprint")) SftpError.HOST_KEY_MISMATCH
+                                else SftpError.UNKNOWN
+                            }
+                        }
+                        _state.update { it.copy(sftpState = it.sftpState.copy(connectionStatus = ConnectionStatus.Error, error = sftpError)) }
+                        _snackbarMessage.emit("SFTP Error: $sftpError")
+                    }
+                }
+            }
+            is AppAction.SftpAction.Disconnect -> {
+                viewModelScope.launch {
+                    sftpProvider.disconnect()
+                    _state.update { it.copy(sftpState = it.sftpState.copy(
+                        activeConnectionId = null,
+                        connectionStatus = ConnectionStatus.Idle,
+                        error = null,
+                        currentPath = ""
+                    ))}
+                    prefs.edit().remove("active_sftp_connection").apply()
+
+                    val st = _state.value
+                    if (st.isGoogleDriveAuthenticated) {
+                        setLocation("drive")
+                    } else if (st.isMegaAuthenticated) {
+                        setLocation("mega")
+                    } else if (st.isDropboxAuthenticated) {
+                        setLocation("dropbox")
+                    } else {
+                        setLocation("cloud")
+                    }
+                }
+            }
+            is AppAction.SftpAction.NavigateTo -> {
+                setLocation(action.path)
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         musicJob?.cancel()
         exoPlayer?.release()
         exoPlayer = null
+        ftpProvider.disconnect()
+        sftpProvider.disconnect()
     }
 }

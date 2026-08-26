@@ -1,6 +1,8 @@
 package com.ripple.filemanager
 
 import com.ripple.filemanager.data.smb.SmbConnection
+import com.ripple.filemanager.data.ftp.FtpConnection
+import com.ripple.filemanager.data.sftp.SftpConnection
 
 enum class AuthReason { OPEN_FILE, LOCK_FILE, UNLOCK_FILE }
 
@@ -62,6 +64,10 @@ sealed class AppAction {
     object CancelExtract : AppAction()
     object ClearExtractResult : AppAction()
     
+    // Haptics Settings
+    data class ToggleHapticsMaster(val enabled: Boolean) : AppAction()
+    data class ToggleHapticsOption(val key: String, val enabled: Boolean) : AppAction()
+    
     // Auth & Permissions
     data class SetGoogleDriveAuthStatus(val isAuthenticated: Boolean, val email: String?) : AppAction()
     data class SetDrivePickedIds(val ids: List<String>) : AppAction()
@@ -80,6 +86,33 @@ sealed class AppAction {
         data class DeleteConnection(val connectionId: String) : SmbAction()
         object ConnectSucceeded : SmbAction()
         data class ConnectFailed(val error: SmbError) : SmbAction()
+    }
+
+    // FTP
+    sealed class FtpAction : AppAction() {
+        data class AddConnection(val connection: com.ripple.filemanager.data.ftp.FtpConnection, val password: String) : FtpAction()
+        data class Connect(val connectionId: String) : FtpAction()
+        data class Disconnect(val connectionId: String) : FtpAction()
+        data class NavigateTo(val path: String) : FtpAction()
+        data class DeleteConnection(val connectionId: String) : FtpAction()
+    }
+
+    // SFTP
+    sealed class SftpAction : AppAction() {
+        data class AddConnection(val connection: com.ripple.filemanager.data.sftp.SftpConnection, val password: String) : SftpAction()
+        data class Connect(val connectionId: String) : SftpAction()
+        data class Disconnect(val connectionId: String) : SftpAction()
+        data class NavigateTo(val path: String) : SftpAction()
+        data class DeleteConnection(val connectionId: String) : SftpAction()
+    }
+
+    // WebDAV / Nextcloud
+    sealed class WebDavAction : AppAction() {
+        data class AddConnection(val connection: com.ripple.filemanager.data.webdav.WebDavConnection, val password: String) : WebDavAction()
+        data class Connect(val connectionId: String) : WebDavAction()
+        data class Disconnect(val connectionId: String) : WebDavAction()
+        data class NavigateTo(val path: String) : WebDavAction()
+        data class DeleteConnection(val connectionId: String) : WebDavAction()
     }
     
     // Music Player Actions
@@ -101,6 +134,7 @@ sealed class AppAction {
     data class ToggleTextDecoration(val decoration: String) : AppAction()
     data class SetMainTextScale(val scale: Float) : AppAction()
     data class SetSubTextScale(val scale: Float) : AppAction()
+    data class SetInvertText(val invert: Boolean) : AppAction()
     data class SetCornerRoundness(val roundness: Float) : AppAction()
     data class SetGridColumns(val columns: Int) : AppAction()
 
@@ -128,6 +162,8 @@ sealed class AppAction {
     // File Organiser
     data class SetOrganiserPath(val category: String, val path: String) : AppAction()
     object OrganiseDownloads : AppAction()
+    object ConfirmOrganiseDownloads : AppAction()
+    object CancelOrganiseDownloads : AppAction()
     
     // Viewers
     data class SetViewerPreference(val category: String, val preference: String) : AppAction()
@@ -135,3 +171,6 @@ sealed class AppAction {
 }
 
 enum class SmbError { AUTH_FAILED, HOST_UNREACHABLE, TIMEOUT, SHARE_NOT_FOUND, UNKNOWN }
+enum class FtpError { AUTH_FAILED, HOST_UNREACHABLE, TIMEOUT, UNKNOWN }
+enum class SftpError { AUTH_FAILED, HOST_UNREACHABLE, TIMEOUT, HOST_KEY_MISMATCH, UNKNOWN }
+enum class WebDavError { AUTH_FAILED, NOT_FOUND, HOST_UNREACHABLE, UNKNOWN }

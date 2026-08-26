@@ -112,6 +112,7 @@ private fun NavTab(
     onSelect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val iconTint by animateColorAsState(
         targetValue = if (isActive) SkylineColors.Background else SkylineColors.Amber.copy(alpha = 0.6f),
         animationSpec = tween(250, easing = FastOutSlowInEasing),
@@ -131,7 +132,7 @@ private fun NavTab(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onSelect
+                onClick = { haptics.tap(); onSelect() }
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -161,6 +162,7 @@ fun UnifiedBottomPill(
         archiveProgress is com.ripple.filemanager.archive.ArchiveProgress.Running || archiveProgress is com.ripple.filemanager.archive.ArchiveProgress.Complete -> 4
         state.pasteProgress != null -> 0
         state.isSelectionMode -> 1
+        state.organisePendingFiles.isNotEmpty() -> 5
         state.clipboardPaths.isNotEmpty() -> 2
         else -> 3
     }
@@ -171,11 +173,149 @@ fun UnifiedBottomPill(
         label = "unified_pill"
     ) { target ->
         when (target) {
-            4 -> if (archiveProgress != null) ExtractingStatePill(archiveProgress, onCancelExtract, modifier)
+            4 -> if (archiveProgress != null) ExtractingStatePill(state, archiveProgress, onCancelExtract, modifier)
             0 -> PastingStatePill(state, onAction, capturedTargetFolderName, modifier)
             1 -> selectionModeContent()
+            5 -> OrganisePendingPill(state, onAction, modifier)
             2 -> ClipboardArmedPill(state, onAction, onCaptureTargetFolder, modifier)
             3 -> rippleNavContent()
+        }
+    }
+}
+
+@Composable
+fun OrganisePendingPill(
+    state: AppState,
+    onAction: (AppAction) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var filesExpanded by remember { mutableStateOf(false) }
+    val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
+    
+    val fileCount = state.organisePendingFiles.size
+    val fileNames = state.organisePendingFiles.map { it.name }
+    
+    val cornerRadius by animateDpAsState(
+        targetValue = if (filesExpanded) 20.dp else 999.dp,
+        animationSpec = tween(180),
+        label = "pill_corner"
+    )
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (filesExpanded) 180f else 0f,
+        animationSpec = tween(180),
+        label = "chevron_rot"
+    )
+    
+    Column(
+        modifier = modifier
+            .border(1.dp, SkylineColors.Border, RoundedCornerShape(cornerRadius))
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(SkylineColors.Surface)
+            .animateContentSize()
+    ) {
+        if (filesExpanded) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 190.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(fileNames) { name ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, SkylineColors.Border, RoundedCornerShape(8.dp))
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Folder, contentDescription = null, tint = SkylineColors.TextDim, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = name,
+                            fontFamily = ManropeFontFamily,
+                            fontSize = 12.5.sp,
+                            color = SkylineColors.TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+        
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.AutoFixHigh,
+                contentDescription = null,
+                tint = SkylineColors.Amber,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(
+                modifier = Modifier.weight(1f).clickable { haptics.tap(); filesExpanded = !filesExpanded }
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = pluralStringResource(R.plurals.items_ready, fileCount, fileCount).uppercase(),
+                        fontFamily = JetBrainsMonoFamily,
+                        fontSize = 11.sp,
+                        letterSpacing = 0.5.sp,
+                        color = SkylineColors.TextPrimary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = SkylineColors.TextDim,
+                        modifier = Modifier.size(13.dp).rotate(chevronRotation)
+                    )
+                }
+                Text(
+                    text = "WILL ORGANISE",
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 9.sp,
+                    color = SkylineColors.TextDim2
+                )
+            }
+            TextButton(
+                onClick = { haptics.tap(); onAction(AppAction.CancelOrganiseDownloads) },
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.cancel).uppercase(),
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 10.sp,
+                    color = SkylineColors.TextDim
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(SkylineColors.Amber)
+                    .clickable { 
+                        haptics.tap()
+                        onAction(AppAction.ConfirmOrganiseDownloads) 
+                    }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = SkylineColors.Background, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "PROCEED",
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SkylineColors.Background
+                )
+            }
         }
     }
 }
@@ -188,6 +328,7 @@ fun ClipboardArmedPill(
     modifier: Modifier = Modifier
 ) {
     var filesExpanded by remember { mutableStateOf(false) }
+    val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
     
     val fileCount = state.clipboardPaths.size
     val fileNames = state.clipboardPaths.map { it.substringAfterLast("/") }
@@ -255,7 +396,7 @@ fun ClipboardArmedPill(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(
-                modifier = Modifier.weight(1f).clickable { filesExpanded = !filesExpanded }
+                modifier = Modifier.weight(1f).clickable { haptics.copyPaste(); filesExpanded = !filesExpanded }
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -281,7 +422,7 @@ fun ClipboardArmedPill(
                 )
             }
             TextButton(
-                onClick = { onAction(AppAction.ClearClipboard) },
+                onClick = { haptics.copyPaste(); onAction(AppAction.ClearClipboard) },
                 contentPadding = PaddingValues(0.dp)
             ) {
                 Text(
@@ -297,6 +438,7 @@ fun ClipboardArmedPill(
                     .clip(RoundedCornerShape(999.dp))
                     .background(SkylineColors.Amber)
                     .clickable { 
+                        haptics.copyPaste()
                         // Target location is current viewing location
                         onCaptureTargetFolder(state.currentFolderName ?: "Current Folder")
                         onAction(AppAction.PasteClipboard(state.location)) 
@@ -325,6 +467,7 @@ fun PastingStatePill(
     capturedTargetFolderName: String?,
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
     val fileCount = state.clipboardPaths.size
     val fileNames = state.clipboardPaths.map { it.substringAfterLast("/") }
     val progress = state.pasteProgress ?: 0f
@@ -384,7 +527,7 @@ fun PastingStatePill(
                     .size(26.dp)
                     .border(1.dp, SkylineColors.Border, RoundedCornerShape(999.dp))
                     .clip(RoundedCornerShape(999.dp))
-                    .clickable { onAction(AppAction.TogglePastePause) },
+                    .clickable { haptics.copyPaste(); onAction(AppAction.TogglePastePause) },
                 contentAlignment = Alignment.Center
             ) {
                 val iconTint = if (state.isPastePaused) SkylineColors.Dust else SkylineColors.TextDim
@@ -401,8 +544,10 @@ fun PastingStatePill(
                 contentDescription = stringResource(R.string.cancel),
                 tint = SkylineColors.TextDim2,
                 modifier = Modifier
-                    .size(18.dp)
-                    .clickable { onAction(AppAction.CancelPaste) }
+                    .size(26.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable { haptics.copyPaste(); onAction(AppAction.CancelPaste) }
+                    .padding(8.dp)
             )
         }
         
@@ -434,10 +579,12 @@ fun PastingStatePill(
 
 @Composable
 fun ExtractingStatePill(
+    state: AppState,
     progressState: com.ripple.filemanager.archive.ArchiveProgress,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
     val isComplete = progressState is com.ripple.filemanager.archive.ArchiveProgress.Complete
     val runningState = progressState as? com.ripple.filemanager.archive.ArchiveProgress.Running
     val progress = if (isComplete) 1f else if (runningState != null && runningState.filesTotal > 0) runningState.filesDone.toFloat() / runningState.filesTotal else 0f
@@ -497,8 +644,10 @@ fun ExtractingStatePill(
                     contentDescription = stringResource(R.string.cancel),
                     tint = SkylineColors.TextDim2,
                     modifier = Modifier
-                        .size(18.dp)
-                        .clickable { onCancel() }
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable { haptics.copyPaste(); onCancel() }
+                        .padding(6.dp)
                 )
             } else {
                 Spacer(modifier = Modifier.width(18.dp))

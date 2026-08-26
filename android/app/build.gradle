@@ -12,8 +12,24 @@ android {
         applicationId "com.ripple.filemanager"
         minSdk 26
         targetSdk 36
-        versionCode 31
-        versionName "2.0.7"
+        versionCode 33
+        versionName "2.0.9"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    def localProperties = new Properties()
+    def localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localProperties.load(new FileInputStream(localPropertiesFile))
+    }
+
+    buildTypes {
+        debug {
+            buildConfigField "String", "TEST_WEBDAV_URL", "\"${localProperties.getProperty('testWebdavUrl', '')}\""
+            buildConfigField "String", "TEST_WEBDAV_USER", "\"${localProperties.getProperty('testWebdavUser', '')}\""
+            buildConfigField "String", "TEST_WEBDAV_PASSWORD", "\"${localProperties.getProperty('testWebdavPassword', '')}\""
+            buildConfigField "boolean", "TEST_WEBDAV_ALLOW_SELF_SIGNED", "${localProperties.getProperty('testWebdavAllowSelfSigned', 'false')}"
+        }
     }
 
     signingConfigs {
@@ -45,6 +61,7 @@ android {
         buildConfig true
     }
     packaging {
+        jniLibs.useLegacyPackaging = true
         resources.excludes.add("META-INF/DEPENDENCIES")
         resources.excludes.add("META-INF/LICENSE")
         resources.excludes.add("META-INF/LICENSE.txt")
@@ -125,9 +142,24 @@ dependencies {
     implementation 'com.hierynomus:smbj:0.13.0'
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
     implementation 'com.google.code.gson:gson:2.11.0'
+
+    // FTP (Apache Commons Net)
+    implementation 'commons-net:commons-net:3.11.1'
+
+    // SFTP (sshj)
+    implementation 'com.hierynomus:sshj:0.38.0'
+    
+    // WebDAV
+    implementation 'com.github.thegrizzlylabs:sardine-android:0.8'
+
     // Archives
     implementation("io.github.realburst:unrar5j:v2.0.3")
     implementation 'net.lingala.zip4j:zip4j:2.11.5'
+    
+    // Testing
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.6.1'
     
     // WorkManager
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
@@ -135,6 +167,10 @@ dependencies {
 
 configurations {
     all {
+        // sshj pulls in jdk18on variants; smbj pulls in jdk15to18 variants.
+        // Exclude all jdk15to18 modules so the newer jdk18on wins.
         exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
+        exclude group: 'org.bouncycastle', module: 'bcpkix-jdk15to18'
+        exclude group: 'org.bouncycastle', module: 'bcutil-jdk15to18'
     }
 }

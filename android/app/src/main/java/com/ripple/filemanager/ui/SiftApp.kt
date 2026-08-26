@@ -116,11 +116,44 @@ data class FlyingDelete(
 @Composable
 fun SiftApp(
     state: AppState,
-    onAction: (AppAction) -> Unit,
+    onActionOrig: (AppAction) -> Unit,
     snackbarHostState: androidx.compose.material3.SnackbarHostState,
     windowWidthSizeClass: androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 ) {
     val isWideScreen = windowWidthSizeClass != WindowWidthSizeClass.Compact
+
+    val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
+    androidx.compose.runtime.CompositionLocalProvider(com.ripple.filemanager.haptics.LocalHaptics provides haptics) {
+        val onAction: (AppAction) -> Unit = { action ->
+            when (action) {
+                is AppAction.DeleteSelectedFiles,
+                is AppAction.PermanentlyDeleteTrashFiles,
+                is AppAction.DeleteSelectedCleanerFiles -> haptics.delete()
+                is AppAction.SetClipboard,
+                is AppAction.PasteClipboard -> haptics.copyPaste()
+                is AppAction.OpenFileViewer,
+                is AppAction.PlayAudio -> haptics.fileOpen()
+                is AppAction.SetShowSettingsScreen,
+                is AppAction.ToggleHapticsMaster,
+                is AppAction.ToggleHapticsOption,
+                is AppAction.SetRecycleBinSettings -> haptics.settingsToggle()
+                is AppAction.SetCleanerScreenVisible,
+                is AppAction.SetCleanerCategory,
+                is AppAction.SelectAllCleanerFiles,
+                is AppAction.ClearCleanerSelection -> haptics.cleaner()
+                is AppAction.CreateFolder,
+                is AppAction.CreateFile -> haptics.fab()
+                is AppAction.Reload,
+                is AppAction.LoadFileDetails,
+                is AppAction.AuthSuccess,
+                is AppAction.SetGoogleDriveAuthStatus,
+                is AppAction.SetMegaAuthStatus,
+                is AppAction.SetDropboxAuthStatus,
+                is AppAction.AutoRequestAccess -> {}
+                else -> haptics.tap()
+            }
+            onActionOrig(action)
+        }
 
     BackHandler(enabled = state.isSelectionMode) {
         onAction(AppAction.ClearSelection)
@@ -140,7 +173,8 @@ fun SiftApp(
         fontStyle = state.fontStyle,
         textDecorations = state.textDecorations,
         mainTextScale = state.mainTextScale,
-        subTextScale = state.subTextScale
+        subTextScale = state.subTextScale,
+        invertText = state.invertText
     ) {
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val drawerScope = rememberCoroutineScope()
@@ -152,7 +186,7 @@ fun SiftApp(
         if (state.showMegaPopup) {
             var email by remember { mutableStateOf("") }
             var password by remember { mutableStateOf("") }
-            androidx.compose.material3.AlertDialog(
+            com.ripple.filemanager.ui.GradientAlertDialog(
                 onDismissRequest = { onAction(AppAction.SetShowMegaPopup(false)) },
                 containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
                 shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness),
@@ -263,8 +297,9 @@ fun SiftApp(
             }
         ) {
         Surface(
-            color = MaterialTheme.colorScheme.surface, 
-            modifier = Modifier.fillMaxSize()
+            color = androidx.compose.ui.graphics.Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.fillMaxSize().appGradientBackground()
         ) {
             if (isWideScreen) {
                 Row(modifier = Modifier.fillMaxSize()) {
@@ -416,7 +451,7 @@ fun SiftApp(
                             
                             if (showCreateFolderDialog) {
                                 var folderName by remember { mutableStateOf("") }
-                                AlertDialog(
+                                com.ripple.filemanager.ui.GradientAlertDialog(
                                     onDismissRequest = { showCreateFolderDialog = false },
                                     title = { com.ripple.filemanager.ui.MonoLabel("NEW FOLDER", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                                     text = {
@@ -441,7 +476,7 @@ fun SiftApp(
                                         }
                                     },
                                     dismissButton = {
-                                        TextButton(onClick = { showCreateFolderDialog = false }) {
+                                        TextButton(onClick = { haptics.tap(); showCreateFolderDialog = false }) {
                                             Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                                         }
                                     },
@@ -452,7 +487,7 @@ fun SiftApp(
                             
                             if (showCreateFileDialog) {
                                 var fileName by remember { mutableStateOf("") }
-                                AlertDialog(
+                                com.ripple.filemanager.ui.GradientAlertDialog(
                                     onDismissRequest = { showCreateFileDialog = false },
                                     title = { com.ripple.filemanager.ui.MonoLabel("NEW FILE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                                     text = {
@@ -477,7 +512,7 @@ fun SiftApp(
                                         }
                                     },
                                     dismissButton = {
-                                        TextButton(onClick = { showCreateFileDialog = false }) {
+                                        TextButton(onClick = { haptics.tap(); showCreateFileDialog = false }) {
                                             Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                                         }
                                     },
@@ -520,248 +555,7 @@ fun SiftApp(
         BackHandler(enabled = state.showSettingsScreen) {
             onAction(AppAction.SetShowSettingsScreen(false))
         }
-        val currentPickingCategory = remember { mutableStateOf<String?>(null) }
-        val context = androidx.compose.ui.platform.LocalContext.current
-        val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
-            contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
-        ) { uri ->
-            if (uri != null && currentPickingCategory.value != null) {
-                val path = uri.path
-                if (path != null && path.startsWith("/tree/primary:")) {
-                    val relPath = path.removePrefix("/tree/primary:")
-                    val absolutePath = "/storage/emulated/0/$relPath"
-                    onAction(AppAction.SetOrganiserPath(currentPickingCategory.value!!, absolutePath))
-                } else if (path != null && path == "/tree/primary") {
-                    val absolutePath = "/storage/emulated/0"
-                    onAction(AppAction.SetOrganiserPath(currentPickingCategory.value!!, absolutePath))
-                } else {
-                    android.widget.Toast.makeText(context, context.getString(R.string.select_internal_storage_error), android.widget.Toast.LENGTH_SHORT).show()
-                }
-            }
-            currentPickingCategory.value = null
-        }
-
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { onAction(AppAction.SetShowSettingsScreen(false)) }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleLarge)
-                    }
-                    Column(modifier = Modifier.weight(1f).padding(16.dp).verticalScroll(rememberScrollState())) {
-                        var isThemeExpanded by remember { mutableStateOf(false) }
-                        
-                        Surface(
-                            shape = getDynamicCornerShape(16f, state.cornerRoundness),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { isThemeExpanded = !isThemeExpanded }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(stringResource(R.string.theme_appearance_settings), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                                Icon(
-                                    imageVector = if (isThemeExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = stringResource(R.string.expand_content_desc),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        androidx.compose.animation.AnimatedVisibility(visible = isThemeExpanded) {
-                            ThemeSettingsContent(
-                                currentMode = state.themeMode,
-                                currentHue = state.themeHue,
-                                useDynamicTheme = state.useDynamicSystemTheme,
-                                themeLightnessOffset = state.themeLightnessOffset,
-                                onModeChange = { onAction(AppAction.SetThemeMode(it)) },
-                                onHueChange = { onAction(AppAction.SetThemeHue(it)) },
-                                onDynamicThemeChange = { onAction(AppAction.SetDynamicSystemTheme(it)) },
-                                onThemeLightnessChange = { onAction(AppAction.SetThemeLightnessOffset(it)) },
-                                currentIconShape = state.iconShapeSetting,
-                                onIconShapeChange = { onAction(AppAction.SetIconShape(it)) },
-                                fontStyle = state.fontStyle,
-                                textDecorations = state.textDecorations,
-                                mainTextScale = state.mainTextScale,
-                                subTextScale = state.subTextScale,
-                                onFontStyleChange = { onAction(AppAction.SetFontStyle(it)) },
-                                onTextDecorationToggle = { onAction(AppAction.ToggleTextDecoration(it)) },
-                                onMainTextScaleChange = { onAction(AppAction.SetMainTextScale(it)) },
-                                onSubTextScaleChange = { onAction(AppAction.SetSubTextScale(it)) },
-                                cornerRoundness = state.cornerRoundness,
-                                onCornerRoundnessChange = { onAction(AppAction.SetCornerRoundness(it)) },
-                                gridColumns = state.gridColumns,
-                                onGridColumnsChange = { onAction(AppAction.SetGridColumns(it)) }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        var isSecurityExpanded by remember { mutableStateOf(false) }
-                        
-                        Surface(
-                            shape = getDynamicCornerShape(16f, state.cornerRoundness),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { isSecurityExpanded = !isSecurityExpanded }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(stringResource(R.string.security_settings), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                                Icon(
-                                    imageVector = if (isSecurityExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = stringResource(R.string.expand_content_desc),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        androidx.compose.animation.AnimatedVisibility(visible = isSecurityExpanded) {
-                            SecuritySettingsContent(
-                                cornerRoundness = state.cornerRoundness,
-                                errorMessage = state.securitySettingsErrorMessage,
-                                onUpdatePassword = { oldPass, newPass -> onAction(AppAction.UpdateGlobalPassword(oldPass, newPass)) },
-                                onSetBiometric = { onAction(AppAction.SetBiometricEnabled(it)) }
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        var isViewersExpanded by remember { mutableStateOf(false) }
-                        
-                        Surface(
-                            shape = getDynamicCornerShape(16f, state.cornerRoundness),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { isViewersExpanded = !isViewersExpanded }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(stringResource(R.string.viewers_settings), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                                Icon(
-                                    imageVector = if (isViewersExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = stringResource(R.string.expand_content_desc),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        androidx.compose.animation.AnimatedVisibility(visible = isViewersExpanded) {
-                            Column(
-                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                ViewerPreferenceItem(
-                                    label = stringResource(R.string.text_pdf_viewer),
-                                    currentValue = state.viewerTextPdf,
-                                    cornerRoundness = state.cornerRoundness,
-                                    onValueChange = { onAction(AppAction.SetViewerPreference("Text/PDF", it)) }
-                                )
-                                ViewerPreferenceItem(
-                                    label = stringResource(R.string.music_viewer),
-                                    currentValue = state.viewerMusic,
-                                    cornerRoundness = state.cornerRoundness,
-                                    onValueChange = { onAction(AppAction.SetViewerPreference("Music", it)) }
-                                )
-                                ViewerPreferenceItem(
-                                    label = stringResource(R.string.image_viewer),
-                                    currentValue = state.viewerImage,
-                                    cornerRoundness = state.cornerRoundness,
-                                    onValueChange = { onAction(AppAction.SetViewerPreference("Image", it)) }
-                                )
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        var isOrganiserExpanded by remember { mutableStateOf(false) }
-                        
-                        Surface(
-                            shape = getDynamicCornerShape(16f, state.cornerRoundness),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { isOrganiserExpanded = !isOrganiserExpanded }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(stringResource(R.string.file_organiser_settings), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                                Icon(
-                                    imageVector = if (isOrganiserExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = stringResource(R.string.expand_content_desc),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        androidx.compose.animation.AnimatedVisibility(visible = isOrganiserExpanded) {
-                            Column {
-                                Spacer(modifier = Modifier.height(16.dp))
-                                val paths = listOf(
-                                    "Docs" to ("Documents Path" to state.orgDestDocs),
-                                    "Images" to ("Images Path" to state.orgDestImages),
-                                    "Apks" to ("APKs Path" to state.orgDestApks),
-                                    "Music" to ("Music Path" to state.orgDestMusic),
-                                    "Videos" to ("Videos Path" to state.orgDestVideos)
-                                )
-        
-                                paths.forEach { (cat, info) ->
-                                    val (label, pathValue) = info
-                                    Surface(
-                                        shape = getDynamicCornerShape(16f, state.cornerRoundness),
-                                        color = MaterialTheme.colorScheme.surface,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                androidx.compose.foundation.text.BasicTextField(
-                                                    value = pathValue,
-                                                    onValueChange = { onAction(AppAction.SetOrganiserPath(cat, it)) },
-                                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary)
-                                                )
-                                            }
-                                            IconButton(onClick = { currentPickingCategory.value = cat; launcher.launch(null) }) {
-                                                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.pick_directory), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        SettingsScreen(state = state, onAction = onAction)
         }
 
 
@@ -853,6 +647,8 @@ fun SiftApp(
     } // end ModalNavigationDrawer
 }
 
+    } // end CompositionLocalProvider
+
 @Composable
 fun DrawerContent(
     state: AppState,
@@ -861,10 +657,15 @@ fun DrawerContent(
     onCloseDrawer: () -> Unit,
     onShowAbout: () -> Unit = {}
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var showGDrivePopup by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var showDropboxPopup by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var showSmbConnections by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showFtpConnections by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showSftpConnections by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showWebDavConnections by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showNextcloudConnections by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     
     val launchDrivePicker = rememberDrivePickerLauncher { success, pickedIds ->
         showGDrivePopup = false
@@ -891,9 +692,9 @@ fun DrawerContent(
         }
     }
     ModalDrawerSheet(
-        drawerContainerColor = MaterialTheme.colorScheme.background,
+        drawerContainerColor = androidx.compose.ui.graphics.Color.Transparent,
         drawerContentColor = MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier.width(300.dp)
+        modifier = Modifier.width(300.dp).appGradientBackground()
     ) {
         Column(
             modifier = Modifier
@@ -908,7 +709,7 @@ fun DrawerContent(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.size(40.dp)
                 ) {
-                    IconButton(onClick = onCloseDrawer) {
+                    IconButton(onClick = { haptics.tap(); onCloseDrawer() }) {
                         Icon(
                             Icons.Default.Close,
                             contentDescription = stringResource(R.string.close),
@@ -972,7 +773,7 @@ fun DrawerContent(
                 shape = getDynamicCornerShape(14f, cornerRoundness),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                onClick = { isCloudExpanded = !isCloudExpanded },
+                onClick = { haptics.tap(); isCloudExpanded = !isCloudExpanded },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column {
@@ -1018,7 +819,7 @@ fun DrawerContent(
                                 shape = getDynamicCornerShape(12f, cornerRoundness),
                                 color = if (state.isGoogleDriveAuthenticated) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                                 border = if (state.isGoogleDriveAuthenticated) null else BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                                onClick = { showGDrivePopup = true },
+                                onClick = { haptics.tap(); showGDrivePopup = true },
                                 modifier = Modifier.size(64.dp)
                             ) {
                                 Column(
@@ -1046,7 +847,7 @@ fun DrawerContent(
                                 shape = getDynamicCornerShape(12f, cornerRoundness),
                                 color = if (state.isMegaAuthenticated) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                                 border = if (state.isMegaAuthenticated) null else BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                                onClick = { onAction(AppAction.SetShowMegaPopup(true)) },
+                                onClick = { haptics.tap(); onAction(AppAction.SetShowMegaPopup(true)) },
                                 modifier = Modifier.size(64.dp)
                             ) {
                                 Column(
@@ -1074,7 +875,7 @@ fun DrawerContent(
                                 shape = getDynamicCornerShape(12f, cornerRoundness),
                                 color = if (state.isDropboxAuthenticated) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                                 border = if (state.isDropboxAuthenticated) null else BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                                onClick = { showDropboxPopup = true },
+                                onClick = { haptics.tap(); showDropboxPopup = true },
                                 modifier = Modifier.size(64.dp)
                             ) {
                                 Column(
@@ -1103,7 +904,7 @@ fun DrawerContent(
                                 shape = getDynamicCornerShape(12f, cornerRoundness),
                                 color = if (smbIsActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                                 border = if (smbIsActive) null else BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                                onClick = { showSmbConnections = true },
+                                onClick = { haptics.tap(); showSmbConnections = true },
                                 modifier = Modifier.size(64.dp)
                             ) {
                                 Column(
@@ -1128,11 +929,12 @@ fun DrawerContent(
                             }
 
                             // FTP
+                            val ftpIsActive = state.ftpState.activeConnectionId != null
                             Surface(
                                 shape = getDynamicCornerShape(12f, cornerRoundness),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                                onClick = { onAction(AppAction.SetErrorMessage("FTP coming soon")) },
+                                color = if (ftpIsActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                border = if (ftpIsActive) null else BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                                onClick = { haptics.tap(); showFtpConnections = true },
                                 modifier = Modifier.size(64.dp)
                             ) {
                                 Column(
@@ -1143,13 +945,13 @@ fun DrawerContent(
                                     Icon(
                                         Icons.Default.Storage,
                                         contentDescription = stringResource(R.string.ftp),
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        tint = if (ftpIsActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Text(
                                         "FTP",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        color = if (ftpIsActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -1157,11 +959,12 @@ fun DrawerContent(
                             }
 
                             // SFTP
+                            val sftpIsActive = state.sftpState.activeConnectionId != null
                             Surface(
                                 shape = getDynamicCornerShape(12f, cornerRoundness),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-                                onClick = { onAction(AppAction.SetErrorMessage("SFTP coming soon")) },
+                                color = if (sftpIsActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                border = if (sftpIsActive) null else BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                                onClick = { haptics.tap(); showSftpConnections = true },
                                 modifier = Modifier.size(64.dp)
                             ) {
                                 Column(
@@ -1172,13 +975,73 @@ fun DrawerContent(
                                     Icon(
                                         Icons.Default.Security,
                                         contentDescription = stringResource(R.string.sftp),
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        tint = if (sftpIsActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Text(
                                         "SFTP",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        color = if (sftpIsActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            // Nextcloud
+                            val nextcloudIsActive = state.webDavState.savedConnections.any { it.isNextcloud && it.id == state.webDavState.activeConnectionId }
+                            Surface(
+                                shape = getDynamicCornerShape(12f, cornerRoundness),
+                                color = if (nextcloudIsActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                border = if (nextcloudIsActive) null else BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                                onClick = { haptics.tap(); showNextcloudConnections = true },
+                                modifier = Modifier.size(64.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.fillMaxSize().padding(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CloudSync,
+                                        contentDescription = "Nextcloud",
+                                        tint = if (nextcloudIsActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Text(
+                                        "Nextcloud",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (nextcloudIsActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            // WebDAV
+                            val webdavIsActive = state.webDavState.savedConnections.any { !it.isNextcloud && it.id == state.webDavState.activeConnectionId }
+                            Surface(
+                                shape = getDynamicCornerShape(12f, cornerRoundness),
+                                color = if (webdavIsActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                border = if (webdavIsActive) null else BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
+                                onClick = { haptics.tap(); showWebDavConnections = true },
+                                modifier = Modifier.size(64.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.fillMaxSize().padding(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.FolderShared,
+                                        contentDescription = "WebDAV",
+                                        tint = if (webdavIsActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Text(
+                                        "WebDAV",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (webdavIsActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -1227,7 +1090,7 @@ fun DrawerContent(
                 .build()
             val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
 
-            androidx.compose.material3.AlertDialog(
+            com.ripple.filemanager.ui.GradientAlertDialog(
                 onDismissRequest = { showGDrivePopup = false },
                 containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
                 shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
@@ -1248,6 +1111,7 @@ fun DrawerContent(
                 confirmButton = {
                     if (state.isGoogleDriveAuthenticated) {
                         androidx.compose.material3.TextButton(onClick = {
+                            haptics.tap()
                             showGDrivePopup = false
                             onCloseDrawer()
                             onAction(AppAction.SetLocation("drive"))
@@ -1256,6 +1120,7 @@ fun DrawerContent(
                         }
                     } else {
                         androidx.compose.material3.TextButton(onClick = {
+                            haptics.tap()
                             googleSignInClient.signOut().addOnCompleteListener {
                                 googleSignInLauncher.launch(googleSignInClient.signInIntent)
                             }
@@ -1267,6 +1132,7 @@ fun DrawerContent(
                 dismissButton = {
                     if (state.isGoogleDriveAuthenticated) {
                         androidx.compose.material3.TextButton(onClick = {
+                            haptics.tap()
                             googleSignInClient.signOut().addOnCompleteListener {
                                 onAction(AppAction.SetGoogleDriveAuthStatus(false, null))
                             }
@@ -1275,7 +1141,7 @@ fun DrawerContent(
                             androidx.compose.material3.Text(stringResource(R.string.logout_action), color = MaterialTheme.colorScheme.error)
                         }
                     } else {
-                        androidx.compose.material3.TextButton(onClick = { showGDrivePopup = false }) {
+                        androidx.compose.material3.TextButton(onClick = { haptics.tap(); showGDrivePopup = false }) {
                             androidx.compose.material3.Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                         }
                     }
@@ -1289,7 +1155,7 @@ fun DrawerContent(
             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
             var email by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
             var password by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-            androidx.compose.material3.AlertDialog(
+            com.ripple.filemanager.ui.GradientAlertDialog(
                 onDismissRequest = { showDropboxPopup = false },
                 containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
                 shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
@@ -1329,6 +1195,7 @@ fun DrawerContent(
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(
                                 onClick = {
+                                    haptics.tap()
                                     if (email.isNotBlank() && password.isNotBlank()) {
                                         onAction(AppAction.SetDropboxAuthStatus(true, email))
                                     }
@@ -1340,7 +1207,7 @@ fun DrawerContent(
                             }
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                androidx.compose.material3.TextButton(onClick = { uriHandler.openUri("https://dropbox.com/register") }) {
+                                androidx.compose.material3.TextButton(onClick = { haptics.tap(); uriHandler.openUri("https://dropbox.com/register") }) {
                                     androidx.compose.material3.Text(stringResource(R.string.create_account_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                                 }
                             }
@@ -1350,20 +1217,21 @@ fun DrawerContent(
                 confirmButton = {
                     if (state.isDropboxAuthenticated) {
                         androidx.compose.material3.TextButton(onClick = {
+                            haptics.tap()
                             showDropboxPopup = false
                             onCloseDrawer()
                             onAction(AppAction.SetLocation("dropbox"))
                         }) {
                             androidx.compose.material3.Text(stringResource(R.string.view_files_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
                         }
-                        androidx.compose.material3.TextButton(onClick = { onAction(AppAction.SetDropboxAuthStatus(false, null)) }) {
+                        androidx.compose.material3.TextButton(onClick = { haptics.tap(); onAction(AppAction.SetDropboxAuthStatus(false, null)) }) {
                             androidx.compose.material3.Text(stringResource(R.string.logout_action), color = MaterialTheme.colorScheme.error)
                         }
                     }
                 },
                 dismissButton = {
                     if (!state.isDropboxAuthenticated) {
-                        androidx.compose.material3.TextButton(onClick = { showDropboxPopup = false }) {
+                        androidx.compose.material3.TextButton(onClick = { haptics.tap(); showDropboxPopup = false }) {
                             androidx.compose.material3.Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                         }
                     }
@@ -1378,6 +1246,38 @@ fun DrawerContent(
                 onDismiss = { showSmbConnections = false }
             )
         }
+
+        if (showFtpConnections) {
+            FtpConnectionsDialog(
+                state = state.ftpState,
+                onAction = onAction,
+                onDismiss = { showFtpConnections = false }
+            )
+        }
+
+        if (showSftpConnections) {
+            SftpConnectionsDialog(
+                state = state.sftpState,
+                onAction = onAction,
+                onDismiss = { showSftpConnections = false }
+            )
+        }
+
+        if (showWebDavConnections) {
+            WebDavConnectionsDialog(
+                state = state.webDavState,
+                onAction = onAction,
+                onDismiss = { showWebDavConnections = false }
+            )
+        }
+
+        if (showNextcloudConnections) {
+            NextcloudConnectionsDialog(
+                state = state.webDavState,
+                onAction = onAction,
+                onDismiss = { showNextcloudConnections = false }
+            )
+        }
     }
 }
 
@@ -1388,11 +1288,12 @@ fun DrawerMenuItem(
     cornerRoundness: Float,
     onClick: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     Surface(
         shape = getDynamicCornerShape(14f, cornerRoundness),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-        onClick = onClick,
+        onClick = { haptics.tap(); onClick() },
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1434,6 +1335,7 @@ fun AboutScreen(
     cornerRoundness: Float,
     onClose: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val context = LocalContext.current
 
     Surface(
@@ -1453,7 +1355,7 @@ fun AboutScreen(
                     .padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onClose) {
+                IconButton(onClick = { haptics.tap(); onClose() }) {
                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                 }
                 Text(
@@ -1748,6 +1650,7 @@ fun MainContent(
     onDrawerOpen: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val context = LocalContext.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -1883,6 +1786,7 @@ fun MainContent(
 
     Scaffold(
         modifier = modifier,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         snackbarHost = {
             val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             val isThreeButton = navBottom > 24.dp
@@ -2149,11 +2053,15 @@ Row(
             }
         }
     } else if (!targetLocation.startsWith("/")) {
-        if (targetLocation == "cloud" || targetLocation.startsWith("drive") || targetLocation.startsWith("mega") || targetLocation.startsWith("dropbox") || targetLocation.startsWith("smb_")) {
+        if (targetLocation == "cloud" || targetLocation.startsWith("drive") || targetLocation.startsWith("mega") || targetLocation.startsWith("dropbox") || targetLocation.startsWith("smb_") || targetLocation.startsWith("ftp_") || targetLocation.startsWith("sftp_") || targetLocation.startsWith("webdav_") || targetLocation.startsWith("nextcloud_")) {
             val currentCloudName = when {
                 targetLocation.startsWith("mega") -> "Mega"
                 targetLocation.startsWith("dropbox") -> "Dropbox"
                 targetLocation.startsWith("smb_") -> "SMB Network"
+                targetLocation.startsWith("ftp_") -> "FTP Network"
+                targetLocation.startsWith("sftp_") -> "SFTP Network"
+                targetLocation.startsWith("nextcloud_") -> "Nextcloud"
+                targetLocation.startsWith("webdav_") -> "WebDAV"
                 targetLocation == "cloud" -> "Cloud"
                 else -> "Google Drive"
             }
@@ -2166,7 +2074,7 @@ Row(
                     modifier = Modifier
                         .clip(getDynamicCornerShape(12f, state.cornerRoundness))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { cloudMenuExpanded = true }
+                        .clickable { haptics.tap(); cloudMenuExpanded = true }
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -2210,12 +2118,44 @@ Row(
                             }
                         )
                     }
+                    if (state.ftpState.activeConnectionId != null) {
+                        DropdownMenuItem(
+                            text = { Text("FTP Network") },
+                            onClick = { 
+                                val connectionId = state.ftpState.activeConnectionId
+                                onAction(AppAction.SetLocation("ftp_${connectionId}:/"))
+                                cloudMenuExpanded = false 
+                            }
+                        )
+                    }
+                    if (state.sftpState.activeConnectionId != null) {
+                        DropdownMenuItem(
+                            text = { Text("SFTP Network") },
+                            onClick = { 
+                                val connectionId = state.sftpState.activeConnectionId
+                                onAction(AppAction.SetLocation("sftp_${connectionId}:/"))
+                                cloudMenuExpanded = false 
+                            }
+                        )
+                    }
+                    if (state.webDavState.activeConnectionId != null) {
+                        val activeConn = state.webDavState.savedConnections.find { it.id == state.webDavState.activeConnectionId }
+                        val prefix = if (activeConn?.isNextcloud == true) "nextcloud" else "webdav"
+                        val label = if (activeConn?.isNextcloud == true) "Nextcloud" else "WebDAV"
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = { 
+                                onAction(AppAction.SetLocation("${prefix}_${state.webDavState.activeConnectionId}:/"))
+                                cloudMenuExpanded = false 
+                            }
+                        )
+                    }
                 }
             }
 
-            if (targetLocation != "cloud" && targetLocation != "drive" && targetLocation != "mega" && targetLocation != "dropbox" && !targetLocation.startsWith("smb_")) {
+            if (targetLocation != "cloud" && targetLocation != "drive" && targetLocation != "mega" && targetLocation != "dropbox" && !targetLocation.startsWith("smb_") && !targetLocation.startsWith("ftp_") && !targetLocation.startsWith("sftp_") && !targetLocation.startsWith("webdav_") && !targetLocation.startsWith("nextcloud_")) {
                 state.driveFolderStack.forEach { (loc, name) ->
-                    if (loc != "drive" && loc != "mega" && loc != "dropbox" && !loc.startsWith("smb_")) {
+                    if (loc != "drive" && loc != "mega" && loc != "dropbox" && !loc.startsWith("smb_") && !loc.startsWith("ftp_") && !loc.startsWith("sftp_") && !loc.startsWith("webdav_") && !loc.startsWith("nextcloud_")) {
                         Text(stringResource(R.string.path_separator), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                         Text(
                             text = name,
@@ -2259,7 +2199,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 .clip(shape)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
                 .background(MaterialTheme.colorScheme.surface)
-                .clickable { showSortMenu = true }
+                .clickable { haptics.tap(); showSortMenu = true }
                 .padding(8.dp)
         ) {
             Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.sort_content_desc), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
@@ -2499,6 +2439,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             IconButton(onClick = { onAction(AppAction.SelectAll) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Default.SelectAll, contentDescription = stringResource(R.string.select_all), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
                             IconButton(onClick = { onAction(AppAction.SelectNone) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Default.Deselect, contentDescription = stringResource(R.string.select_none), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
                             IconButton(onClick = {
+                                haptics.tap()
                                 val uris = state.selectedFiles.mapNotNull { id ->
                                     state.files.find { it.id == id }?.path?.let { path ->
                                         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
@@ -2515,7 +2456,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Share, contentDescription = stringResource(R.string.share), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
                             IconButton(onClick = { onAction(AppAction.SetClipboard("copy")) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.copy_action), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
                             IconButton(onClick = { onAction(AppAction.SetClipboard("cut")) }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.ContentCut, contentDescription = stringResource(R.string.cut_action), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
-                            IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete_label), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
+                            IconButton(onClick = { haptics.tap(); showDeleteConfirm = true }, modifier = Modifier.size(42.dp)) { Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete_label), tint = SkylineColors.Amber.copy(alpha = 0.8f)) }
                         }
                         }
                     },
@@ -2534,9 +2475,9 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 
                 if (showCreateFolderDialog) {
                     var folderName by remember { mutableStateOf("") }
-                    AlertDialog(
+                    com.ripple.filemanager.ui.GradientAlertDialog(
                         onDismissRequest = { showCreateFolderDialog = false },
-                        title = { MonoLabel("NEW FOLDER", color = SkylineColors.Amber, fontSize = 14) },
+                        title = { MonoLabel("NEW FOLDER", color = SkylineColors.TextPrimary, fontSize = 14) },
                         text = {
                             OutlinedTextField(
                                 value = folderName,
@@ -2555,11 +2496,11 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     showCreateFolderDialog = false
                                 }
                             ) {
-                                Text(stringResource(R.string.save_action), color = SkylineColors.Amber)
+                                Text(stringResource(R.string.save_action), color = SkylineColors.TextPrimary)
                             }
                         },
                         dismissButton = {
-                            TextButton(onClick = { showCreateFolderDialog = false }) {
+                            TextButton(onClick = { haptics.tap(); showCreateFolderDialog = false }) {
                                 Text(stringResource(R.string.cancel), color = SkylineColors.TextDim)
                             }
                         },
@@ -2570,9 +2511,9 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 
                 if (showCreateFileDialog) {
                     var fileName by remember { mutableStateOf("") }
-                    AlertDialog(
+                    com.ripple.filemanager.ui.GradientAlertDialog(
                         onDismissRequest = { showCreateFileDialog = false },
-                        title = { MonoLabel("NEW FILE", color = SkylineColors.Amber, fontSize = 14) },
+                        title = { MonoLabel("NEW FILE", color = SkylineColors.TextPrimary, fontSize = 14) },
                         text = {
                             OutlinedTextField(
                                 value = fileName,
@@ -2591,11 +2532,11 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     showCreateFileDialog = false
                                 }
                             ) {
-                                Text(stringResource(R.string.save_action), color = SkylineColors.Amber)
+                                Text(stringResource(R.string.save_action), color = SkylineColors.TextPrimary)
                             }
                         },
                         dismissButton = {
-                            TextButton(onClick = { showCreateFileDialog = false }) {
+                            TextButton(onClick = { haptics.tap(); showCreateFileDialog = false }) {
                                 Text(stringResource(R.string.cancel), color = SkylineColors.TextDim)
                             }
                         },
@@ -2622,7 +2563,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showDeleteConfirm) {
             val isDrive = state.location == "drive"
             val warningText = if (isDrive) "Deleting is irreversible proceed" else if (state.isRecycleBinEnabled) "Files will be moved to Trash." else "This action cannot be undone."
-            AlertDialog(
+            com.ripple.filemanager.ui.GradientAlertDialog(
                 onDismissRequest = { showDeleteConfirm = false },
                 title = { com.ripple.filemanager.ui.MonoLabel("DELETE SELECTED ITEM(S)?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                 text = { Text(warningText) },
@@ -2633,7 +2574,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     }) { Text(stringResource(R.string.delete_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
+                    TextButton(onClick = { haptics.tap(); showDeleteConfirm = false }) { Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
                 },
                 containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
                 shape = getDynamicCornerShape(12f, state.cornerRoundness)
@@ -2655,7 +2596,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     isExtracting = false
                     extractTargetFile = null
                 } else {
-                    AlertDialog(
+                    com.ripple.filemanager.ui.GradientAlertDialog(
                         onDismissRequest = {},
                         title = { com.ripple.filemanager.ui.MonoLabel("EXTRACTING ZIP", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                         text = {
@@ -2769,7 +2710,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         }
         
         if (state.extractResultPath != null) {
-            AlertDialog(
+            com.ripple.filemanager.ui.GradientAlertDialog(
                 onDismissRequest = { onAction(AppAction.ClearExtractResult) },
                 title = { com.ripple.filemanager.ui.MonoLabel("EXTRACTION COMPLETE", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                 text = { Text(stringResource(R.string.extract_open_prompt)) },
@@ -2795,10 +2736,9 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         }
         
         if (infoDialogFile != null) {
-            AlertDialog(
+            com.ripple.filemanager.ui.GradientAlertDialog(
                 onDismissRequest = { infoDialogFile = null },
                 shape = getDynamicCornerShape(0f, state.cornerRoundness),
-                containerColor = SkylineColors.Surface,
                 title = {
                     Text(
                         text = infoDialogFile?.name ?: "INFO",
@@ -2889,6 +2829,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 
 @Composable
 fun Sidebar(currentLocation: String, onLocationSelected: (String) -> Unit, cornerRoundness: Float, modifier: Modifier = Modifier) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     Column(
         modifier = modifier.fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)).windowInsetsPadding(WindowInsets.statusBars).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -2938,6 +2879,7 @@ fun Sidebar(currentLocation: String, onLocationSelected: (String) -> Unit, corne
 
 @Composable
 fun NavButton(label: String, id: String, icon: androidx.compose.ui.graphics.vector.ImageVector, currentId: String, cornerRoundness: Float, onSelect: (String) -> Unit) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val active = if (id == "drive") {
         currentId == "drive" || currentId.startsWith("drive_id:") ||
         currentId == "mega" || currentId.startsWith("mega_id:") ||
@@ -2970,6 +2912,7 @@ fun RippleBottomNav(
     cornerRoundness: Float, 
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val items = listOf(
         Triple("home", androidx.compose.material.icons.Icons.Filled.Home, androidx.compose.material.icons.Icons.Outlined.Home),
         Triple("recent", androidx.compose.material.icons.Icons.Filled.Schedule, androidx.compose.material.icons.Icons.Outlined.Schedule),
@@ -3023,6 +2966,7 @@ fun BatchRenameDialog(
     onDismiss: () -> Unit,
     onRename: (String, String, Int, Int, Boolean, String) -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var baseName by remember { mutableStateOf(initialBaseName) }
     var extension by remember { mutableStateOf(initialExtension) }
     var startNumberStr by remember { mutableStateOf("1") }
@@ -3183,7 +3127,7 @@ fun BatchRenameDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { isPrefix = true }) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { haptics.tap(); isPrefix = true }) {
                             RadioButton(
                                 selected = isPrefix,
                                 onClick = { isPrefix = true },
@@ -3191,7 +3135,7 @@ fun BatchRenameDialog(
                             )
                             Text(stringResource(R.string.prefix_label))
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { isPrefix = false }) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { haptics.tap(); isPrefix = false }) {
                             RadioButton(
                                 selected = !isPrefix,
                                 onClick = { isPrefix = false },
@@ -3242,6 +3186,7 @@ fun FabMenuItem(
     cornerRoundness: Float,
     onClick: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     androidx.compose.material3.Surface(
         shape = getDynamicCornerShape(24f, cornerRoundness),
         color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -3283,6 +3228,7 @@ fun ViewerPreferenceItem(
     cornerRoundness: Float,
     onValueChange: (String) -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var expanded by remember { mutableStateOf(false) }
     Surface(
         shape = getDynamicCornerShape(16f, cornerRoundness),
@@ -3363,6 +3309,7 @@ fun GradientProgressIndicator(
     modifier: Modifier = Modifier,
     trackColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surfaceContainerHigh
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "gradient")
     val offset by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -3426,6 +3373,7 @@ fun StorageCard(
     cornerRoundness: Float,
     onClick: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
         BlueprintCard(
             modifier = modifier
                 .fillMaxWidth()
@@ -3444,7 +3392,7 @@ fun StorageCard(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 com.ripple.filemanager.ui.MonoLabel(
                     text = titleText.uppercase(),
-                    color = com.ripple.filemanager.ui.theme.SkylineColors.AmberDim,
+                    color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim,
                     fontSize = 11
                 )
                 com.ripple.filemanager.ui.MonoLabel(
@@ -3481,6 +3429,7 @@ fun AuthDialog(
     onDismiss: () -> Unit,
     onConfirm: (password: String?) -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var password by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = context.getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE)
@@ -3524,7 +3473,7 @@ fun AuthDialog(
     }
 
     if (showPasswordField) {
-        androidx.compose.material3.AlertDialog(
+        com.ripple.filemanager.ui.GradientAlertDialog(
             onDismissRequest = onDismiss,
             containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
             shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, 0.5f),

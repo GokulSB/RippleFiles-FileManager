@@ -34,6 +34,7 @@ fun ArchiveFileCard(
     itemCount: String,
     onClick: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -54,7 +55,7 @@ fun ArchiveFileCard(
                 .fillMaxWidth()
                 .clip(getDynamicCornerShape(12f, cornerRoundness)).background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
                 .border(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outline)
-                .clickable(onClick = onClick)
+                .clickable(onClick = { haptics.tap(); onClick() })
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -129,6 +130,7 @@ fun ArchiveExtractDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -143,7 +145,7 @@ fun ArchiveExtractDialog(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onDismiss
+                    onClick = { haptics.tap(); onDismiss() }
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -195,16 +197,16 @@ fun ArchiveExtractDialog(
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     // Action rows
-                    ArchiveActionRow("Extract here", itemCount, onClick = onExtractHere)
-                    ArchiveActionRow("Extract to...", "choose folder", onClick = onExtractTo)
-                    ArchiveActionRow("View contents", "", onClick = onViewContents)
+                    ArchiveActionRow("Extract here", itemCount, onClick = { haptics.tap(); onExtractHere() })
+                    ArchiveActionRow("Extract to...", "choose folder", onClick = { haptics.tap(); onExtractTo() })
+                    ArchiveActionRow("View contents", "", onClick = { haptics.tap(); onViewContents() })
                     ArchiveActionRow(
                         label = "Add to archive", 
                         hint = if (isRar) "RAR unsupported" else "", 
                         disabled = isRar, 
                         onClick = {}
                     )
-                    ArchiveActionRow("Delete", "", hideDivider = true, onClick = onDelete)
+                    ArchiveActionRow("Delete", "", hideDivider = true, onClick = { haptics.delete(); onDelete() })
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
@@ -213,7 +215,7 @@ fun ArchiveExtractDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha=0.5f))
-                            .clickable(onClick = onDismiss)
+                            .clickable(onClick = { haptics.tap(); onDismiss() })
                             .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -239,10 +241,11 @@ private fun ArchiveActionRow(
     hideDivider: Boolean = false,
     onClick: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !disabled, onClick = onClick)
+            .clickable(enabled = !disabled, onClick = { haptics.tap(); onClick() })
     ) {
         Row(
             modifier = Modifier
@@ -290,6 +293,7 @@ fun ArchiveExtractProgressDialog(
     filesTotal: Int,
     onDismissWhenComplete: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val isComplete = progress >= 1f
     
     Dialog(
@@ -306,7 +310,7 @@ fun ArchiveExtractProgressDialog(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = { if (isComplete) onDismissWhenComplete() }
+                    onClick = { haptics.tap(); if (isComplete) onDismissWhenComplete() }
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -452,7 +456,7 @@ fun ArchiveExtractProgressDialog(
                             .fillMaxWidth()
                             .border(1.dp, if (isComplete) androidx.compose.material3.MaterialTheme.colorScheme.outline else androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha=0.5f))
                             .background(if (isComplete) androidx.compose.material3.MaterialTheme.colorScheme.primary else Color.Transparent)
-                            .clickable(enabled = isComplete, onClick = onDismissWhenComplete)
+                            .clickable(enabled = isComplete, onClick = { haptics.tap(); onDismissWhenComplete() })
                             .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -478,6 +482,7 @@ fun ArchivePasswordDialog(
     onSubmit: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var password by remember { mutableStateOf("") }
     
     Dialog(
@@ -494,7 +499,7 @@ fun ArchivePasswordDialog(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onDismiss
+                    onClick = { haptics.tap(); onDismiss() }
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -589,7 +594,7 @@ fun ArchivePasswordDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .border(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha=0.5f))
-                                .clickable(onClick = onDismiss)
+                                .clickable(onClick = { haptics.tap(); onDismiss() })
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -635,6 +640,7 @@ fun ArchiveFailedDialog(
     reason: String,
     onDismiss: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val errorAccent = Color(0xFFE57373) // Red-leaning accent
     Dialog(
         onDismissRequest = onDismiss,
@@ -650,7 +656,7 @@ fun ArchiveFailedDialog(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onDismiss
+                    onClick = { haptics.tap(); onDismiss() }
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -716,7 +722,7 @@ fun ArchiveFailedDialog(
                             .fillMaxWidth()
                             .border(1.dp, errorAccent)
                             .background(Color.Transparent)
-                            .clickable(onClick = onDismiss)
+                            .clickable(onClick = { haptics.tap(); onDismiss() })
                             .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {

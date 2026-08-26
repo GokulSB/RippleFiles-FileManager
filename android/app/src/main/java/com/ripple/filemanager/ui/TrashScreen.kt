@@ -45,11 +45,12 @@ fun TrashScreen(
     onAction: (AppAction) -> Unit,
     onClose: () -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var selectedFiles by remember { mutableStateOf<ImmutableSet<Int>>(persistentSetOf()) }
     var showSettings by remember { mutableStateOf(false) }
     var deletingIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
 
     BackHandler(enabled = true) {
         if (selectedFiles.isNotEmpty()) {
@@ -64,6 +65,8 @@ fun TrashScreen(
     }
 
     Scaffold(
+        modifier = Modifier.appGradientBackground(),
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { 
@@ -78,12 +81,12 @@ fun TrashScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
+                    IconButton(onClick = { haptics.tap(); onClose() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
-                    IconButton(onClick = { 
+                    IconButton(onClick = { haptics.tap(); 
                         if (selectedFiles.size == state.trashFiles.size && state.trashFiles.isNotEmpty()) {
                             selectedFiles = persistentSetOf()
                         } else {
@@ -96,15 +99,15 @@ fun TrashScreen(
                             Icon(Icons.Default.SelectAll, contentDescription = stringResource(R.string.select_all))
                         }
                     }
-                    IconButton(onClick = { onAction(AppAction.ToggleViewMode) }) {
+                    IconButton(onClick = { haptics.tap(); onAction(AppAction.ToggleViewMode) }) {
                         Icon(if (state.isListMode) Icons.Default.GridView else Icons.Default.ViewList, contentDescription = stringResource(R.string.toggle_view_content_desc))
                     }
-                    IconButton(onClick = { showSettings = true }) {
+                    IconButton(onClick = { haptics.tap(); showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_title))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                     navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
@@ -125,7 +128,7 @@ fun TrashScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Button(
-                            onClick = {
+                            onClick = { haptics.tap();
                                 val filesToRestore = state.trashFiles.filter { it.id in selectedFiles }.mapNotNull { it.encodedTrashName }
                                 onAction(AppAction.RestoreTrashFiles(filesToRestore))
                                 selectedFiles = kotlinx.collections.immutable.persistentSetOf()
@@ -141,7 +144,7 @@ fun TrashScreen(
                         var showDeleteConfirm by remember { mutableStateOf(false) }
                         
                         Button(
-                            onClick = { showDeleteConfirm = true },
+                            onClick = { haptics.tap(); showDeleteConfirm = true },
                             shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
                             colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
                         ) {
@@ -151,13 +154,14 @@ fun TrashScreen(
                         }
                         
                         if (showDeleteConfirm) {
-                            AlertDialog(
+                            com.ripple.filemanager.ui.GradientAlertDialog(
                                 onDismissRequest = { showDeleteConfirm = false },
                                 title = { com.ripple.filemanager.ui.MonoLabel("DELETE PERMANENTLY?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
                                 text = { Text(stringResource(R.string.delete_forever_warning)) },
                                 confirmButton = {
                                     Button(
                                         onClick = {
+                                            haptics.delete()
                                             showDeleteConfirm = false
                                             val filesToDelete = state.trashFiles.filter { it.id in selectedFiles }.mapNotNull { it.encodedTrashName }
                                             val idsToRemove = selectedFiles
@@ -179,7 +183,7 @@ fun TrashScreen(
                                     }
                                 },
                                 dismissButton = {
-                                    TextButton(onClick = { showDeleteConfirm = false }) {
+                                    TextButton(onClick = { haptics.tap(); showDeleteConfirm = false }) {
                                         Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                                     }
                                 },
@@ -218,7 +222,7 @@ fun TrashScreen(
                             iconShape = com.ripple.filemanager.IconShapeType.SYSTEM,
                             cornerRoundness = state.cornerRoundness,
                             searchQuery = "",
-                            onFileClick = { file ->
+                            onFileClick = { file -> haptics.tap();
                                 if (selectedFiles.isNotEmpty()) {
                                     selectedFiles = if (selectedFiles.contains(file.id)) {
                                         selectedFiles.minus(file.id).toImmutableSet()
@@ -229,7 +233,7 @@ fun TrashScreen(
                                     // Handle single tap... maybe view? (Not fully supported for trash)
                                 }
                             },
-                            onFileLongClick = { file ->
+                            onFileLongClick = { file -> haptics.tap();
                                 selectedFiles = if (selectedFiles.contains(file.id)) {
                                     selectedFiles.minus(file.id).toImmutableSet()
                                 } else {
@@ -254,7 +258,7 @@ fun TrashScreen(
         var expanded by remember { mutableStateOf(false) }
         val units = listOf("Seconds", "Minutes", "Hours", "Days", "Weeks", "Months", "Years")
 
-        AlertDialog(
+        com.ripple.filemanager.ui.GradientAlertDialog(
             onDismissRequest = { showSettings = false },
             title = { com.ripple.filemanager.ui.MonoLabel("BIN SETTINGS", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
             text = {
@@ -265,7 +269,7 @@ fun TrashScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(stringResource(R.string.enable_bin))
-                        Switch(checked = isEnabled, onCheckedChange = { isEnabled = it })
+                        Switch(checked = isEnabled, onCheckedChange = { haptics.settingsToggle(); isEnabled = it })
                     }
                     if (isEnabled) {
                         Row(
@@ -303,7 +307,7 @@ fun TrashScreen(
                                     units.forEach { selectionOption ->
                                         DropdownMenuItem(
                                             text = { Text(selectionOption) },
-                                            onClick = {
+                                            onClick = { haptics.tap();
                                                 retentionUnit = selectionOption
                                                 expanded = false
                                             }
@@ -317,7 +321,7 @@ fun TrashScreen(
             },
             confirmButton = {
                 TextButton(
-                    onClick = {
+                    onClick = { haptics.tap();
                         val value = retentionValue.toIntOrNull() ?: 7
                         onAction(AppAction.SetRecycleBinSettings(isEnabled, value, retentionUnit))
                         showSettings = false
@@ -328,7 +332,7 @@ fun TrashScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showSettings = false }) {
+                TextButton(onClick = { haptics.tap(); showSettings = false }) {
                     Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
                 }
             },

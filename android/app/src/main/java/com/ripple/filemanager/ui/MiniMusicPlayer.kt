@@ -62,7 +62,7 @@ fun MiniMusicPlayer(
                     strokeWidth = 3.dp.toPx()
                 )
             }
-            .background(bgColor)
+            .appGradientBackground()
     ) {
         Row(
             modifier = Modifier

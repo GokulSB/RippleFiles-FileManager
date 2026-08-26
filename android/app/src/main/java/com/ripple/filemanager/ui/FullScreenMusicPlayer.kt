@@ -31,6 +31,7 @@ fun FullScreenMusicPlayer(
     if (state.currentAudioFile == null) return
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().appGradientBackground(),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.now_playing), style = MaterialTheme.typography.titleMedium) },
@@ -40,13 +41,13 @@ fun FullScreenMusicPlayer(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = Color.Transparent,
                     navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
                     titleContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color.Transparent
     ) { paddingValues ->
         Column(
             modifier = Modifier

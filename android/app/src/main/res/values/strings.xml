@@ -179,6 +179,13 @@
 
     <!-- SmbFormScreen.kt -->
     <string name="add_smb_connection_title">Add SMB Connection</string>
+    <string name="ftp_connections_title">FTP Connections</string>
+    <string name="add_ftp_connection_title">Add FTP Connection</string>
+    <string name="ftp_connection_details">%1$s:%2$d</string>
+    <string name="use_ftps_label">Use FTPS (TLS)</string>
+    <string name="sftp_connections_title">SFTP Connections</string>
+    <string name="add_sftp_connection_title">Add SFTP Connection</string>
+    <string name="sftp_connection_details">%1$s:%2$d</string>
     <string name="display_name_hint">Display Name (e.g. My NAS)</string>
     <string name="host_ip_label">Host or IP</string>
     <string name="port_label">Port</string>

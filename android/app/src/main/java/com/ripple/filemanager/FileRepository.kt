@@ -541,7 +541,7 @@ class FileRepository(private val context: Context) {
     }
 
     suspend fun searchLocalFiles(baseLocation: String, query: String): List<FileItem> = withContext(Dispatchers.IO) {
-        if (baseLocation == "mega" || baseLocation.startsWith("mega_id:") || baseLocation.startsWith("smb_") || baseLocation == "drive" || baseLocation.startsWith("drive_id:") || baseLocation == "recent" || baseLocation == "pinned") {
+        if (baseLocation == "mega" || baseLocation.startsWith("mega_id:") || baseLocation.startsWith("smb_") || baseLocation.startsWith("ftp_") || baseLocation.startsWith("sftp_") || baseLocation == "drive" || baseLocation.startsWith("drive_id:") || baseLocation == "recent" || baseLocation == "pinned") {
             return@withContext emptyList()
         }
 

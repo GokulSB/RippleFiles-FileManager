@@ -63,6 +63,7 @@ fun DocumentViewerScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     
     // Initialize renderer
     var renderer by remember { mutableStateOf<DocumentRenderer?>(null) }
@@ -143,12 +144,12 @@ fun DocumentViewerScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
+                    IconButton(onClick = { haptics.tap(); onClose() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
+                    IconButton(onClick = { haptics.tap();
                         val uri = androidx.core.content.FileProvider.getUriForFile(
                             context,
                             "${context.packageName}.fileprovider",
@@ -254,6 +255,7 @@ fun ThumbnailItem(
     isBookmarked: Boolean,
     onClick: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var bitmap by remember { mutableStateOf<Bitmap?>(cache.get(index)) }
     
     LaunchedEffect(index, renderer) {
@@ -278,7 +280,7 @@ fun ThumbnailItem(
             .clip(RoundedCornerShape(4.dp))
             .background(Color.White)
             .border(borderWidth, borderColor, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
+            .clickable(onClick = { haptics.tap(); onClick() })
     ) {
         if (bitmap != null) {
             Image(
@@ -404,6 +406,7 @@ fun FloatingPill(
     onZoomOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -414,15 +417,15 @@ fun FloatingPill(
             modifier = Modifier.padding(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            IconButton(onClick = onZoomIn, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = { haptics.tap(); onZoomIn() }, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.zoom_in), modifier = Modifier.size(20.dp))
             }
             HorizontalDivider(modifier = Modifier.width(20.dp).padding(vertical = 4.dp))
-            IconButton(onClick = onZoomOut, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = { haptics.tap(); onZoomOut() }, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Filled.Remove, contentDescription = stringResource(R.string.zoom_out), modifier = Modifier.size(20.dp))
             }
             HorizontalDivider(modifier = Modifier.width(20.dp).padding(vertical = 4.dp))
-            IconButton(onClick = onToggleBookmark, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = { haptics.tap(); onToggleBookmark() }, modifier = Modifier.size(32.dp)) {
                 Icon(
                     if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                     contentDescription = stringResource(R.string.bookmark),

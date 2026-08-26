@@ -31,6 +31,7 @@ fun SmbConnectionsDialog(
     onAction: (AppAction) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var showAddForm by remember { mutableStateOf(false) }
 
     if (showAddForm) {
@@ -42,7 +43,7 @@ fun SmbConnectionsDialog(
             onDismiss = { showAddForm = false }
         )
     } else {
-        AlertDialog(
+        com.ripple.filemanager.ui.GradientAlertDialog(
             onDismissRequest = onDismiss,
             title = {
                 Text(stringResource(R.string.smb_connections_title), style = MaterialTheme.typography.titleLarge)
@@ -77,14 +78,14 @@ fun SmbConnectionsDialog(
                 }
             },
             confirmButton = {
-                Button(onClick = { showAddForm = true }) {
+                Button(onClick = { haptics.tap(); showAddForm = true }) {
                     Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_content_desc))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.new_connection))
                 }
             },
             dismissButton = {
-                TextButton(onClick = onDismiss) {
+                TextButton(onClick = { haptics.tap(); onDismiss() }) {
                     Text(stringResource(R.string.close))
                 }
             }
@@ -101,6 +102,7 @@ fun SmbConnectionItem(
     onDelete: () -> Unit,
     onStop: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     var showMenu by remember { mutableStateOf(false) }
     
     Surface(
@@ -135,7 +137,7 @@ fun SmbConnectionItem(
             }
             
             Box {
-                IconButton(onClick = { showMenu = true }) {
+                IconButton(onClick = { haptics.tap(); showMenu = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
                 }
                 DropdownMenu(
@@ -162,6 +164,7 @@ fun SmbConnectionItem(
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.delete_label), color = MaterialTheme.colorScheme.error) },
                         onClick = {
+                            haptics.delete()
                             showMenu = false
                             onDelete()
                         }

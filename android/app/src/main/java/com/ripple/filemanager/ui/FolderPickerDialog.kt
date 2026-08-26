@@ -52,7 +52,7 @@ fun FolderPickerDialog(
         loadFolders(currentPath)
     }
 
-    AlertDialog(
+    com.ripple.filemanager.ui.GradientAlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.fillMaxHeight(0.8f).fillMaxWidth(0.9f),
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),

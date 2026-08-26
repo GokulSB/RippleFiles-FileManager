@@ -70,6 +70,7 @@ fun ImageViewerScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
 
     BackHandler {
         if (showDetailsSheet) {
@@ -83,12 +84,13 @@ fun ImageViewerScreen(
 
     if (showDeleteConfirm) {
         val actualIndex = if (files.isNotEmpty()) pagerState.currentPage % files.size else 0
-        AlertDialog(
+        com.ripple.filemanager.ui.GradientAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { com.ripple.filemanager.ui.MonoLabel("DELETE IMAGE?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
             text = { Text(stringResource(R.string.delete_warning_undone)) },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.delete()
                     showDeleteConfirm = false
                     val currentFile = files.getOrNull(pagerState.currentPage)
                     if (currentFile != null) {
@@ -98,7 +100,7 @@ fun ImageViewerScreen(
                 }) { Text(stringResource(R.string.delete_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
+                TextButton(onClick = { haptics.tap(); showDeleteConfirm = false }) { Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
             },
             containerColor = MaterialTheme.colorScheme.surface,
             shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness)
@@ -114,7 +116,7 @@ fun ImageViewerScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
+            .appGradientBackground()
     ) {
         val currentFile = files.getOrNull(pagerState.currentPage)
         
@@ -133,8 +135,7 @@ fun ImageViewerScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .background(Color(0xFF0D0904)),
+                .weight(1f),
             contentAlignment = Alignment.Center
         ) {
             HorizontalPager(
@@ -331,12 +332,13 @@ fun LedgerChipButton(
     cornerRoundness: Float,
     onClick: () -> Unit
 ) {
+    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     Surface(
         modifier = Modifier.size(44.dp),
         shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness),
         color = MaterialTheme.colorScheme.surfaceVariant,
         border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
-        onClick = onClick
+        onClick = { haptics.tap(); onClick() }
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
