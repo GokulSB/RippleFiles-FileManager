@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -192,9 +193,12 @@ fun SettingsScreen(
 
     CompositionLocalProvider(androidx.compose.foundation.LocalIndication provides NoRippleIndication) {
         Surface(modifier = Modifier.fillMaxSize().appGradientBackground(), color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onBackground) {
-            Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            Column(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 4.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { haptics.settingsToggle(); onAction(AppAction.SetShowSettingsScreen(false)) }) {

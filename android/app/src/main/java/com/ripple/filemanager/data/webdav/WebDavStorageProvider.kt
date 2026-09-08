@@ -39,30 +39,31 @@ class WebDavStorageProvider {
         currentConnectionId = null
     }
 
-    suspend fun listFiles(path: String, connectionId: String): Result<List<FileItem>> = withContext(Dispatchers.IO) {
+  suspend fun listFiles(path: String, connectionId: String): Result<List<FileItem>> = withContext(Dispatchers.IO) {
         try {
             if (client == null || currentConnectionId != connectionId) {
                 return@withContext Result.failure(Exception("Not connected"))
             }
-
-            // Normalize path: strip the "webdav_<id>:" prefix to get the remote path
+ 
+            // Normalize path: strip the "webdav_<id>:" or "nextcloud_<id>:" prefix to get the remote path
             val schemePrefix = if (path.startsWith("nextcloud_")) "nextcloud_" else "webdav_"
             val prefixToRemove = "${schemePrefix}${connectionId}:"
             var remotePath = path.removePrefix(prefixToRemove)
             if (remotePath.isEmpty()) remotePath = "/"
-
+ 
             val entries = client!!.list(remotePath)
-
+ 
             val items = entries
                 .map { davEntry ->
                     val name = davEntry.name
                     val isDir = davEntry.isDirectory
                     val sizeBytes = davEntry.sizeBytes
                     val lastModified = davEntry.lastModifiedMillis
-
-                    val fullPath = if (remotePath.endsWith("/")) "" else "/"
-                    val prefixPath = ":"
-
+ 
+                    // FIX: actually build the child's full remote path using its name
+                    val fullPath = if (remotePath.endsWith("/")) "$remotePath$name" else "$remotePath/$name"
+                    val prefixPath = "$schemePrefix$connectionId:$fullPath"
+ 
                     val type = if (isDir) "folder" else {
                         val ext = name.substringAfterLast('.', "")
                         when (ext.lowercase()) {
@@ -75,7 +76,7 @@ class WebDavStorageProvider {
                             else -> "unknown"
                         }
                     }
-
+ 
                     FileItem(
                         id = fullPath.hashCode(),
                         path = prefixPath,
@@ -90,7 +91,7 @@ class WebDavStorageProvider {
                     )
                 }
                 .sortedWith(compareBy({ it.type != "folder" }, { it.name.lowercase() }))
-
+ 
             Result.success(items)
         } catch (e: Exception) {
             Result.failure(e)
@@ -130,7 +131,8 @@ class WebDavStorageProvider {
     suspend fun createFolder(path: String, name: String): Result<Unit> = withContext(Dispatchers.IO) {
         val davClient = client ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            val target = if (path.endsWith("/")) "" else "/"
+            // FIX: actually build the target path using path + name
+            val target = if (path.endsWith("/")) "$path$name" else "$path/$name"
             davClient.createFolder(target)
             Result.success(Unit)
         } catch (e: Exception) {

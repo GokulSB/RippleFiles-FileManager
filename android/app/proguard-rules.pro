@@ -1,0 +1,1 @@
+-keep class be.stef.rar.** { *; }

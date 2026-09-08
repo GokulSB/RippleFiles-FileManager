@@ -217,6 +217,22 @@ fun FileGrid(
     val currentFiles = if (folderState is FolderListUiState.Loaded) folderState.items else persistentListOf()
     val currentIsLoading = folderState is FolderListUiState.Loading
 
+    val recentFolders = remember(currentFiles) {
+        currentFiles.filter { it.type == "folder" }
+            .sortedByDescending { it.lastModified }
+            .take(2)
+            .map { it.id }
+            .toSet()
+    }
+
+    val initialLoadComplete = androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(currentFiles) {
+        if (!initialLoadComplete.value && currentFiles.isNotEmpty()) {
+            kotlinx.coroutines.delay(1000)
+            initialLoadComplete.value = true
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         header()
         
@@ -240,13 +256,36 @@ fun FileGrid(
                     items(count = currentFiles.size + skeletonCount, key = { if (it < currentFiles.size) currentFiles[it].id else "skeleton_$it" }, contentType = { if (it < currentFiles.size) (if (currentFiles[it].type == "folder") 1 else 0) else 2 }) { index ->
                         if (index < currentFiles.size) {
                             val file = currentFiles[index]
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = !deletingIds.contains(file.id),
-                                exit = androidx.compose.animation.shrinkOut(
+                            
+                            val animate = !initialLoadComplete.value && index < 20
+                            val alpha = remember { androidx.compose.animation.core.Animatable(if (animate) 0f else 1f) }
+                            val offsetY = remember { androidx.compose.animation.core.Animatable(if (animate) 10f else 0f) }
+                        
+                            LaunchedEffect(animate) {
+                                if (animate) {
+                                    val delay = (index * 50).coerceAtMost(500)
+                                    kotlinx.coroutines.delay(delay.toLong())
+                                    launch { alpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(500)) }
+                                    launch { offsetY.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+                                }
+                            }
+                            
+                            val staggerMod = Modifier.graphicsLayer {
+                                this.alpha = alpha.value
+                                this.translationY = offsetY.value.dp.toPx()
+                            }
+                            
+                            val itemExitTransition = remember {
+                                androidx.compose.animation.shrinkOut(
                                     shrinkTowards = Alignment.Center,
                                     animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
-                                modifier = Modifier.animateItem()
+                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160))
+                            }
+
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = !deletingIds.contains(file.id),
+                                exit = itemExitTransition,
+                                modifier = Modifier.animateItem().then(staggerMod)
                             ) {
                                 if (file.type == "video" || file.type == "audio" || file.type == "image" || file.type == "doc") {
                                     ProvideSkylineLedgerColors {
@@ -274,6 +313,7 @@ fun FileGrid(
                                         iconShape = iconShape,
                                         cornerRoundness = cornerRoundness,
                                         searchQuery = searchQuery,
+                                        isRecentGlow = false,
                                         onClick = { hapticOnFileClick(file) },
                                         onLongClick = { hapticOnFileLongClick(file) },
                                         onPinClick = { onPinClick(file) },
@@ -311,16 +351,39 @@ fun FileGrid(
                     item(span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) { emptyState() }
                 } else {
                     val skeletonCount = pasteLoadingCount ?: 0
-                    items(count = currentFiles.size + skeletonCount, key = { if (it < currentFiles.size) "${currentFiles[it].path}_$it" else "skeleton_$it" }, contentType = { if (it < currentFiles.size) (if (currentFiles[it].type == "folder") 1 else 0) else 2 }) { index ->
+                    items(count = currentFiles.size + skeletonCount, key = { if (it < currentFiles.size) currentFiles[it].id else "skeleton_$it" }, contentType = { if (it < currentFiles.size) (if (currentFiles[it].type == "folder") 1 else 0) else 2 }) { index ->
                         if (index < currentFiles.size) {
                             val file = currentFiles[index]
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = !deletingIds.contains(file.id),
-                                exit = androidx.compose.animation.shrinkOut(
+                            
+                            val animate = !initialLoadComplete.value && index < 20
+                            val alpha = remember { androidx.compose.animation.core.Animatable(if (animate) 0f else 1f) }
+                            val offsetY = remember { androidx.compose.animation.core.Animatable(if (animate) 10f else 0f) }
+                        
+                            LaunchedEffect(animate) {
+                                if (animate) {
+                                    val delay = (index * 50).coerceAtMost(500)
+                                    kotlinx.coroutines.delay(delay.toLong())
+                                    launch { alpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(500)) }
+                                    launch { offsetY.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+                                }
+                            }
+                            
+                            val staggerMod = Modifier.graphicsLayer {
+                                this.alpha = alpha.value
+                                this.translationY = offsetY.value.dp.toPx()
+                            }
+                            
+                            val itemExitTransition = remember {
+                                androidx.compose.animation.shrinkOut(
                                     shrinkTowards = Alignment.Center,
                                     animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
-                                modifier = Modifier.animateItem()
+                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160))
+                            }
+
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = !deletingIds.contains(file.id),
+                                exit = itemExitTransition,
+                                modifier = Modifier.animateItem().then(staggerMod)
                             ) {
                                 if (file.type == "video" || file.type == "audio" || file.type == "image" || file.type == "doc") {
                                     ProvideSkylineLedgerColors {
@@ -350,6 +413,7 @@ fun FileGrid(
                                         cornerRoundness = cornerRoundness,
                                         gridColumns = gridColumns,
                                         searchQuery = searchQuery,
+                                        isRecentGlow = false,
                                         onClick = { hapticOnFileClick(file) },
                                         onLongClick = { hapticOnFileLongClick(file) },
                                         onPinClick = { onPinClick(file) },
@@ -383,7 +447,7 @@ fun FileGrid(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoader, iconShape: com.ripple.filemanager.IconShapeType, cornerRoundness: Float, gridColumns: Int = 2, modifier: Modifier = Modifier, searchQuery: String = "", onClick: () -> Unit, onLongClick: () -> Unit, onPinClick: () -> Unit, onInfoClick: () -> Unit, onRenameClick: (String) -> Unit, onExtractClick: () -> Unit, onLockClick: () -> Unit = {}, onUnlockClick: () -> Unit = {}) {
+fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoader, iconShape: com.ripple.filemanager.IconShapeType, cornerRoundness: Float, gridColumns: Int = 2, modifier: Modifier = Modifier, searchQuery: String = "", isRecentGlow: Boolean = false, onClick: () -> Unit, onLongClick: () -> Unit, onPinClick: () -> Unit, onInfoClick: () -> Unit, onRenameClick: (String) -> Unit, onExtractClick: () -> Unit, onLockClick: () -> Unit = {}, onUnlockClick: () -> Unit = {}) {
     val dynamicRadius = (24f * (cornerRoundness * 2)).coerceIn(0f, 100f)
     val shape = if (isSelected) RoundedCornerShape(topStart = 32.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 26.dp)
                 else RoundedCornerShape(dynamicRadius.dp)
@@ -428,7 +492,8 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             isPinned = file.isPinned,
             isLocked = file.isLocked,
             onLockClick = onLockClick,
-            onUnlockClick = onUnlockClick
+            onUnlockClick = onUnlockClick,
+            isRecentGlow = isRecentGlow
         )
         return
     }
@@ -577,7 +642,7 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoader, iconShape: com.ripple.filemanager.IconShapeType, cornerRoundness: Float, modifier: Modifier = Modifier, searchQuery: String = "", onClick: () -> Unit, onLongClick: () -> Unit, onPinClick: () -> Unit, onInfoClick: () -> Unit, onRenameClick: (String) -> Unit, onExtractClick: () -> Unit, onLockClick: () -> Unit = {}, onUnlockClick: () -> Unit = {}) {
+fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoader, iconShape: com.ripple.filemanager.IconShapeType, cornerRoundness: Float, modifier: Modifier = Modifier, searchQuery: String = "", isRecentGlow: Boolean = false, onClick: () -> Unit, onLongClick: () -> Unit, onPinClick: () -> Unit, onInfoClick: () -> Unit, onRenameClick: (String) -> Unit, onExtractClick: () -> Unit, onLockClick: () -> Unit = {}, onUnlockClick: () -> Unit = {}) {
     val dynamicRadius = (24f * (cornerRoundness * 2)).coerceIn(0f, 100f)
     val shape = if (isSelected) RoundedCornerShape(topStart = 32.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 26.dp)
                 else RoundedCornerShape(dynamicRadius.dp)
@@ -622,7 +687,8 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
             isPinned = file.isPinned,
             isLocked = file.isLocked,
             onLockClick = onLockClick,
-            onUnlockClick = onUnlockClick
+            onUnlockClick = onUnlockClick,
+            isRecentGlow = isRecentGlow
         )
         return
     }
@@ -812,6 +878,7 @@ fun FileShapeIcon(type: String, name: String = "", size: Int, path: String = "",
     }
 }
 
+@androidx.compose.runtime.Immutable
 data class ShapeData(val shape: androidx.compose.ui.graphics.Shape, val bgColor: Color, val iconColor: Color, val icon: ImageVector)
 
 val BlobShape = GenericShape { size, _ ->
@@ -979,20 +1046,16 @@ fun Modifier.gridDepthStackEffect(
     )
     if (durationScale == 0f) return@composed this
 
-    val layoutInfo by androidx.compose.runtime.remember { androidx.compose.runtime.derivedStateOf { gridState.layoutInfo } }
-    val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+    this.graphicsLayer {
+        val itemInfo = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+        if (itemInfo != null) {
+            val distFromTop = itemInfo.offset.y.toFloat()
+            val t = if (distFromTop < topPaddingPx) {
+                ((topPaddingPx - distFromTop) / edgeZonePx).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
 
-    if (itemInfo == null) {
-        this
-    } else {
-        val distFromTop = itemInfo.offset.y.toFloat()
-        val t = if (distFromTop < topPaddingPx) {
-            ((topPaddingPx - distFromTop) / edgeZonePx).coerceIn(0f, 1f)
-        } else {
-            0f
-        }
-
-        this.graphicsLayer {
             val scale = 1f - (maxScaleDrop * t)
             scaleX = scale
             scaleY = scale

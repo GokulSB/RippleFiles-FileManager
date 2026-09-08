@@ -10,3 +10,11 @@
 /mega-temp-java/
 android/gradle-8.*/
 android/gradle*.zip
+*.diff
+*.ps1
+crash_log.txt
+audit_results.txt
+.kotlin/
+android/.kotlin/
+android/*.py
+android/test_icons*.kt

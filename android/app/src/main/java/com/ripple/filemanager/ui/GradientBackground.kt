@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.luminance
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -140,19 +143,16 @@ fun rememberAuroraColors(): AuroraColors {
 fun Modifier.appGradientBackground(): Modifier = composed {
     val colorScheme = androidx.compose.material3.MaterialTheme.colorScheme
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val hatchBrush = rememberDiagonalHatchBrush()
-    
     this.drawWithCache {
         val bgGradient = androidx.compose.ui.graphics.Brush.verticalGradient(
             colors = listOf(
                 colorScheme.surface,
-                androidx.compose.ui.graphics.Color.Black
+                colorScheme.background
             )
         )
         
         onDrawBehind {
-            drawRect(brush = bgGradient)
-            drawRect(brush = hatchBrush)
+            drawRect(color = colorScheme.background)
         }
     }
 }

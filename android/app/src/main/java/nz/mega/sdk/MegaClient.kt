@@ -155,6 +155,64 @@ class MegaClient(private val context: Context) {
         megaApi.startDownload(node, destPath, null, null, false, null, 0, 0, false, listener)
     }
 
+    suspend fun uploadFile(localPath: String, parentHandle: String?): Boolean = suspendCancellableCoroutine { cont ->
+        val parentNode = if (parentHandle != null) {
+            megaApi.getNodeByHandle(parentHandle.toLongOrNull() ?: 0L)
+        } else {
+            megaApi.rootNode
+        }
+        if (parentNode == null) {
+            cont.resumeWithException(Exception("MEGA upload failed: destination folder not found"))
+            return@suspendCancellableCoroutine
+        }
+
+        val fileName = localPath.substringAfterLast('/')
+        val listener = object : nz.mega.sdk.MegaTransferListener() {
+            override fun onTransferFinish(api: MegaApi?, transfer: nz.mega.sdk.MegaTransfer?, error: MegaError?) {
+                if (error != null && error.errorCode == MegaError.API_OK) {
+                    cont.resume(true)
+                } else {
+                    cont.resumeWithException(Exception("MEGA upload failed: ${error?.errorString}"))
+                }
+            }
+        }
+        // mtime = -1 tells the SDK to use the local file's own modification time.
+        megaApi.startUpload(
+            localPath,
+            parentNode,
+            fileName,
+            -1L,
+            null,
+            false,
+            false,
+            null,
+            listener
+        )
+    }
+
+    suspend fun createFolder(name: String, parentHandle: String?): Boolean = suspendCancellableCoroutine { cont ->
+        val parentNode = if (parentHandle != null) {
+            megaApi.getNodeByHandle(parentHandle.toLongOrNull() ?: 0L)
+        } else {
+            megaApi.rootNode
+        }
+        if (parentNode == null) {
+            cont.resumeWithException(Exception("MEGA create folder failed: destination folder not found"))
+            return@suspendCancellableCoroutine
+        }
+
+        val listener = object : MegaRequestListener() {
+            override fun onRequestFinish(api: MegaApi?, request: MegaRequest?, e: MegaError?) {
+                if (e != null && e.errorCode == MegaError.API_OK) {
+                    cont.resume(true)
+                } else {
+                    cont.resumeWithException(Exception("MEGA create folder failed: ${e?.errorString}"))
+                }
+            }
+        }
+        megaApi.createFolder(name, parentNode, listener)
+    }
+
     private fun formatSize(size: Long): String {
         if (size <= 0) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB", "TB")

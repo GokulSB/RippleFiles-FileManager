@@ -25,7 +25,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
+import android.widget.Toast
 import com.ripple.filemanager.AppAction
+import com.ripple.filemanager.data.core.TransferMode
 import com.ripple.filemanager.ui.SiftApp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
@@ -153,7 +155,15 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetShowMegaPopup -> viewModel.setShowMegaPopup(action.show)
                         is AppAction.SetDropboxAuthStatus -> viewModel.setDropboxAuthStatus(action.isAuthenticated, action.email)
                         is AppAction.AutoRequestAccess -> viewModel.autoRequestAccess(action.path)
-                        is AppAction.RequestShizukuAccess -> { /* Shizuku access handled internally by rikka */ }
+                        is AppAction.RequestShizukuAccess -> {
+                            try {
+                                if (rikka.shizuku.Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                    rikka.shizuku.Shizuku.requestPermission(100)
+                                }
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(this@MainActivity, "Shizuku not detected or not running", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
                         is AppAction.SmbAction -> viewModel.handleSmbAction(action)
                         is AppAction.FtpAction -> viewModel.handleFtpAction(action)
                         is AppAction.SftpAction -> viewModel.handleSftpAction(action)
@@ -195,7 +205,9 @@ class MainActivity : FragmentActivity() {
                         is AppAction.PlayNextAudio -> viewModel.playNextAudio()
                         is AppAction.PlayPreviousAudio -> viewModel.playPreviousAudio()
                         is AppAction.SetShowFullScreenPlayer -> viewModel.setShowFullScreenPlayer(action.show)
-                        is AppAction.SetOrganiserPath -> viewModel.setOrganiserPath(action.category, action.path)
+                        is AppAction.SilentInstallApk -> viewModel.silentInstallApk(action.path, action.downgrade, action.forceUninstall)
+            is AppAction.BatchInstallApks -> viewModel.batchInstallApks(action.paths, action.downgrade, action.silent, action.forceUninstall)
+            is AppAction.SetOrganiserPath -> viewModel.setOrganiserPath(action.category, action.path)
                         is AppAction.OrganiseDownloads -> viewModel.organiseDownloads()
                         is AppAction.ConfirmOrganiseDownloads -> viewModel.confirmOrganiseDownloads()
                         is AppAction.CancelOrganiseDownloads -> viewModel.cancelOrganiseDownloads()
@@ -207,6 +219,23 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetBiometricEnabled -> viewModel.setBiometricEnabled(action.enabled)
                         is AppAction.ToggleHapticsMaster -> viewModel.toggleHapticsMaster(action.enabled)
                         is AppAction.ToggleHapticsOption -> viewModel.toggleHapticsOption(action.key, action.enabled)
+                        is AppAction.CycleDualPaneMode -> viewModel.cycleDualPaneMode()
+                        is AppAction.SetActivePane -> viewModel.setActivePane(action.side)
+                        is AppAction.SetLocationForPane -> viewModel.setLocationForPane(action.path, action.folderName)
+                        is AppAction.NavigateBackInPane -> viewModel.navigateBackInPane(action.side)
+                        is AppAction.TransferFileBetweenPanes -> {
+                            val current = viewModel.state.value
+                            val sourceLocation = if (action.sourceSide == PaneSide.LEFT) current.location else current.secondPaneState.location
+                            val destLocation = if (action.destinationSide == PaneSide.LEFT) current.location else current.secondPaneState.location
+                            viewModel.transferFileBetweenPanes(action.file, sourceLocation, destLocation, action.mode, action.conflictResolution) { outcome ->
+                                val message = when (outcome) {
+                                    is MainViewModel.TransferOutcome.Success -> "${if (action.mode == TransferMode.MOVE) "Moved" else "Copied"} ${action.file.name}"
+                                    is MainViewModel.TransferOutcome.Failed -> "Transfer failed: ${outcome.message}"
+                                    is MainViewModel.TransferOutcome.UnsupportedFolderTransfer -> "Copying folders between different storage types isn't supported yet"
+                                }
+                                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                 }
             }

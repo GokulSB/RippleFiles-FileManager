@@ -328,6 +328,20 @@ fun OffsetFab(
 // SKYLINE TOP BAR
 // ─────────────────────────────────────────────────────────────────────────────
 
+fun getFolderAccent(folderName: String): Color {
+    val name = folderName.lowercase()
+    return when {
+        name == "android" -> SkylineColors.AccentGreen
+        name == "dcim" || name == "camera" -> SkylineColors.AccentBlue
+        name == "documents" || name == "docs" -> SkylineColors.AccentTeal
+        name == "download" || name == "downloads" -> SkylineColors.AccentPrimary
+        name == "movies" || name == "video" || name == "videos" -> SkylineColors.AccentRed
+        name == "pictures" || name == "images" -> SkylineColors.AccentPink
+        name == "audio" || name == "ringtones" || name == "music" -> SkylineColors.AccentViolet
+        else -> SkylineColors.Dust
+    }
+}
+
 @Composable
 fun SkylineTopBar(
     query: String,
@@ -340,11 +354,11 @@ fun SkylineTopBar(
     organiseProgress: Float? = null
 ) {
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
-    val shape = getDynamicCornerShape(12f, cornerRoundness)
+    val shape = getDynamicCornerShape(14f, cornerRoundness)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars)
             .padding(horizontal = 12.dp)
             .padding(top = 8.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -374,7 +388,7 @@ fun SkylineTopBar(
             onValueChange = onQueryChange,
             placeholder = {
                 Text(
-                    "SEARCH FILES & FOLDERS",
+                    "Search files & folders",
                     fontFamily = JetBrainsMonoFamily,
                     fontSize = 11.sp,
                     letterSpacing = 1.sp,
@@ -469,182 +483,235 @@ fun SkylineFolderGridTile(
     isPinned: Boolean = false,
     isLocked: Boolean = false,
     onLockClick: (() -> Unit)? = null,
-    onUnlockClick: (() -> Unit)? = null
+    onUnlockClick: (() -> Unit)? = null,
+    isRecentGlow: Boolean = false
 ) {
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val shape = getDynamicCornerShape(16f, cornerRoundness)
     val baseTone = fileTypeTone(type)
     val toneColor = when {
-        type == "folder" -> {
-            if (sizeBytes > 0L) {
-                when {
-                    sizeBytes > 1024L * 1024L * 1024L -> SkylineColors.Rust // Red-ish for Large (>1GB)
-                    sizeBytes > 100L * 1024L * 1024L -> SkylineColors.Amber // Yellow-ish for Medium (>100MB)
-                    else -> SkylineColors.Sage // Green-ish for Small
-                }
-            } else {
-                val count = itemCountOrMeta.substringBefore(" ").toIntOrNull() ?: 0
-                when {
-                    count > 50 -> SkylineColors.Rust // Red-ish for >50 items
-                    count > 10 -> SkylineColors.Amber // Yellow-ish for >10 items
-                    else -> SkylineColors.Sage // Green-ish for small folders
-                }
-            }
-        }
+        type == "folder" -> getFolderAccent(name)
         else -> {
             when {
-                sizeBytes > 1024L * 1024L * 1024L -> SkylineColors.Rust // Red-ish for Large (>1GB)
-                sizeBytes > 100L * 1024L * 1024L -> SkylineColors.Amber // Yellow-ish for Medium (>100MB)
-                sizeBytes > 0L -> SkylineColors.Sage // Green-ish for Small (>0B)
-                else -> baseTone // Default fallback
+                sizeBytes > 1024L * 1024L * 1024L -> SkylineColors.Rust
+                sizeBytes > 100L * 1024L * 1024L -> SkylineColors.Amber
+                sizeBytes > 0L -> SkylineColors.Sage
+                else -> baseTone
             }
         }
     }
     val typeCode  = fileTypeCode(type)
 
-    val borderColor = if (isSelected) SkylineColors.Amber else SkylineColors.Border
+    val borderColor = if (isRecentGlow && type == "folder") {
+        toneColor.copy(alpha = 0.55f) // Glow border
+    } else if (isSelected) {
+        SkylineColors.Amber 
+    } else {
+        SkylineColors.Border
+    }
     val borderWidth = if (isSelected) 2.dp else 1.dp
     
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val shadowMod = if (!isDark) Modifier.shadow(3.dp, shape, spotColor = Color(0x33000000)) else Modifier
+    val glowMod = if (isRecentGlow && type == "folder") {
+        Modifier.shadow(24.dp, shape, spotColor = toneColor.copy(alpha = 0.6f), ambientColor = toneColor.copy(alpha = 0.6f))
+    } else if (!isDark) {
+        Modifier.shadow(3.dp, shape, spotColor = Color(0x33000000))
+    } else Modifier
 
-    Column(
-        modifier = modifier
-            .defaultMinSize(minHeight = 110.dp)
-            .then(shadowMod)
-            .border(borderWidth, borderColor, shape)
-            .background(MaterialTheme.colorScheme.surface, shape)
-            .clip(shape)
-            .combinedClickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = { haptics.tap(); onClick() },
-                onLongClick = onLongClick
+    Box(modifier = modifier.padding(top = if (type == "folder") 9.dp else 0.dp)) {
+        if (type == "folder") {
+            Box(
+                modifier = Modifier
+                    .offset(x = 16.dp, y = (-9).dp)
+                    .size(34.dp, 9.dp)
+                    .background(toneColor, RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
             )
-    ) {
-        // 4dp color strip at the top
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .background(toneColor)
-        )
+        }
 
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            // Top row: outline icon + type-code badge
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val iconVector = when (type) {
-                    "folder" -> Icons.Outlined.Folder
-                    "image" -> Icons.Outlined.Image
-                    "video" -> Icons.Outlined.OndemandVideo
-                    "audio" -> Icons.Outlined.AudioFile
-                    else -> Icons.Outlined.InsertDriveFile
-                }
-                Icon(
-                    imageVector = iconVector,
-                    contentDescription = null,
-                    tint = toneColor,
-                    modifier = Modifier.size(16.dp)
+        Column(
+            modifier = Modifier
+                .defaultMinSize(minHeight = 110.dp)
+                .then(glowMod)
+                .border(borderWidth, borderColor, shape)
+                .background(MaterialTheme.colorScheme.surface, shape)
+                .clip(shape)
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { haptics.tap(); onClick() },
+                    onLongClick = onLongClick
                 )
-                if (isPinned) {
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Default.PushPin,
-                        contentDescription = stringResource(R.string.pinned_badge),
-                        tint = SkylineColors.Amber,
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
-                if (isLocked) {
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Outlined.Lock,
-                        contentDescription = stringResource(R.string.locked_badge),
-                        tint = SkylineColors.Rust,
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
+        ) {
+            if (type != "folder") {
                 Box(
                     modifier = Modifier
-                        .border(1.dp, toneColor.copy(alpha = 0.5f), getDynamicCornerShape(4f, cornerRoundness))
-                        .background(toneColor.copy(alpha = 0.12f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = typeCode,
-                        fontFamily = JetBrainsMonoFamily,
-                        fontSize = 8.sp,
-                        letterSpacing = 1.sp,
-                        color = toneColor,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                if (isSelected) {
-                    Spacer(Modifier.weight(1f))
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SkylineColors.Amber, modifier = Modifier.size(14.dp))
-                } else {
-                    Spacer(Modifier.weight(1f))
-                    var showMenu by remember { mutableStateOf(false) }
-                    Box {
-                        IconButton(
-                            onClick = { showMenu = true },
-                            modifier = Modifier.size(20.dp)
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(toneColor)
+                )
+            }
+
+            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                // Top row
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val iconVector = when (type) {
+                        "folder" -> Icons.Outlined.Folder
+                        "image" -> Icons.Outlined.Image
+                        "video" -> Icons.Outlined.OndemandVideo
+                        "audio" -> Icons.Outlined.AudioFile
+                        else -> Icons.Outlined.InsertDriveFile
+                    }
+                    
+                    if (type == "folder") {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(toneColor.copy(alpha = 0.2f), RoundedCornerShape(11.dp)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), tint = SkylineColors.TextDim, modifier = Modifier.size(16.dp))
+                            Icon(imageVector = iconVector, contentDescription = null, tint = toneColor, modifier = Modifier.size(18.dp))
                         }
-                        if (showMenu) {
-                            androidx.compose.ui.window.Popup(alignment = androidx.compose.ui.Alignment.TopEnd, onDismissRequest = { showMenu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
-                                Surface(
-                                    shape = getDynamicCornerShape(12f, cornerRoundness),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, SkylineColors.Border),
-                                    shadowElevation = 4.dp
-                                ) {
-                                    Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                        IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = stringResource(R.string.pin_file), tint = SkylineColors.Amber) }
-                                        if (onLockClick != null || onUnlockClick != null) {
-                                            IconButton(onClick = { showMenu = false; if (isLocked) onUnlockClick?.invoke() else onLockClick?.invoke() }, modifier = Modifier.size(36.dp)) {
-                                                Icon(if (isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (isLocked) stringResource(R.string.unlock_file) else stringResource(R.string.lock_file), tint = SkylineColors.Amber)
+                    } else {
+                        Icon(
+                            imageVector = iconVector,
+                            contentDescription = null,
+                            tint = toneColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    if (isPinned) {
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.PushPin,
+                            contentDescription = stringResource(R.string.pinned_badge),
+                            tint = SkylineColors.Amber,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                    if (isLocked) {
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = stringResource(R.string.locked_badge),
+                            tint = SkylineColors.Rust,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                    
+                    if (type != "folder") {
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .border(1.dp, toneColor.copy(alpha = 0.5f), getDynamicCornerShape(4f, cornerRoundness))
+                                .background(toneColor.copy(alpha = 0.12f))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = typeCode,
+                                fontFamily = JetBrainsMonoFamily,
+                                fontSize = 8.sp,
+                                letterSpacing = 1.sp,
+                                color = toneColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    if (isSelected) {
+                        Spacer(Modifier.weight(1f))
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SkylineColors.Amber, modifier = Modifier.size(14.dp))
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                        var showMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(
+                                onClick = { showMenu = true },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), tint = SkylineColors.TextDim, modifier = Modifier.size(16.dp))
+                            }
+                            if (showMenu) {
+                                androidx.compose.ui.window.Popup(alignment = androidx.compose.ui.Alignment.TopEnd, onDismissRequest = { showMenu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+                                    Surface(
+                                        shape = getDynamicCornerShape(12f, cornerRoundness),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, SkylineColors.Border),
+                                        shadowElevation = 4.dp
+                                    ) {
+                                        Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                            IconButton(onClick = { showMenu = false; onPinClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PushPin, contentDescription = stringResource(R.string.pin_file), tint = SkylineColors.Amber) }
+                                            if (onLockClick != null || onUnlockClick != null) {
+                                                IconButton(onClick = { showMenu = false; if (isLocked) onUnlockClick?.invoke() else onLockClick?.invoke() }, modifier = Modifier.size(36.dp)) {
+                                                    Icon(if (isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = if (isLocked) stringResource(R.string.unlock_file) else stringResource(R.string.lock_file), tint = SkylineColors.Amber)
+                                                }
                                             }
+                                            IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = stringResource(R.string.app_info), tint = SkylineColors.Amber) }
                                         }
-                                        IconButton(onClick = { showMenu = false; onInfoClick?.invoke() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Info, contentDescription = stringResource(R.string.app_info), tint = SkylineColors.Amber) }
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                Spacer(Modifier.height(8.dp))
+
+                // File name
+                Text(
+                    text = name,
+                    fontFamily = ManropeFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp,
+                    color = SkylineColors.TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 18.sp
+                )
+
+                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.height(6.dp))
+
+                // Bottom meta row
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    if (type == "folder") {
+                        // Count pill
+                        Box(
+                            modifier = Modifier
+                                .background(toneColor.copy(alpha = 0.26f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = itemCountOrMeta.substringBefore(" "), // extracts the number
+                                fontFamily = JetBrainsMonoFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 10.sp,
+                                color = toneColor
+                            )
+                        }
+                        Text(
+                            text = date.uppercase(),
+                            fontFamily = JetBrainsMonoFamily,
+                            fontSize = 10.sp,
+                            color = SkylineColors.TextDim,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        Text(
+                            text = "$itemCountOrMeta · $date".uppercase(),
+                            fontFamily = JetBrainsMonoFamily,
+                            fontSize = 10.sp,
+                            color = SkylineColors.TextDim,
+                            letterSpacing = 0.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             }
-
-            Spacer(Modifier.height(8.dp))
-
-            // File name
-            Text(
-                text = name,
-                fontFamily = ManropeFontFamily,
-                fontWeight = FontWeight.Medium,
-                fontSize = 13.sp,
-                color = SkylineColors.TextPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 17.sp
-            )
-
-            Spacer(Modifier.weight(1f))
-            Spacer(Modifier.height(6.dp))
-
-            // Bottom meta row: items · date, single line to prevent wrap bug
-            Text(
-                text = "$itemCountOrMeta · $date".uppercase(),
-                fontFamily = JetBrainsMonoFamily,
-                fontSize = 9.sp,
-                color = SkylineColors.TextDim,
-                letterSpacing = 0.5.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
         }
     }
 }
@@ -671,47 +738,44 @@ fun SkylineFolderListRow(
     isPinned: Boolean = false,
     isLocked: Boolean = false,
     onLockClick: (() -> Unit)? = null,
-    onUnlockClick: (() -> Unit)? = null
+    onUnlockClick: (() -> Unit)? = null,
+    isRecentGlow: Boolean = false
 ) {
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val shape = getDynamicCornerShape(16f, cornerRoundness)
     val baseTone = fileTypeTone(type)
     val toneColor = when {
-        type == "folder" -> {
-            if (sizeBytes > 0L) {
-                when {
-                    sizeBytes > 1024L * 1024L * 1024L -> SkylineColors.Rust // Red-ish for Large (>1GB)
-                    sizeBytes > 100L * 1024L * 1024L -> SkylineColors.Amber // Yellow-ish for Medium (>100MB)
-                    else -> SkylineColors.Sage // Green-ish for Small
-                }
-            } else {
-                val count = trailingMeta.substringBefore(" ").toIntOrNull() ?: 0
-                when {
-                    count > 50 -> SkylineColors.Rust // Red-ish for >50 items
-                    count > 10 -> SkylineColors.Amber // Yellow-ish for >10 items
-                    else -> SkylineColors.Sage // Green-ish for small folders
-                }
-            }
-        }
+        type == "folder" -> getFolderAccent(name)
         else -> {
             when {
-                sizeBytes > 1024L * 1024L * 1024L -> SkylineColors.Rust // Red-ish for Large (>1GB)
-                sizeBytes > 100L * 1024L * 1024L -> SkylineColors.Amber // Yellow-ish for Medium (>100MB)
-                sizeBytes > 0L -> SkylineColors.Sage // Green-ish for Small (>0B)
-                else -> baseTone // Default fallback
+                sizeBytes > 1024L * 1024L * 1024L -> SkylineColors.Rust
+                sizeBytes > 100L * 1024L * 1024L -> SkylineColors.Amber
+                sizeBytes > 0L -> SkylineColors.Sage
+                else -> baseTone
             }
         }
     }
-    val borderColor = if (isSelected) SkylineColors.Amber else SkylineColors.Border
+    val typeCode  = fileTypeCode(type)
+    val borderColor = if (isRecentGlow && type == "folder") {
+        toneColor.copy(alpha = 0.55f)
+    } else if (isSelected) {
+        SkylineColors.Amber 
+    } else {
+        SkylineColors.Border
+    }
     
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val shadowMod = if (!isDark) Modifier.shadow(3.dp, shape, spotColor = Color(0x33000000)) else Modifier
+    val glowMod = if (isRecentGlow && type == "folder") {
+        Modifier.shadow(24.dp, shape, spotColor = toneColor.copy(alpha = 0.6f), ambientColor = toneColor.copy(alpha = 0.6f))
+    } else if (!isDark) {
+        Modifier.shadow(3.dp, shape, spotColor = Color(0x33000000))
+    } else Modifier
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 64.dp)
-            .then(shadowMod)
+            .then(glowMod)
             .border(1.dp, borderColor, shape)
             .background(if (isSelected) SkylineColors.Amber.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface, shape)
             .clip(shape)
@@ -723,14 +787,36 @@ fun SkylineFolderListRow(
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 5dp left-edge color bar
-        Box(
-            modifier = Modifier
-                .width(5.dp)
-                .height(64.dp)
-                .background(toneColor)
-        )
+        if (type != "folder") {
+            Box(
+                modifier = Modifier
+                    .width(5.dp)
+                    .height(64.dp)
+                    .background(toneColor)
+            )
+        }
 
+        Spacer(Modifier.width(12.dp))
+
+        val iconVector = when (type) {
+            "folder" -> Icons.Outlined.Folder
+            "image" -> Icons.Outlined.Image
+            "video" -> Icons.Outlined.OndemandVideo
+            "audio" -> Icons.Outlined.AudioFile
+            else -> Icons.Outlined.InsertDriveFile
+        }
+        
+        if (type == "folder") {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(toneColor.copy(alpha = 0.2f), RoundedCornerShape(11.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(imageVector = iconVector, contentDescription = null, tint = toneColor, modifier = Modifier.size(18.dp))
+            }
+        }
+        
         Spacer(Modifier.width(12.dp))
 
         if (isPinned) {
@@ -756,31 +842,50 @@ fun SkylineFolderListRow(
             Text(
                 text = name,
                 fontFamily = ManropeFontFamily,
-                fontWeight = FontWeight.Medium,
-                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
                 color = SkylineColors.TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (type == "folder") {
+                    Box(
+                        modifier = Modifier
+                            .background(toneColor.copy(alpha = 0.26f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = trailingMeta.substringBefore(" "),
+                            fontFamily = JetBrainsMonoFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 10.sp,
+                            color = toneColor
+                        )
+                    }
+                }
+                Text(
+                    text = if (type == "folder") "items · ${subline.substringBefore(" ·")}".uppercase() else subline.uppercase(),
+                    fontFamily = JetBrainsMonoFamily,
+                    fontSize = 9.sp,
+                    letterSpacing = 0.8.sp,
+                    color = SkylineColors.TextDim
+                )
+            }
+        }
+        
+        if (type != "folder") {
             Text(
-                text = subline.uppercase(),
+                text = trailingMeta,
                 fontFamily = JetBrainsMonoFamily,
-                fontSize = 9.sp,
-                letterSpacing = 0.8.sp,
-                color = SkylineColors.TextDim
+                fontSize = 10.sp,
+                letterSpacing = 0.5.sp,
+                color = SkylineColors.TextDim,
+                modifier = Modifier.padding(end = 4.dp),
+                textAlign = TextAlign.End
             )
         }
-
-        Text(
-            text = trailingMeta,
-            fontFamily = JetBrainsMonoFamily,
-            fontSize = 10.sp,
-            letterSpacing = 0.5.sp,
-            color = SkylineColors.TextDim,
-            modifier = Modifier.padding(end = 4.dp),
-            textAlign = TextAlign.End
-        )
 
         if (isSelected) {
             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SkylineColors.Amber, modifier = Modifier.size(16.dp).padding(end = 12.dp))
@@ -865,7 +970,7 @@ fun ExpandingPillNav(
                 .background(if (expanded) pillBgExpanded else pillColor, pillShape)
                 .then(if (expanded) Modifier.border(1.dp, strokeColor, pillShape) else Modifier)
                 .clip(pillShape)
-                .animateContentSize(animationSpec = tween(320, easing = FastOutSlowInEasing))
+                .animateContentSize(animationSpec = spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy, stiffness = androidx.compose.animation.core.Spring.StiffnessLow))
                 .padding(start = if (expanded) 8.dp else 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.End
@@ -994,6 +1099,7 @@ fun ExpandingPillNav(
     }
 }
 
+@androidx.compose.runtime.Immutable
 data class StorageSourceUi(
     val key: String,
     val displayName: String,
@@ -1018,7 +1124,7 @@ fun ConnectedStorageCard(
     // Fallback if empty (shouldn't happen on Home screen, but just in case)
     if (sources.isEmpty()) return
     
-    val cardShape = getDynamicCornerShape(12f, cornerRoundness)
+    val cardShape = getDynamicCornerShape(14f, cornerRoundness)
     
     Column(
         modifier = modifier

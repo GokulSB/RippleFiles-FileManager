@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import android.os.Environment
 import android.os.StatFs
@@ -26,7 +27,7 @@ import com.ripple.filemanager.data.smb.SmbConnection
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
-enum class IconShapeType { 
+enum class IconShapeType {
     SYSTEM, 
     CIRCLE, 
     SQUARE, 
@@ -76,6 +77,33 @@ data class SftpState(
     val currentPath: String = "",
     val connectionStatus: ConnectionStatus = ConnectionStatus.Idle,
     val error: SftpError? = null
+)
+
+// --- Dual-pane support ---
+// PaneState holds just the navigation-related slice of what AppState
+// already tracks at the top level (location, files, folder stack, cache,
+// selection). The LEFT pane keeps using the existing top-level AppState
+// fields unchanged, so nothing about the current single-pane screen
+// changes. This PaneState is only used for the RIGHT pane, which only
+// exists once dual-pane mode is turned on.
+enum class PaneSide { LEFT, RIGHT }
+
+/** OFF = single-pane (today's normal screen). SIDE_BY_SIDE = two panes left
+ * and right with a vertical divider. STACKED = two panes top and bottom
+ * with a horizontal divider. The toggle button cycles through all three
+ * in this order. */
+enum class DualPaneMode { OFF, SIDE_BY_SIDE, STACKED }
+
+@androidx.compose.runtime.Immutable
+data class PaneState(
+    val location: String = "home",
+    val currentFolderName: String? = null,
+    val folderStack: List<Pair<String, String>> = emptyList(),
+    val files: ImmutableList<FileItem> = persistentListOf(),
+    val folderCache: kotlinx.collections.immutable.PersistentMap<String, ImmutableList<FileItem>> = kotlinx.collections.immutable.persistentMapOf(),
+    val isLoading: Boolean = false,
+    val selectedFiles: ImmutableSet<Int> = persistentSetOf(),
+    val errorMessage: String? = null
 )
 
 
@@ -227,7 +255,15 @@ data class AppState(
     val viewerImage: String = "In-app",
     val pasteLoadingCount: Int? = null,
     val unlockedFileToOpen: FileItem? = null,
-    val haptics: HapticsSettings = HapticsSettings()
+    val haptics: HapticsSettings = HapticsSettings(),
+
+    // Dual-pane support: the LEFT pane is represented by the existing
+    // fields above (location, files, driveFolderStack, folderCache,
+    // isLoading, selectedFiles) — unchanged. The RIGHT pane only exists
+    // once dualPaneMode is not OFF, and lives entirely in secondPaneState.
+    val dualPaneMode: DualPaneMode = DualPaneMode.OFF,
+    val activePaneSide: PaneSide = PaneSide.LEFT,
+    val secondPaneState: PaneState = PaneState()
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -248,6 +284,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val smbStore by lazy { com.ripple.filemanager.data.smb.SmbStore(application) }
     private val smbProvider = com.ripple.filemanager.data.smb.SmbStorageProvider()
+    var activeSmbFileSource: com.ripple.filemanager.data.smb.SmbFileSource? = null
+        private set
 
     private val ftpStore by lazy { com.ripple.filemanager.data.ftp.FtpStore(application) }
     private val ftpProvider = com.ripple.filemanager.data.ftp.FtpStorageProvider()
@@ -334,6 +372,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val savedSmbConnectionId = prefs.getString("active_smb_connection", null)
         val savedConnectionsList = smbStore.getConnections()
         val validSmbConnection = if (savedSmbConnectionId != null && savedConnectionsList.any { it.id == savedSmbConnectionId }) savedSmbConnectionId else null
+        if (validSmbConnection != null) {
+            activeSmbFileSource = com.ripple.filemanager.data.smb.SmbFileSource(smbProvider, validSmbConnection)
+        }
         
         _state.update { it.copy(smbState = it.smbState.copy(
             savedConnections = savedConnectionsList,
@@ -442,59 +483,67 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return repository.getFileDetails(path)
     }
 
+    // Extracted from loadFiles() so both the left pane (loadFiles) and the
+    // right pane (loadFilesForPane) can fetch files the same way, without
+    // duplicating this prefix-checking chain. Behavior is unchanged from
+    // before — this is a pure reorganization, not new logic.
+    private suspend fun fetchFilesForLocation(location: String): List<FileItem> {
+        return if (location == "mega") {
+            megaClient.getChildren(null)
+        } else if (location.startsWith("mega_id:")) {
+            megaClient.getChildren(location.removePrefix("mega_id:"))
+        } else if (location.startsWith("smb_")) {
+            val connectionId = location.substringAfter("smb_").substringBefore(":")
+            var res = smbProvider.listFiles(location, connectionId)
+            if (res.isFailure) {
+                val connection = smbStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
+                val password = smbStore.getPassword(connectionId) ?: throw Exception("Password not found")
+                smbProvider.connect(connection, password).getOrThrow()
+                res = smbProvider.listFiles(location, connectionId)
+            }
+            res.getOrThrow()
+        } else if (location.startsWith("ftp_")) {
+            val connectionId = location.substringAfter("ftp_").substringBefore(":")
+            var res = ftpProvider.listFiles(location, connectionId)
+            if (res.isFailure) {
+                val connection = ftpStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
+                val password = ftpStore.getPassword(connectionId) ?: throw Exception("Password not found")
+                ftpProvider.connect(connection, password).getOrThrow()
+                res = ftpProvider.listFiles(location, connectionId)
+            }
+            res.getOrThrow()
+        } else if (location.startsWith("sftp_")) {
+            val connectionId = location.substringAfter("sftp_").substringBefore(":")
+            var res = sftpProvider.listFiles(location, connectionId)
+            if (res.isFailure) {
+                val connection = sftpStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
+                val password = sftpStore.getPassword(connectionId) ?: throw Exception("Password not found")
+                sftpProvider.connect(connection, password).getOrThrow()
+                res = sftpProvider.listFiles(location, connectionId)
+            }
+            res.getOrThrow()
+        } else if (location.startsWith("webdav_") || location.startsWith("nextcloud_")) {
+            val prefix = if (location.startsWith("nextcloud_")) "nextcloud_" else "webdav_"
+            val connectionId = location.removePrefix(prefix).substringBefore(":")
+            var res = webDavProvider.listFiles(location, connectionId)
+            if (res.isFailure) {
+                val connection = webDavStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
+                val password = webDavStore.getPassword(connectionId) ?: throw Exception("Password not found")
+                webDavProvider.connect(connection, password).getOrThrow()
+                res = webDavProvider.listFiles(location, connectionId)
+            }
+            res.getOrThrow()
+        } else {
+            repository.getFiles(location)
+        }
+    }
+
     private fun loadFiles(location: String) {
         loadJob?.cancel()
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), isLoading = true, location = location, errorMessage = null) }
         loadJob = viewModelScope.launch {
             try {
-                val fetched = if (location == "mega") {
-                    megaClient.getChildren(null)
-                } else if (location.startsWith("mega_id:")) {
-                    megaClient.getChildren(location.removePrefix("mega_id:"))
-                } else if (location.startsWith("smb_")) {
-                    val connectionId = location.substringAfter("smb_").substringBefore(":")
-                    var res = smbProvider.listFiles(location, connectionId)
-                    if (res.isFailure) {
-                        val connection = smbStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
-                        val password = smbStore.getPassword(connectionId) ?: throw Exception("Password not found")
-                        smbProvider.connect(connection, password).getOrThrow()
-                        res = smbProvider.listFiles(location, connectionId)
-                    }
-                    res.getOrThrow()
-                } else if (location.startsWith("ftp_")) {
-                    val connectionId = location.substringAfter("ftp_").substringBefore(":")
-                    var res = ftpProvider.listFiles(location, connectionId)
-                    if (res.isFailure) {
-                        val connection = ftpStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
-                        val password = ftpStore.getPassword(connectionId) ?: throw Exception("Password not found")
-                        ftpProvider.connect(connection, password).getOrThrow()
-                        res = ftpProvider.listFiles(location, connectionId)
-                    }
-                    res.getOrThrow()
-                } else if (location.startsWith("sftp_")) {
-                    val connectionId = location.substringAfter("sftp_").substringBefore(":")
-                    var res = sftpProvider.listFiles(location, connectionId)
-                    if (res.isFailure) {
-                        val connection = sftpStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
-                        val password = sftpStore.getPassword(connectionId) ?: throw Exception("Password not found")
-                        sftpProvider.connect(connection, password).getOrThrow()
-                        res = sftpProvider.listFiles(location, connectionId)
-                    }
-                    res.getOrThrow()
-                } else if (location.startsWith("webdav_") || location.startsWith("nextcloud_")) {
-                    val prefix = if (location.startsWith("nextcloud_")) "nextcloud_" else "webdav_"
-                    val connectionId = location.removePrefix(prefix).substringBefore(":")
-                    var res = webDavProvider.listFiles(location, connectionId)
-                    if (res.isFailure) {
-                        val connection = webDavStore.getConnections().find { it.id == connectionId } ?: throw Exception("Connection not found")
-                        val password = webDavStore.getPassword(connectionId) ?: throw Exception("Password not found")
-                        webDavProvider.connect(connection, password).getOrThrow()
-                        res = webDavProvider.listFiles(location, connectionId)
-                    }
-                    res.getOrThrow()
-                } else {
-                    repository.getFiles(location)
-                }
+                val fetched = fetchFilesForLocation(location)
                 rawFiles = fetched
                 
                 val st = _state.value
@@ -516,6 +565,240 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 rawFiles = emptyList()
                 _state.update { it.copy(hasShizuku = repository.hasShizuku(), files = persistentListOf(), isLoading = false, errorMessage = e.message ?: e.toString()) }
             }
+        }
+    }
+
+    // --- Dual-pane: right pane equivalents of loadFiles/setLocation/navigateBackInDrive ---
+    // These mirror the left-pane functions above but read/write secondPaneState
+    // instead of the top-level AppState fields, and use a separate job so
+    // loading in one pane never cancels loading in the other.
+    private var secondPaneLoadJob: kotlinx.coroutines.Job? = null
+
+    fun cycleDualPaneMode() {
+        val current = _state.value.dualPaneMode
+        val next = when (current) {
+            DualPaneMode.OFF -> DualPaneMode.SIDE_BY_SIDE
+            DualPaneMode.SIDE_BY_SIDE -> DualPaneMode.STACKED
+            DualPaneMode.STACKED -> DualPaneMode.OFF
+        }
+        _state.update { it.copy(dualPaneMode = next) }
+        if (next != DualPaneMode.OFF && _state.value.secondPaneState.files.isEmpty()) {
+            loadFilesForPane("home")
+        }
+    }
+
+    fun setActivePane(side: PaneSide) {
+        _state.update { it.copy(activePaneSide = side) }
+    }
+
+    private fun loadFilesForPane(location: String) {
+        secondPaneLoadJob?.cancel()
+        _state.update { it.copy(secondPaneState = it.secondPaneState.copy(isLoading = true, location = location, errorMessage = null)) }
+        secondPaneLoadJob = viewModelScope.launch {
+            try {
+                val fetched = fetchFilesForLocation(location)
+                _state.update {
+                    val newFiles = fetched.toImmutableList()
+                    val newCache = it.secondPaneState.folderCache.put(location, newFiles)
+                    it.copy(secondPaneState = it.secondPaneState.copy(isLoading = false, files = newFiles, folderCache = newCache))
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _state.update { it.copy(secondPaneState = it.secondPaneState.copy(files = persistentListOf(), isLoading = false, errorMessage = e.message ?: e.toString())) }
+            }
+        }
+    }
+
+    fun setLocationForPane(location: String, folderName: String? = null) {
+        val current = _state.value.secondPaneState
+        val enteringCloudSubfolder = location.startsWith("drive_id:") || location.startsWith("mega_id:") || location.startsWith("smb_") || location.startsWith("ftp_") || location.startsWith("sftp_") || location.startsWith("webdav_") || location.startsWith("nextcloud_")
+        val wasInCloud = current.location == "drive" || current.location == "mega" || current.location.startsWith("drive_id:") || current.location.startsWith("mega_id:") || current.location.startsWith("smb_") || current.location.startsWith("ftp_") || current.location.startsWith("sftp_") || current.location.startsWith("webdav_") || current.location.startsWith("nextcloud_")
+
+        val newStack = when {
+            enteringCloudSubfolder && wasInCloud ->
+                current.folderStack + (current.location to (current.currentFolderName ?: "Cloud"))
+            location == "drive" || location == "mega" || (location.startsWith("smb_") && location.endsWith(":/")) || (location.startsWith("ftp_") && location.endsWith(":/")) || (location.startsWith("sftp_") && location.endsWith(":/")) || (location.startsWith("webdav_") && location.endsWith(":/")) || (location.startsWith("nextcloud_") && location.endsWith(":/")) -> emptyList()
+            else -> current.folderStack
+        }
+
+        val cachedFiles = current.folderCache[location] ?: persistentListOf()
+        _state.update { it.copy(secondPaneState = current.copy(location = location, currentFolderName = folderName, folderStack = newStack, isLoading = true, files = cachedFiles)) }
+        loadFilesForPane(location)
+    }
+
+    fun navigateBackInPane(side: PaneSide) {
+        if (side == PaneSide.LEFT) {
+            navigateBackInDrive()
+            return
+        }
+        val current = _state.value.secondPaneState
+        if (current.folderStack.isNotEmpty()) {
+            val (prevLocation, prevName) = current.folderStack.last()
+            val cachedFiles = current.folderCache[prevLocation] ?: persistentListOf()
+            _state.update { it.copy(secondPaneState = current.copy(location = prevLocation, currentFolderName = prevName, folderStack = current.folderStack.dropLast(1), isLoading = true, files = cachedFiles)) }
+            loadFilesForPane(prevLocation)
+        } else {
+            setLocationForPane("home")
+        }
+    }
+
+    // --- Dual-pane: cross-storage file transfer engine ---
+    // This is where the FileSource interface (built in step 1) earns its
+    // keep: any pane can copy a file to any other pane, regardless of what
+    // kind of storage each side is, by staging through a local temp file.
+    //
+    // TransferMode and ConflictResolution live in data/core/TransferTypes.kt
+    // (shared with the UI) rather than nested here, so the dual-pane screen
+    // can reference them without depending on this whole ViewModel class.
+
+    sealed class TransferOutcome {
+        object Success : TransferOutcome()
+        data class Failed(val message: String) : TransferOutcome()
+        object UnsupportedFolderTransfer : TransferOutcome()
+    }
+
+    /** Builds the right FileSource adapter for a given location string, reusing
+     * the same provider instances already used elsewhere in this ViewModel. */
+    private fun resolveFileSource(location: String): com.ripple.filemanager.data.core.FileSource? {
+        return when {
+            location == "home" || location.startsWith("/") ->
+                com.ripple.filemanager.data.local.LocalFileSource(repository)
+            location == "drive" || location.startsWith("drive_id:") ->
+                com.ripple.filemanager.data.drive.DriveFileSource(repository)
+            location == "mega" || location.startsWith("mega_id:") ->
+                nz.mega.sdk.MegaFileSource(megaClient)
+            location.startsWith("smb_") -> {
+                val connectionId = location.substringAfter("smb_").substringBefore(":")
+                com.ripple.filemanager.data.smb.SmbFileSource(smbProvider, connectionId)
+            }
+            location.startsWith("ftp_") -> {
+                val connectionId = location.substringAfter("ftp_").substringBefore(":")
+                com.ripple.filemanager.data.ftp.FtpFileSource(ftpProvider, connectionId)
+            }
+            location.startsWith("sftp_") -> {
+                val connectionId = location.substringAfter("sftp_").substringBefore(":")
+                com.ripple.filemanager.data.sftp.SftpFileSource(sftpProvider, connectionId)
+            }
+            location.startsWith("webdav_") || location.startsWith("nextcloud_") -> {
+                val isNextcloud = location.startsWith("nextcloud_")
+                val prefix = if (isNextcloud) "nextcloud_" else "webdav_"
+                val connectionId = location.removePrefix(prefix).substringBefore(":")
+                com.ripple.filemanager.data.webdav.WebDavFileSource(webDavProvider, connectionId, isNextcloud)
+            }
+            else -> null
+        }
+    }
+
+    /**
+     * Transfers `file` (currently shown in `sourceLocation`) into the folder
+     * currently open at `destinationFolderLocation` — i.e. drag a file from
+     * one pane and drop it into whatever folder the other pane is showing.
+     *
+     * Folders can only be transferred when BOTH sides are Local — none of
+     * the network/cloud providers have recursive folder copy, only
+     * single-file transfers, so cross-storage folder drags are refused
+     * cleanly instead of silently doing something broken.
+     *
+     * conflictResolution is null when the caller already checked there's no
+     * naming conflict at the destination. Pass ConflictResolution.Rename to
+     * upload under a different name instead of the original.
+     */
+    fun transferFileBetweenPanes(
+        file: FileItem,
+        sourceLocation: String,
+        destinationFolderLocation: String,
+        mode: com.ripple.filemanager.data.core.TransferMode = com.ripple.filemanager.data.core.TransferMode.COPY,
+        conflictResolution: com.ripple.filemanager.data.core.ConflictResolution? = null,
+        onOutcome: (TransferOutcome) -> Unit
+    ) {
+        val bothLocal = sourceLocation.let { it == "home" || it.startsWith("/") } &&
+            destinationFolderLocation.let { it == "home" || it.startsWith("/") }
+        if (file.type == "folder" && !bothLocal) {
+            onOutcome(TransferOutcome.UnsupportedFolderTransfer)
+            return
+        }
+
+        viewModelScope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                try {
+                    val sourceFs = resolveFileSource(sourceLocation)
+                        ?: return@withContext TransferOutcome.Failed("Unsupported source location")
+                    val destFs = resolveFileSource(destinationFolderLocation)
+                        ?: return@withContext TransferOutcome.Failed("Unsupported destination location")
+
+                    // Use a uniquely-named subfolder for staging, so the temp
+                    // file itself can keep the ORIGINAL filename (adapters
+                    // upload using the local file's own .name, so anything
+                    // added to that name would leak into the uploaded copy).
+                    val transferDir = java.io.File(getApplication<Application>().cacheDir, "transfer_${System.currentTimeMillis()}_${(0..9999).random()}")
+                    transferDir.mkdirs()
+                    val tempFile = java.io.File(transferDir, file.name)
+
+                    val downloadResult = sourceFs.downloadToLocal(file.path, tempFile)
+                    if (downloadResult.isFailure) {
+                        transferDir.deleteRecursively()
+                        return@withContext TransferOutcome.Failed(downloadResult.exceptionOrNull()?.message ?: "Download failed")
+                    }
+
+                    // If renaming to resolve a conflict, upload a copy of the
+                    // temp file under the new name instead of the original.
+                    val uploadSourceFile = when (conflictResolution) {
+                        is com.ripple.filemanager.data.core.ConflictResolution.Rename -> {
+                            val renamed = java.io.File(tempFile.parentFile, conflictResolution.newName)
+                            tempFile.copyRecursively(renamed, overwrite = true)
+                            tempFile.deleteRecursively()
+                            renamed
+                        }
+                        else -> tempFile
+                    }
+
+                    // Drive and MEGA have no true "replace this file" operation —
+                    // uploading just creates a new item alongside the old one.
+                    // For Overwrite there, find the existing item by name and
+                    // delete it first so the result actually looks replaced.
+                    // Path-based providers (SMB/FTP/SFTP/WebDAV/Local) already
+                    // overwrite in place on upload, so this is a no-op for them.
+                    if (conflictResolution is com.ripple.filemanager.data.core.ConflictResolution.Overwrite) {
+                        val isPathless = destinationFolderLocation == "drive" || destinationFolderLocation.startsWith("drive_id:") ||
+                            destinationFolderLocation == "mega" || destinationFolderLocation.startsWith("mega_id:")
+                        if (isPathless) {
+                            val existingMatch = destFs.listFiles(destinationFolderLocation)
+                                .getOrNull()
+                                ?.find { it.name == file.name }
+                            if (existingMatch != null) {
+                                val deleteResult = destFs.delete(existingMatch.path, existingMatch.type == "folder")
+                                if (deleteResult.isFailure) {
+                                    transferDir.deleteRecursively()
+                                    return@withContext TransferOutcome.Failed(
+                                        "Couldn't remove the existing file before overwriting: ${deleteResult.exceptionOrNull()?.message}"
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    val uploadResult = destFs.uploadFromLocal(uploadSourceFile, destinationFolderLocation)
+                    transferDir.deleteRecursively()
+
+                    if (uploadResult.isFailure) {
+                        return@withContext TransferOutcome.Failed(uploadResult.exceptionOrNull()?.message ?: "Upload failed")
+                    }
+
+                    if (mode == com.ripple.filemanager.data.core.TransferMode.MOVE) {
+                        sourceFs.delete(file.path, file.type == "folder")
+                    }
+
+                    TransferOutcome.Success
+                } catch (e: Exception) {
+                    TransferOutcome.Failed(e.message ?: e.toString())
+                }
+            }
+            onOutcome(outcome)
+            // Refresh both panes so the moved/copied file shows up (or disappears).
+            loadFiles(_state.value.location)
+            loadFilesForPane(_state.value.secondPaneState.location)
         }
     }
 
@@ -596,6 +879,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setFilter(filter: String) {
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), filter = filter, selectedFiles = persistentSetOf()) }
         updateFilteredFiles()
+    }
+
+    fun silentInstallApk(path: String, downgrade: Boolean, forceUninstall: Boolean = false) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            if (forceUninstall) {
+                _snackbarMessage.emit("Uninstalling previous version...")
+                val pkgName = repository.getPackageNameFromApk(path)
+                if (pkgName != null) {
+                    repository.uninstallApkSilent(pkgName)
+                }
+            }
+            _snackbarMessage.emit("Installing app in background...")
+            val (success, output) = repository.installApkSilent(path, downgrade)
+            if (success) {
+                _snackbarMessage.emit("Successfully installed app")
+            } else {
+                _snackbarMessage.emit("Failed to install app silently")
+            }
+        }
+    }
+
+    fun batchInstallApks(paths: List<String>, downgrade: Boolean, silent: Boolean, forceUninstall: Boolean = false) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            if (silent || downgrade) {
+                _snackbarMessage.emit("Starting batch installation...")
+                var successCount = 0
+                for (path in paths) {
+                    if (forceUninstall) {
+                        val pkgName = repository.getPackageNameFromApk(path)
+                        if (pkgName != null) {
+                            repository.uninstallApkSilent(pkgName)
+                        }
+                    }
+                    val (success, _) = repository.installApkSilent(path, downgrade)
+                    if (success) successCount++
+                }
+                _snackbarMessage.emit("Successfully installed $successCount of ${paths.size} apps")
+            } else {
+                _snackbarMessage.emit("Normal batch install requires Shizuku for automation. Please use Silent Mode!")
+            }
+        }
     }
 
     fun setSortMode(mode: SortMode) {
@@ -1761,6 +2085,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 viewModelScope.launch {
                     val result = smbProvider.connect(connection, password)
                     if (result.isSuccess) {
+                        activeSmbFileSource = com.ripple.filemanager.data.smb.SmbFileSource(smbProvider, action.connectionId)
                         _state.update { it.copy(
                             smbState = it.smbState.copy(
                                 activeConnectionId = action.connectionId,
@@ -1790,6 +2115,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             is AppAction.SmbAction.Disconnect -> {
                 viewModelScope.launch {
+                    activeSmbFileSource = null
                     smbProvider.disconnect()
                     _state.update { it.copy(smbState = it.smbState.copy(
                         activeConnectionId = null,

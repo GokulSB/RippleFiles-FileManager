@@ -43,6 +43,7 @@ import com.ripple.filemanager.ui.theme.LocalSkylineLedgerColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@androidx.compose.runtime.Immutable
 data class MediaFileUiModel(
     val id: Int,
     val path: String,

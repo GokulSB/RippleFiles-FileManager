@@ -3,6 +3,8 @@ package com.ripple.filemanager
 import com.ripple.filemanager.data.smb.SmbConnection
 import com.ripple.filemanager.data.ftp.FtpConnection
 import com.ripple.filemanager.data.sftp.SftpConnection
+import com.ripple.filemanager.data.core.TransferMode
+import com.ripple.filemanager.data.core.ConflictResolution
 
 enum class AuthReason { OPEN_FILE, LOCK_FILE, UNLOCK_FILE }
 
@@ -160,6 +162,8 @@ sealed class AppAction {
     data class SetRecycleBinSettings(val enabled: Boolean, val retentionValue: Int, val retentionUnit: String) : AppAction()
     
     // File Organiser
+    data class SilentInstallApk(val path: String, val downgrade: Boolean, val forceUninstall: Boolean = false) : AppAction()
+    data class BatchInstallApks(val paths: List<String>, val downgrade: Boolean, val silent: Boolean, val forceUninstall: Boolean = false) : AppAction()
     data class SetOrganiserPath(val category: String, val path: String) : AppAction()
     object OrganiseDownloads : AppAction()
     object ConfirmOrganiseDownloads : AppAction()
@@ -168,6 +172,18 @@ sealed class AppAction {
     // Viewers
     data class SetViewerPreference(val category: String, val preference: String) : AppAction()
 
+    // Dual Pane
+    object CycleDualPaneMode : AppAction()
+    data class SetActivePane(val side: PaneSide) : AppAction()
+    data class SetLocationForPane(val path: String, val folderName: String? = null) : AppAction()
+    data class NavigateBackInPane(val side: PaneSide) : AppAction()
+    data class TransferFileBetweenPanes(
+        val sourceSide: PaneSide,
+        val file: FileItem,
+        val destinationSide: PaneSide,
+        val mode: TransferMode,
+        val conflictResolution: ConflictResolution? = null
+    ) : AppAction()
 }
 
 enum class SmbError { AUTH_FAILED, HOST_UNREACHABLE, TIMEOUT, SHARE_NOT_FOUND, UNKNOWN }

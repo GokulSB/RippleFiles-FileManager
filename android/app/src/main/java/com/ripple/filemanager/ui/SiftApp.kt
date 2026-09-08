@@ -48,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -106,6 +107,7 @@ fun getDynamicCornerShape(defaultRadius: Float, cornerRoundness: Float): Rounded
     return RoundedCornerShape((defaultRadius * (cornerRoundness * 2)).coerceIn(0f, 100f).dp)
 }
 
+@androidx.compose.runtime.Immutable
 data class FlyingDelete(
     val id: String,
     val startRect: androidx.compose.ui.geometry.Rect,
@@ -1641,6 +1643,31 @@ fun handleFileOpen(
 @androidx.compose.runtime.Immutable
 data class FabMenuAction(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val onClick: () -> Unit)
 
+/**
+ * Same decision chain as the single-pane onFileClick block below
+ * (lock check -> archive check -> handleFileOpen), pulled out so the
+ * dual-pane screen's onOpenFile callback can reuse it without duplicating
+ * the whole if/else chain. Selection-mode and folder handling aren't
+ * included here since dual-pane doesn't support multi-select yet and
+ * folders are already routed to onNavigate before this is called.
+ */
+fun handleFileTapForPane(
+    file: FileItem,
+    state: AppState,
+    context: android.content.Context,
+    focusManager: androidx.compose.ui.focus.FocusManager,
+    onAction: (AppAction) -> Unit,
+    onShowArchiveOptions: (FileItem) -> Unit
+) {
+    if (file.isLocked) {
+        onAction(AppAction.RequestAuth(com.ripple.filemanager.AuthReason.OPEN_FILE, file.path, fileId = file.id, folderName = file.name))
+    } else if (file.name.lowercase().endsWith(".zip") || file.name.lowercase().endsWith(".rar") || file.name.lowercase().endsWith(".tar") || file.name.lowercase().endsWith(".gz") || file.name.lowercase().endsWith(".bz2") || file.name.lowercase().endsWith(".xz")) {
+        onShowArchiveOptions(file)
+    } else {
+        handleFileOpen(file, context, state, focusManager, onAction)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun MainContent(
@@ -1652,6 +1679,11 @@ fun MainContent(
 ) {
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val context = LocalContext.current
+    val isDark = when (state.themeMode) {
+        com.ripple.filemanager.ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+        com.ripple.filemanager.ThemeMode.DARK -> true
+        com.ripple.filemanager.ThemeMode.LIGHT -> false
+    }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var extractTargetFile by remember { mutableStateOf<FileItem?>(null) }
@@ -1753,12 +1785,24 @@ fun MainContent(
         onAction(AppAction.ClearSelection)
     }
 
-    androidx.activity.compose.PredictiveBackHandler(enabled = state.selectedFiles.isEmpty() && state.query.isEmpty() && state.location != "home") { progress ->
+    val canDualPaneGoBack = if (state.dualPaneMode != com.ripple.filemanager.DualPaneMode.OFF) {
+        if (state.activePaneSide == com.ripple.filemanager.PaneSide.LEFT) {
+            state.driveFolderStack.isNotEmpty() || state.location != "home"
+        } else {
+            state.secondPaneState.folderStack.isNotEmpty() || state.secondPaneState.location != "home"
+        }
+    } else false
+
+    androidx.activity.compose.PredictiveBackHandler(
+        enabled = if (state.dualPaneMode != com.ripple.filemanager.DualPaneMode.OFF) canDualPaneGoBack else (state.selectedFiles.isEmpty() && state.query.isEmpty() && state.location != "home")
+    ) { progress ->
         try {
             progress.collect { backEvent ->
                 backProgress = backEvent.progress
             }
-            if (state.location.startsWith("/")) {
+            if (state.dualPaneMode != com.ripple.filemanager.DualPaneMode.OFF) {
+                onAction(AppAction.NavigateBackInPane(state.activePaneSide))
+            } else if (state.location.startsWith("/")) {
                 val parent = File(state.location).parent
                 val rootPath = Environment.getExternalStorageDirectory().absolutePath
                 if (parent != null && parent.length >= rootPath.length) {
@@ -1831,8 +1875,12 @@ fun MainContent(
     ) { paddingValues ->
         Column(
             modifier = Modifier
-                .padding(paddingValues)
-                .padding(horizontal = 24.dp)
+                .fillMaxSize()
+                .padding(
+                    top = paddingValues.calculateTopPadding(),
+                    start = paddingValues.calculateLeftPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),
+                    end = paddingValues.calculateRightPadding(androidx.compose.ui.platform.LocalLayoutDirection.current)
+                )
                 .pointerInput(Unit) {
                     detectTapGestures(onPress = { focusManager.clearFocus() })
                 }
@@ -1859,7 +1907,7 @@ fun MainContent(
                 val cloudNames = listOf("Google Drive", "Mega", "Dropbox")
                 val currentCloud = cloudNames[unauthCloudIndex]
                 Column(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -1910,7 +1958,7 @@ fun MainContent(
 
             } else if (state.errorMessage != null) {
                 Column(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -1934,7 +1982,7 @@ fun MainContent(
 
                     val targetLocation = state.location
 var showSortMenu by remember { mutableStateOf(false) }
-Column {
+Column(modifier = Modifier.weight(1f)) {
 if (state.storageTotalGb > 0f && (targetLocation == "home" || targetLocation == "drive" || targetLocation == "recent" || targetLocation == "pinned" || targetLocation.startsWith("drive_id:") || targetLocation.startsWith(android.os.Environment.getExternalStorageDirectory().absolutePath))) {
     val storageSources = buildList {
         // Local storage
@@ -1972,51 +2020,93 @@ if (state.storageTotalGb > 0f && (targetLocation == "home" || targetLocation == 
     
     ConnectedStorageCard(
         sources = storageSources,
-        cornerRoundness = state.cornerRoundness
+        cornerRoundness = state.cornerRoundness,
+        modifier = Modifier.padding(horizontal = 24.dp)
     )
     Spacer(modifier = Modifier.height(8.dp))
 }
 Spacer(modifier = Modifier.height(8.dp))
 Row(
-    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-    horizontalArrangement = Arrangement.spacedBy(8.dp)
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+    horizontalArrangement = Arrangement.spacedBy(4.dp)
 ) {
     listOf(
-        "audio" to Icons.Outlined.MusicNote, 
-        "video" to Icons.Outlined.PermMedia, 
-        "doc" to Icons.Outlined.InsertDriveFile,
-        "apk" to Icons.Outlined.Android
-    ).forEach { (id, icon) ->
+        Triple("audio", Icons.Outlined.MusicNote, "Audio"), 
+        Triple("video", Icons.Outlined.PermMedia, "Videos"), 
+        Triple("doc", Icons.Outlined.InsertDriveFile, "Files"),
+        Triple("apk", Icons.Outlined.Android, "Apps")
+    ).forEach { (id, icon, label) ->
         val active = state.filter == id || (id == "video" && state.filter == "media") || (id == "audio" && state.filter == "music")
-        val toneColor = com.ripple.filemanager.ui.theme.fileTypeTone(id)
-        val shape = getDynamicCornerShape(18f, state.cornerRoundness)
-        Box(
+        val accentColor = when(id) {
+            "audio" -> com.ripple.filemanager.ui.theme.SkylineColors.AccentViolet
+            "video" -> com.ripple.filemanager.ui.theme.SkylineColors.AccentRed
+            "doc" -> com.ripple.filemanager.ui.theme.SkylineColors.AccentTeal
+            "apk" -> com.ripple.filemanager.ui.theme.SkylineColors.AccentGreen
+            else -> com.ripple.filemanager.ui.theme.SkylineColors.TextDim
+        }
+        val shape = RoundedCornerShape(50)
+        Row(
             modifier = Modifier
+                .weight(1f)
                 .heightIn(min = 36.dp)
-                .border(if (active) 2.dp else 1.dp, if (active) toneColor else MaterialTheme.colorScheme.outlineVariant, shape)
+                .border(if (active) 2.dp else 1.dp, if (active) accentColor else MaterialTheme.colorScheme.outlineVariant, shape)
                 .clip(shape)
-                .background(if (active) toneColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface)
+                .background(if (active) accentColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface)
                 .clickable { 
                     if (active) onAction(AppAction.SetFilter("all")) else onAction(AppAction.SetFilter(id))
                 }
-                .padding(horizontal = 20.dp),
-            contentAlignment = Alignment.Center
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = id,
-                tint = if (active) toneColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(accentColor, RoundedCornerShape(7.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = id,
+                    tint = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                fontFamily = com.ripple.filemanager.ui.theme.JetBrainsMonoFamily,
+                fontWeight = FontWeight.Medium,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                color = if (active) accentColor else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 Spacer(modifier = Modifier.height(8.dp))
-                                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+val sheetRadius = (24f * (state.cornerRoundness * 2)).coerceIn(0f, 100f).dp
+val sheetShape = RoundedCornerShape(topStart = sheetRadius, topEnd = sheetRadius)
+Column(
+    modifier = Modifier
+        .fillMaxWidth()
+        .weight(1f)
+        .clip(sheetShape)
+        .background(MaterialTheme.colorScheme.surfaceVariant)
+        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), sheetShape)
+        .padding(top = 16.dp, start = 24.dp, end = 24.dp)
+) {
+    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
 val rootPath = Environment.getExternalStorageDirectory().absolutePath
 
 Row(
-    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+    modifier = Modifier.weight(1f)
+        .clip(getDynamicCornerShape(14f, state.cornerRoundness))
+        .background(MaterialTheme.colorScheme.surface)
+        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, getDynamicCornerShape(14f, state.cornerRoundness))
+        .padding(horizontal = 12.dp, vertical = 6.dp)
+        .horizontalScroll(rememberScrollState()),
     verticalAlignment = Alignment.CenterVertically
 ) {
     if (targetLocation.startsWith("/") && targetLocation.length > rootPath.length) {
@@ -2024,7 +2114,7 @@ Row(
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = "Internal storage", 
-            style = MaterialTheme.typography.labelLarge, 
+            style = MaterialTheme.typography.titleMedium.copy(fontFamily = com.ripple.filemanager.ui.theme.ManropeFontFamily, fontWeight = FontWeight.Bold), 
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .clip(getDynamicCornerShape(4f, state.cornerRoundness))
@@ -2042,8 +2132,7 @@ Row(
                 val pathForClick = currentPath
                 Text(
                     text = segment, 
-                    style = MaterialTheme.typography.labelLarge, 
-                    fontWeight = if (index == segments.size - 1) FontWeight.Bold else null,
+                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = com.ripple.filemanager.ui.theme.ManropeFontFamily, fontWeight = FontWeight.Bold), 
                     color = if (index == segments.size - 1) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .clip(getDynamicCornerShape(4f, state.cornerRoundness))
@@ -2169,11 +2258,19 @@ Row(
                     }
                 }
                 Text(stringResource(R.string.path_separator), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-                Text(state.currentFolderName ?: "Folder", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Text(state.currentFolderName ?: "Folder", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            } else {
+                // Home Text
+                Text(
+                    text = if (targetLocation == "home") "Home" else if (targetLocation == "drive") "Drive" else if (targetLocation == "recent") "Recent" else if (targetLocation == "pinned") "Pinned" else if (targetLocation.startsWith("drive_id:")) targetLocation.substringAfter("drive_id:") else "Files",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
         } else {
             val displayLoc = targetLocation.replaceFirstChar { it.uppercase() }
-            Text(displayLoc, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(displayLoc, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         }
     } else {
         // Just root path
@@ -2193,7 +2290,7 @@ Spacer(modifier = Modifier.width(8.dp))
 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     // Sort button with DropdownMenu
     Box {
-        val shape = getDynamicCornerShape(20f, state.cornerRoundness)
+        val shape = getDynamicCornerShape(14f, state.cornerRoundness)
         Box(
             modifier = Modifier
                 .clip(shape)
@@ -2227,7 +2324,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     }
 
     // View toggle button
-    val shape = getDynamicCornerShape(20f, state.cornerRoundness)
+    val shape = getDynamicCornerShape(14f, state.cornerRoundness)
     Box(
         modifier = Modifier
             .clip(shape)
@@ -2243,15 +2340,77 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             modifier = Modifier.size(20.dp)
         )
     }
+
+    // Dual pane toggle button — cycles OFF -> side-by-side -> stacked -> OFF
+    val dualPaneShape = getDynamicCornerShape(14f, state.cornerRoundness)
+    val dualPaneOn = state.dualPaneMode != com.ripple.filemanager.DualPaneMode.OFF
+    Box(
+        modifier = Modifier
+            .clip(dualPaneShape)
+            .border(
+                1.dp,
+                if (dualPaneOn) com.ripple.filemanager.ui.theme.SkylineColors.Amber else MaterialTheme.colorScheme.outlineVariant,
+                dualPaneShape
+            )
+            .background(
+                if (dualPaneOn) com.ripple.filemanager.ui.theme.SkylineColors.Amber.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+            )
+            .clickable { onAction(AppAction.CycleDualPaneMode) }
+            .padding(8.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.VerticalSplit,
+            contentDescription = when (state.dualPaneMode) {
+                com.ripple.filemanager.DualPaneMode.OFF -> "Turn on dual pane"
+                com.ripple.filemanager.DualPaneMode.SIDE_BY_SIDE -> "Switch to stacked dual pane"
+                com.ripple.filemanager.DualPaneMode.STACKED -> "Turn off dual pane"
+            },
+            tint = if (dualPaneOn) com.ripple.filemanager.ui.theme.SkylineColors.Amber else MaterialTheme.colorScheme.onSurfaceVariant,
+            // A vertical-split icon rotated 90° reads as a horizontal split —
+            // avoids depending on a separate HorizontalSplit icon that may
+            // not exist in this icon set.
+            modifier = Modifier
+                .size(20.dp)
+                .rotate(if (state.dualPaneMode == com.ripple.filemanager.DualPaneMode.STACKED) 90f else 0f)
+        )
+    }
 }
                                     }
-}
 
-
+                if (state.dualPaneMode != com.ripple.filemanager.DualPaneMode.OFF) {
+                    com.ripple.filemanager.ui.dualpane.DualPaneFileManagerScreen(
+                        state = state,
+                        mode = state.dualPaneMode,
+                        onNavigate = { side, path, name ->
+                            if (side == com.ripple.filemanager.PaneSide.LEFT) {
+                                onAction(AppAction.SetLocation(path, name))
+                            } else {
+                                onAction(AppAction.SetLocationForPane(path, name))
+                            }
+                        },
+                        onBack = { side -> onAction(AppAction.NavigateBackInPane(side)) },
+                        onSetActivePane = { side -> onAction(AppAction.SetActivePane(side)) },
+                        onOpenFile = { _, file ->
+                            handleFileTapForPane(
+                                file = file,
+                                state = state,
+                                context = context,
+                                focusManager = focusManager,
+                                onAction = onAction,
+                                onShowArchiveOptions = { showArchiveOptionsFor = it }
+                            )
+                        },
+                        onDropFile = { sourceSide, file, destSide, mode, conflictResolution ->
+                            onAction(AppAction.TransferFileBetweenPanes(sourceSide, file, destSide, mode, conflictResolution))
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
                 androidx.compose.animation.AnimatedContent(
                     targetState = state,
                     contentKey = { it.location },
                     modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.TopStart,
                     transitionSpec = {
                         androidx.compose.animation.fadeIn(
                             animationSpec = androidx.compose.animation.core.tween(200)
@@ -2265,7 +2424,7 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ) { targetStateSnapshot ->
                     val state = targetStateSnapshot
                     val targetLocation = state.location
-                    androidx.compose.foundation.layout.Box {
+                    androidx.compose.foundation.layout.Box(contentAlignment = Alignment.TopStart) {
                                         FileGrid(
                                             folderState = if (state.isLoading) FolderListUiState.Loading else FolderListUiState.Loaded(state.files),
                                             pasteLoadingCount = state.pasteLoadingCount,
@@ -2380,9 +2539,11 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         }
                     }
                 }
-            }
-        }
-        
+                }
+            } // closes sheet Column
+            } 
+        } 
+    } 
         Box(modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 24.dp, end = 24.dp), contentAlignment = Alignment.BottomEnd) {
             Column(
                 horizontalAlignment = Alignment.End,
@@ -2398,6 +2559,313 @@ Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         onAction = onAction
                     )
                 }
+
+                val selectedFiles = state.files.filter { it.id in state.selectedFiles }
+                val selectedApks = selectedFiles.filter { it.name.endsWith(".apk", ignoreCase = true) || it.name.endsWith(".apks", ignoreCase = true) }
+                val showInstallFab = state.isSelectionMode && selectedApks.isNotEmpty() && selectedApks.size == selectedFiles.size
+
+                var showSingleApkInstallPopup by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                var showBatchApkInstallPopup by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                var showDowngradeWarningSingle by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                var showDowngradeWarningBatch by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                var batchSheetMode by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.ripple.filemanager.ui.InstallMode?>(null) }
+                var parsedBatchApks by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.ripple.filemanager.ui.ParsedApkItem>?>(null) }
+
+                androidx.compose.runtime.LaunchedEffect(selectedApks, showBatchApkInstallPopup) {
+                    if (selectedApks.size > 1 && showBatchApkInstallPopup) {
+                        parsedBatchApks = null
+                        val results = mutableListOf<com.ripple.filemanager.ui.ParsedApkItem>()
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            val pm = context.packageManager
+                            for (apk in selectedApks) {
+                                if (apk.path.startsWith("/")) {
+                                    val pi = pm.getPackageArchiveInfo(apk.path, android.content.pm.PackageManager.GET_ACTIVITIES)
+                                    if (pi != null) {
+                                        pi.applicationInfo?.sourceDir = apk.path
+                                        pi.applicationInfo?.publicSourceDir = apk.path
+                                        val label = pi.applicationInfo?.loadLabel(pm)?.toString() ?: apk.name
+                                        val vName = pi.versionName ?: "Unknown"
+                                        
+                                        var isDowngrade = false
+                                        var installedVName: String? = null
+                                        var installedVCode: Long? = null
+                                        try {
+                                            val installed = pm.getPackageInfo(pi.packageName, 0)
+                                            installedVName = installed.versionName
+                                            installedVCode = installed.longVersionCode
+                                            if (pi.longVersionCode < installed.longVersionCode) {
+                                                isDowngrade = true
+                                            }
+                                        } catch (e: Exception) {}
+                                        
+                                        results.add(com.ripple.filemanager.ui.ParsedApkItem(apk, label, vName, pi.longVersionCode, isDowngrade, installedVName, installedVCode))
+                                    } else {
+                                        results.add(com.ripple.filemanager.ui.ParsedApkItem(apk, apk.name, "Unknown", 0L, false, null, null))
+                                    }
+                                } else {
+                                    results.add(com.ripple.filemanager.ui.ParsedApkItem(apk, apk.name, "Unknown", 0L, false, null, null))
+                                }
+                            }
+                        }
+                        parsedBatchApks = results
+                    }
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = showSingleApkInstallPopup && showInstallFab && selectedApks.size == 1,
+                    enter = androidx.compose.animation.scaleIn(
+                        initialScale = 0.9f, 
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f), 
+                        animationSpec = androidx.compose.animation.core.tween(120)
+                    ) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120)),
+                    exit = androidx.compose.animation.scaleOut(
+                        targetScale = 0.9f, 
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f), 
+                        animationSpec = androidx.compose.animation.core.tween(120)
+                    ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120))
+                ) {
+                    val singleApk = selectedApks.firstOrNull() ?: return@AnimatedVisibility
+                    var apkInfo by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<android.content.pm.PackageInfo?>(null) }
+                    var installedInfo by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<android.content.pm.PackageInfo?>(null) }
+                    var hasLoaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                    
+                    androidx.compose.runtime.LaunchedEffect(singleApk) {
+                        hasLoaded = false
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            if (singleApk.path.startsWith("/")) {
+                                val pm = context.packageManager
+                                val pi = pm.getPackageArchiveInfo(singleApk.path, android.content.pm.PackageManager.GET_ACTIVITIES)
+                                if (pi != null) {
+                                    pi.applicationInfo?.sourceDir = singleApk.path
+                                    pi.applicationInfo?.publicSourceDir = singleApk.path
+                                    apkInfo = pi
+                                    try {
+                                        installedInfo = pm.getPackageInfo(pi.packageName, 0)
+                                    } catch (e: Exception) {
+                                        installedInfo = null
+                                    }
+                                }
+                            }
+                        }
+                        hasLoaded = true
+                    }
+                    
+                    if (!hasLoaded) {
+                        Box(modifier = Modifier.padding(bottom = 8.dp).size(56.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                        }
+                    } else {
+                        val pm = context.packageManager
+                        val appLabel = apkInfo?.applicationInfo?.loadLabel(pm)?.toString() ?: singleApk.name
+                        val modes = com.ripple.filemanager.ui.evaluateInstallModes(
+                            selectedApk = if (apkInfo != null) com.ripple.filemanager.ui.ApkVersionInfo(apkInfo!!.packageName, apkInfo!!.longVersionCode, apkInfo!!.versionName ?: "Unknown") else com.ripple.filemanager.ui.ApkVersionInfo("", 0, "Unknown"),
+                            installedApp = if (installedInfo != null) com.ripple.filemanager.ui.ApkVersionInfo(installedInfo!!.packageName, installedInfo!!.longVersionCode, installedInfo!!.versionName ?: "Unknown") else null,
+                            shizukuConnected = state.hasShizuku
+                        )
+                        
+                        val vText = if (apkInfo != null) {
+                            if (installedInfo != null) "${installedInfo!!.versionName ?: "Unknown"} (${installedInfo!!.longVersionCode}) -> ${apkInfo!!.versionName ?: "Unknown"} (${apkInfo!!.longVersionCode})" else "${apkInfo!!.versionName ?: "Unknown"} (${apkInfo!!.longVersionCode})"
+                        } else {
+                            "Unknown Version"
+                        }
+                        
+                        com.ripple.filemanager.ui.SingleApkInstallPopup(
+                            appName = appLabel,
+                            versionText = vText,
+                            modes = modes,
+                            onNormalInstall = { 
+                                showSingleApkInstallPopup = false
+                                handleFileOpen(singleApk, context, state, focusManager, onAction)
+                            },
+                            onDowngradeInstall = {
+                                showSingleApkInstallPopup = false
+                                showDowngradeWarningSingle = true
+                            },
+                            onSilentInstall = {
+                                showSingleApkInstallPopup = false
+                                onAction(com.ripple.filemanager.AppAction.SilentInstallApk(singleApk.path, downgrade = false))
+                            },
+                            modifier = Modifier.padding(bottom = 8.dp),
+                            cornerRoundness = state.cornerRoundness
+                        )
+                    }
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = showBatchApkInstallPopup && showInstallFab && selectedApks.size > 1,
+                    enter = androidx.compose.animation.scaleIn(
+                        initialScale = 0.9f, 
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f), 
+                        animationSpec = androidx.compose.animation.core.tween(120)
+                    ) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120)),
+                    exit = androidx.compose.animation.scaleOut(
+                        targetScale = 0.9f, 
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f), 
+                        animationSpec = androidx.compose.animation.core.tween(120)
+                    ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120))
+                ) {
+                    val parsed = parsedBatchApks
+                    if (parsed == null) {
+                        Box(modifier = Modifier.padding(bottom = 8.dp).size(56.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                        }
+                    } else {
+                        val normalCount = parsed.count { !it.isDowngrade }
+                        val downgradeCount = parsed.count { it.isDowngrade }
+                        
+                        com.ripple.filemanager.ui.BatchApkInstallPopup(
+                            selectedCount = parsed.size,
+                            normalPillText = "$normalCount apps",
+                            normalPillIsCoral = normalCount < parsed.size,
+                            downgradePillText = "$downgradeCount apps",
+                            downgradePillIsCoral = downgradeCount == 0,
+                            silentPillText = "$normalCount apps",
+                            silentPillIsCoral = normalCount < parsed.size,
+                            isShizukuConnected = state.hasShizuku,
+                            onNormalClick = {
+                                showBatchApkInstallPopup = false
+                                batchSheetMode = com.ripple.filemanager.ui.InstallMode.NORMAL
+                            },
+                            onDowngradeClick = {
+                                showBatchApkInstallPopup = false
+                                batchSheetMode = com.ripple.filemanager.ui.InstallMode.DOWNGRADE
+                            },
+                            onSilentClick = {
+                                showBatchApkInstallPopup = false
+                                batchSheetMode = com.ripple.filemanager.ui.InstallMode.SILENT
+                            },
+                            modifier = Modifier.padding(bottom = 8.dp),
+                            cornerRoundness = state.cornerRoundness
+                        )
+                    }
+                }
+
+
+                if (showDowngradeWarningSingle) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showDowngradeWarningSingle = false },
+                        shape = getDynamicCornerShape(24f, state.cornerRoundness),
+                        title = { androidx.compose.material3.Text("Downgrade Warning", color = com.ripple.filemanager.ui.theme.SkylineColors.Rust) },
+                        text = { androidx.compose.material3.Text("Android OS strictly forbids downgrading most apps to prevent security vulnerabilities.\n\nTo install this older version, the currently installed app MUST be completely uninstalled first, WHICH WILL PERMANENTLY DELETE ALL ITS DATA.\n\nWould you like to proceed with a clean downgrade (wipes data)?") },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                showDowngradeWarningSingle = false
+                                onAction(com.ripple.filemanager.AppAction.SilentInstallApk(selectedApks.first().path, downgrade = true, forceUninstall = true))
+                            }) {
+                                androidx.compose.material3.Text("Wipe Data & Downgrade", color = com.ripple.filemanager.ui.theme.SkylineColors.Rust)
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                showDowngradeWarningSingle = false
+                                // Try keeping data anyway
+                                onAction(com.ripple.filemanager.AppAction.SilentInstallApk(selectedApks.first().path, downgrade = true, forceUninstall = false))
+                            }) {
+                                androidx.compose.material3.Text("Try Keeping Data (May Fail)")
+                            }
+                        },
+                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+
+                if (showDowngradeWarningBatch) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showDowngradeWarningBatch = false },
+                        shape = getDynamicCornerShape(24f, state.cornerRoundness),
+                        title = { androidx.compose.material3.Text("Batch Downgrade Warning", color = com.ripple.filemanager.ui.theme.SkylineColors.Rust) },
+                        text = { androidx.compose.material3.Text("Android OS strictly forbids downgrading most apps. To install older versions, the currently installed apps MUST be completely uninstalled first, WHICH WILL PERMANENTLY DELETE ALL THEIR DATA.\n\nWould you like to proceed with a clean downgrade for all selected apps (wipes data)?") },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                showDowngradeWarningBatch = false
+                                val filteredApks = parsedBatchApks?.filter { it.isDowngrade } ?: emptyList()
+                                onAction(com.ripple.filemanager.AppAction.BatchInstallApks(filteredApks.map { it.file.path }, downgrade = true, silent = true, forceUninstall = true))
+                            }) {
+                                androidx.compose.material3.Text("Wipe Data & Downgrade", color = com.ripple.filemanager.ui.theme.SkylineColors.Rust)
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                showDowngradeWarningBatch = false
+                                val filteredApks = parsedBatchApks?.filter { it.isDowngrade } ?: emptyList()
+                                onAction(com.ripple.filemanager.AppAction.BatchInstallApks(filteredApks.map { it.file.path }, downgrade = true, silent = true, forceUninstall = false))
+                            }) {
+                                androidx.compose.material3.Text("Try Keeping Data (May Fail)")
+                            }
+                        },
+                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+
+                if (batchSheetMode != null) {
+                    val filteredApks = parsedBatchApks?.filter {
+                        when (batchSheetMode) {
+                            com.ripple.filemanager.ui.InstallMode.NORMAL -> !it.isDowngrade
+                            com.ripple.filemanager.ui.InstallMode.SILENT -> !it.isDowngrade
+                            com.ripple.filemanager.ui.InstallMode.DOWNGRADE -> it.isDowngrade
+                            else -> true
+                        }
+                    } ?: emptyList()
+                    
+                    val batchApks = filteredApks.map { parsedApk ->
+                        val vTransition = if (parsedApk.installedVersionName != null) "${parsedApk.installedVersionName} (${parsedApk.installedVersionCode}) -> ${parsedApk.versionName} (${parsedApk.versionCode})" else "${parsedApk.versionName} (${parsedApk.versionCode})"
+                        com.ripple.filemanager.ui.BatchApkItem(
+                            name = parsedApk.appName,
+                            initial = parsedApk.appName.take(1).uppercase(),
+                            versionTransition = vTransition,
+                            note = null,
+                            isNoteWarning = false,
+                            overrideMode = null
+                        )
+                    }
+                    com.ripple.filemanager.ui.BatchInstallSheet(
+                        fileCount = batchApks.size,
+                        selectedMode = batchSheetMode!!,
+                        apks = batchApks,
+                        isShizukuConnected = state.hasShizuku,
+                        cornerRoundness = state.cornerRoundness,
+                        onRemove = { /* implement remove later */ },
+                        onCancel = { batchSheetMode = null },
+                        onInstall = {
+                            val mode = batchSheetMode
+                            batchSheetMode = null
+                            if (mode == com.ripple.filemanager.ui.InstallMode.DOWNGRADE) {
+                                showDowngradeWarningBatch = true
+                            } else {
+                                val isSilent = mode == com.ripple.filemanager.ui.InstallMode.SILENT
+                                onAction(com.ripple.filemanager.AppAction.BatchInstallApks(filteredApks.map { it.file.path }, downgrade = false, silent = isSilent))
+                            }
+                        }
+                    )
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = showInstallFab,
+                    enter = androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut()
+                ) {
+                    FloatingActionButton(
+                        onClick = {
+                            if (selectedApks.size == 1) {
+                                showSingleApkInstallPopup = !showSingleApkInstallPopup
+                                showBatchApkInstallPopup = false
+                            } else {
+                                showBatchApkInstallPopup = !showBatchApkInstallPopup
+                                showSingleApkInstallPopup = false
+                            }
+                        },
+                        shape = getDynamicCornerShape(16f, state.cornerRoundness),
+                        containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
+                        contentColor = androidx.compose.ui.graphics.Color(0xFF161009)
+                    ) {
+                        if (selectedApks.size == 1) {
+                            Icon(androidx.compose.material.icons.Icons.Default.Android, contentDescription = "Install")
+                        } else {
+                            Icon(androidx.compose.material.icons.Icons.Default.Apps, contentDescription = "Batch Install")
+                        }
+                    }
+                }
+
+
 
                 UnifiedBottomPill(
                     state = state,

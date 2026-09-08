@@ -167,6 +167,68 @@ class FileRepository(private val context: Context) {
         return java.io.File(path).deleteRecursively()
     }
 
+        fun runShizukuCommandWithOutput(cmd: String): Pair<Boolean, String> {
+        return try {
+            val m = rikka.shizuku.Shizuku::class.java.getDeclaredMethods().find { it.name == "newProcess" }
+            m?.isAccessible = true
+            val process = m?.invoke(null, arrayOf("sh", "-c", cmd), null, null) as? Process
+            
+            if (process == null) return Pair(false, "Process is null")
+            
+            val reader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
+            val errReader = java.io.BufferedReader(java.io.InputStreamReader(process.errorStream))
+            
+            var output = ""
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                output += line + "\\n"
+            }
+            while (errReader.readLine().also { line = it } != null) {
+                output += line + "\\n"
+            }
+            
+            val exitCode = process.waitFor()
+            Pair(exitCode == 0, output)
+        } catch (e: Exception) {
+            Pair(false, e.message ?: "Unknown error")
+        }
+    }
+    
+            fun uninstallApkSilent(packageName: String): Pair<Boolean, String> {
+        if (!hasShizuku()) return Pair(false, "No Shizuku")
+        return runShizukuCommandWithOutput("cmd package uninstall $packageName")
+    }
+
+    fun getPackageNameFromApk(path: String): String? {
+        val pm = context.packageManager
+        val pi = pm.getPackageArchiveInfo(path, 0)
+        return pi?.packageName
+    }
+
+    fun installApkSilent(path: String, downgrade: Boolean): Pair<Boolean, String> {
+        if (!hasShizuku()) return Pair(false, "No Shizuku")
+        
+        // We use 'cmd package install' with a piped stream (-S) from 'cat'.
+        // 1. 'cat' runs as shell, which can read the FUSE filesystem (avoiding SELinux denials).
+        // 2. 'cmd package install' is much faster than 'pm install' because it doesn't spin up a Dalvik VM.
+        // 3. We avoid writing the APK to a temporary /data/local/tmp file, cutting disk I/O in half!
+        
+        val file = java.io.File(path)
+        val size = file.length()
+        
+        if (size == 0L) {
+            return Pair(false, "File not found or empty")
+        }
+        
+        val cmd = if (downgrade) {
+            "cat \"$path\" | cmd package install -r -d -S $size"
+        } else {
+            "cat \"$path\" | cmd package install -r -S $size"
+        }
+        
+        return runShizukuCommandWithOutput(cmd)
+    }
+
     fun hasShizuku(): Boolean {
         return try {
             Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -1101,6 +1163,48 @@ class FileRepository(private val context: Context) {
             }
         }
     }
+
+    // Added for FileSource/dual-pane support: pulls the download/upload
+    // logic that already existed inside copyFiles() into standalone,
+    // reusable methods so DriveFileSource can call them directly.
+    suspend fun downloadDriveFileToLocal(fileId: String, destination: File): Result<File> = withContext(Dispatchers.IO) {
+        if (driveService == null) return@withContext Result.failure(IllegalStateException("Drive not connected"))
+        try {
+            val driveFile = driveService!!.files().get(fileId)
+                .setSupportsAllDrives(true)
+                .setFields("name, size, mimeType")
+                .execute()
+            val isGoogleDoc = driveFile.mimeType?.startsWith("application/vnd.google-apps.") == true
+            val size = driveFile.size ?: 0L
+
+            if (size == 0L || isGoogleDoc) {
+                destination.createNewFile()
+            } else {
+                java.io.FileOutputStream(destination).use { out ->
+                    driveService!!.files().get(fileId).setSupportsAllDrives(true).executeMediaAndDownloadTo(out)
+                }
+            }
+            Result.success(destination)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun uploadLocalFileToDrive(localFile: File, destParentLocation: String): Result<Unit> = withContext(Dispatchers.IO) {
+        if (driveService == null) return@withContext Result.failure(IllegalStateException("Drive not connected"))
+        try {
+            val destParentId = if (destParentLocation == "drive") "root" else destParentLocation.removePrefix("drive_id:")
+            val fileContent = com.google.api.client.http.FileContent("application/octet-stream", localFile)
+            val driveFile = com.google.api.services.drive.model.File()
+            driveFile.name = localFile.name
+            driveFile.parents = listOf(destParentId)
+            driveService!!.files().create(driveFile, fileContent).execute()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getDriveStorageQuota(): Pair<Long, Long>? = withContext(Dispatchers.IO) {
         if (driveService == null) return@withContext null
         try {
