@@ -23,15 +23,17 @@ sealed class AppAction {
     data class SetShowThemeSheet(val show: Boolean) : AppAction()
     data class SetShowBatchRenameDialog(val show: Boolean) : AppAction()
     data class SetSortMode(val mode: SortMode) : AppAction()
+    data class ShowToast(val message: String) : AppAction()
     
     // File Selection
     object ClearSelection : AppAction()
     data class ToggleSelection(val id: Int) : AppAction()
-    object SelectAll : AppAction()
+    data class SelectAll(val ids: Collection<Int>? = null) : AppAction()
     object SelectNone : AppAction()
     
     // File Operations
     data class OpenFileViewer(val id: Int) : AppAction()
+    data class ViewFile(val file: FileItem) : AppAction()
     object CloseFileViewer : AppAction()
     object ClearUnlockedFileToOpen : AppAction()
     data class CreateFolder(val name: String) : AppAction()
@@ -52,6 +54,7 @@ sealed class AppAction {
         val style: String
     ) : AppAction()
     object DeleteSelectedFiles : AppAction()
+    data class LogRecentAction(val path: String, val action: String) : AppAction()
     
     // Clipboard Operations
     data class SetClipboard(val action: String) : AppAction()
@@ -139,6 +142,7 @@ sealed class AppAction {
     data class SetInvertText(val invert: Boolean) : AppAction()
     data class SetCornerRoundness(val roundness: Float) : AppAction()
     data class SetGridColumns(val columns: Int) : AppAction()
+    data class SetListMode(val isList: Boolean) : AppAction()
 
     // Cleaner Screen
     data class SetCleanerCategory(val category: String?) : AppAction()
@@ -184,6 +188,23 @@ sealed class AppAction {
         val mode: TransferMode,
         val conflictResolution: ConflictResolution? = null
     ) : AppAction()
+
+    // Nearby Share (LocalSend Protocol v2)
+    sealed class NearbyShareAction : AppAction() {
+        data class ToggleReceive(val enabled: Boolean) : NearbyShareAction()
+        data class StageFiles(val files: List<FileItem>) : NearbyShareAction()
+        data class RemoveStagedFile(val file: FileItem) : NearbyShareAction()
+        object ClearStagedFiles : NearbyShareAction()
+        data class SendToPeer(val peer: com.ripple.filemanager.localsend.NearbyPeer) : NearbyShareAction()
+        data class AcceptIncoming(val sessionId: String) : NearbyShareAction()
+        data class DeclineIncoming(val sessionId: String) : NearbyShareAction()
+        object CancelTransfer : NearbyShareAction()
+        object DismissTransfer : NearbyShareAction()
+        object DismissReceivedFilesPrompt : NearbyShareAction()
+        data class SetDeviceName(val name: String) : NearbyShareAction()
+        data class SetReceivePath(val path: String) : NearbyShareAction()
+        data class SetAskBeforeReceiving(val ask: Boolean) : NearbyShareAction()
+    }
 }
 
 enum class SmbError { AUTH_FAILED, HOST_UNREACHABLE, TIMEOUT, SHARE_NOT_FOUND, UNKNOWN }

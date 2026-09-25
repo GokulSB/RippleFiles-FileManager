@@ -2,6 +2,7 @@ package com.ripple.filemanager.ui
 
 import androidx.compose.ui.res.stringResource
 import com.ripple.filemanager.R
+import com.ripple.filemanager.ui.expressive.ExpressiveConfirmationSheet
 
 import android.content.Context
 import android.content.Intent
@@ -83,27 +84,25 @@ fun ImageViewerScreen(
     }
 
     if (showDeleteConfirm) {
-        val actualIndex = if (files.isNotEmpty()) pagerState.currentPage % files.size else 0
-        com.ripple.filemanager.ui.GradientAlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { com.ripple.filemanager.ui.MonoLabel("DELETE IMAGE?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
-            text = { Text(stringResource(R.string.delete_warning_undone)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    haptics.delete()
-                    showDeleteConfirm = false
-                    val currentFile = files.getOrNull(pagerState.currentPage)
-                    if (currentFile != null) {
-                        onDeleteClick(currentFile)
-                        // Note: We don't close here anymore. LaunchedEffect below handles closing if no files remain.
-                    }
-                }) { Text(stringResource(R.string.delete_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber) }
+        val currentFile = files.getOrNull(pagerState.currentPage)
+        val deleteTitle = if (currentFile != null) "Delete \"${currentFile.name}\"?" else "Delete image?"
+        val warningText = stringResource(R.string.delete_warning_undone)
+        ExpressiveConfirmationSheet(
+            title = deleteTitle,
+            subtitle = warningText,
+            confirmLabel = stringResource(R.string.delete_action),
+            cancelLabel = stringResource(R.string.cancel),
+            onConfirm = {
+                haptics.delete()
+                showDeleteConfirm = false
+                if (currentFile != null) {
+                    onDeleteClick(currentFile)
+                }
             },
-            dismissButton = {
-                TextButton(onClick = { haptics.tap(); showDeleteConfirm = false }) { Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim) }
-            },
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, cornerRoundness)
+            onDismissRequest = {
+                haptics.tap()
+                showDeleteConfirm = false
+            }
         )
     }
 

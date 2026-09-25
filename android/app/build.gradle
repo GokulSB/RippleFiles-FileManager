@@ -12,8 +12,8 @@ android {
         applicationId "com.ripple.filemanager"
         minSdk 26
         targetSdk 36
-        versionCode 35
-        versionName "2.0.11"
+        versionCode 36
+        versionName "3.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -38,6 +38,8 @@ android {
             storePassword "password123"
             keyAlias "upload"
             keyPassword "password123"
+            v1SigningEnabled true
+            v2SigningEnabled true
         }
     }
 
@@ -71,6 +73,8 @@ android {
         resources.excludes.add("META-INF/notice.txt")
         resources.excludes.add("META-INF/ASL2.0")
         resources.excludes.add("META-INF/*.kotlin_module")
+        resources.excludes.add("META-INF/versions/9/OSGI-INF/MANIFEST.MF")
+        resources.excludes.add("META-INF/INDEX.LIST")
     }
 }
 
@@ -98,6 +102,7 @@ dependencies {
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
     implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.graphics:graphics-shapes:1.0.1'
     implementation 'androidx.compose.material3:material3-window-size-class'
     implementation 'io.coil-kt:coil-compose:2.6.0'
     implementation 'com.google.android.gms:play-services-auth:21.6.0'
@@ -163,6 +168,12 @@ dependencies {
     
     // WorkManager
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
+
+    // LocalSend Protocol (HTTP Server & Client & PKIX)
+    implementation 'org.nanohttpd:nanohttpd:2.3.1'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
 }
 
 configurations {

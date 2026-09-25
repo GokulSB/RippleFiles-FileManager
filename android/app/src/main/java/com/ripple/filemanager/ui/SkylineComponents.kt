@@ -47,6 +47,7 @@ import androidx.compose.ui.zIndex
 import com.ripple.filemanager.ui.theme.FrauncesFontFamily
 import com.ripple.filemanager.ui.theme.JetBrainsMonoFamily
 import com.ripple.filemanager.ui.theme.ManropeFontFamily
+import com.ripple.filemanager.ui.theme.OutfitFontFamily
 import com.ripple.filemanager.ui.theme.SkylineColors
 import com.ripple.filemanager.ui.theme.fileTypeCode
 import com.ripple.filemanager.ui.theme.fileTypeTone
@@ -66,7 +67,7 @@ val SkylinePillShape: Shape = RoundedCornerShape(50)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Uppercase, JetBrains Mono, amber-dim — used for all section headers and metadata.
+ * Uppercase, Outfit, amber-dim — used for all section headers and metadata.
  */
 @Composable
 fun MonoLabel(
@@ -77,10 +78,10 @@ fun MonoLabel(
 ) {
     Text(
         text = text.uppercase(),
-        fontFamily = JetBrainsMonoFamily,
-        fontWeight = FontWeight.Medium,
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.SemiBold,
         fontSize = fontSize.sp,
-        letterSpacing = 1.5.sp,
+        letterSpacing = 1.sp,
         color = color,
         modifier = modifier
     )

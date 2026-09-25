@@ -21,6 +21,15 @@ val FrauncesFontFamily    = FontFamily(Font(R.font.fraunces))
 val ManropeFontFamily     = FontFamily(Font(R.font.manrope))
 val JetBrainsMonoFamily   = FontFamily(Font(R.font.jetbrains_mono))
 
+// ── Outfit (Expressive design) font family ───────────────────────────────────
+val OutfitFontFamily = FontFamily(
+    Font(R.font.outfit_extralight, FontWeight.ExtraLight),
+    Font(R.font.outfit_light, FontWeight.Light),
+    Font(R.font.outfit_regular, FontWeight.Normal),
+    Font(R.font.outfit_medium, FontWeight.Medium),
+    Font(R.font.outfit_semibold, FontWeight.SemiBold)
+)
+
 /** Skyline typography: Fraunces display, Manrope body, JetBrains Mono labels */
 val SkylineTypography = Typography(
     displayLarge  = TextStyle(fontFamily = FrauncesFontFamily, fontWeight = FontWeight.Normal, fontSize = 57.sp),
@@ -39,6 +48,37 @@ val SkylineTypography = Typography(
     labelMedium   = TextStyle(fontFamily = JetBrainsMonoFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp, letterSpacing = 0.8.sp),
     labelSmall    = TextStyle(fontFamily = JetBrainsMonoFamily, fontWeight = FontWeight.Medium, fontSize = 10.sp, letterSpacing = 1.5.sp)
 )
+
+/** Expressive typography: Outfit display, Outfit body, Outfit labels */
+val ExpressiveTypography = Typography(
+    displayLarge  = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.ExtraLight, fontSize = 57.sp),
+    displayMedium = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.ExtraLight, fontSize = 45.sp),
+    displaySmall  = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.Light, fontSize = 36.sp),
+    headlineLarge = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.Light, fontSize = 32.sp),
+    headlineMedium= TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.Normal, fontSize = 28.sp),
+    headlineSmall = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.Normal, fontSize = 24.sp),
+    titleLarge    = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 22.sp),
+    titleMedium   = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
+    titleSmall    = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp),
+    bodyLarge     = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.Normal, fontSize = 16.sp),
+    bodyMedium    = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.Normal, fontSize = 14.sp),
+    bodySmall     = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.Normal, fontSize = 12.sp),
+    labelLarge    = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+    labelMedium   = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 12.sp),
+    labelSmall    = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 10.sp)
+)
+
+val LocalAppFont = androidx.compose.runtime.compositionLocalOf<FontFamily> { OutfitFontFamily }
+
+fun getFontFamilyForStyle(style: String): FontFamily = when (style) {
+    "Skyline Ledger" -> FrauncesFontFamily
+    "Monospace" -> JetBrainsMonoFamily
+    "Roboto" -> RobotoFontFamily
+    "Google Sans" -> GoogleSansFontFamily
+    "Poppins" -> PoppinsFontFamily
+    "System" -> FontFamily.Default
+    else -> OutfitFontFamily
+}
 
 fun getSkylineTypography(
     fontStyleStr: String,
@@ -69,30 +109,35 @@ fun getSkylineTypography(
             bodyFamily = ManropeFontFamily
             monoFamily = JetBrainsMonoFamily
         }
-        "Roboto" -> {
-            displayFamily = RobotoFontFamily
-            bodyFamily = RobotoFontFamily
-            monoFamily = FontFamily.Monospace
-        }
-        "Google Sans" -> {
-            displayFamily = GoogleSansFontFamily
-            bodyFamily = GoogleSansFontFamily
-            monoFamily = FontFamily.Monospace
-        }
-        "Poppins" -> {
-            displayFamily = PoppinsFontFamily
-            bodyFamily = PoppinsFontFamily
-            monoFamily = FontFamily.Monospace
-        }
         "Monospace" -> {
             displayFamily = JetBrainsMonoFamily
             bodyFamily = JetBrainsMonoFamily
             monoFamily = JetBrainsMonoFamily
         }
-        else -> {
+        "Roboto" -> {
+            displayFamily = RobotoFontFamily
+            bodyFamily = RobotoFontFamily
+            monoFamily = RobotoFontFamily
+        }
+        "Google Sans" -> {
+            displayFamily = GoogleSansFontFamily
+            bodyFamily = GoogleSansFontFamily
+            monoFamily = GoogleSansFontFamily
+        }
+        "Poppins" -> {
+            displayFamily = PoppinsFontFamily
+            bodyFamily = PoppinsFontFamily
+            monoFamily = PoppinsFontFamily
+        }
+        "System" -> {
             displayFamily = FontFamily.Default
             bodyFamily = FontFamily.Default
             monoFamily = FontFamily.Monospace
+        }
+        else -> {
+            displayFamily = OutfitFontFamily
+            bodyFamily = OutfitFontFamily
+            monoFamily = OutfitFontFamily
         }
     }
 
@@ -121,22 +166,24 @@ fun getSkylineTypography(
         textDecoration = textDecoration
     )
 
+    val base = if (fontStyleStr == "Skyline Ledger") SkylineTypography else ExpressiveTypography
+
     return Typography(
-        displayLarge   = applyDisplay(SkylineTypography.displayLarge, mainTextScale),
-        displayMedium  = applyDisplay(SkylineTypography.displayMedium, mainTextScale),
-        displaySmall   = applyDisplay(SkylineTypography.displaySmall, mainTextScale),
-        headlineLarge  = applyDisplay(SkylineTypography.headlineLarge, mainTextScale),
-        headlineMedium = applyDisplay(SkylineTypography.headlineMedium, mainTextScale),
-        headlineSmall  = applyDisplay(SkylineTypography.headlineSmall, mainTextScale),
-        titleLarge     = applyBody(SkylineTypography.titleLarge, mainTextScale),
-        titleMedium    = applyBody(SkylineTypography.titleMedium, mainTextScale),
-        titleSmall     = applyBody(SkylineTypography.titleSmall, mainTextScale),
-        bodyLarge      = applyBody(SkylineTypography.bodyLarge, subTextScale),
-        bodyMedium     = applyBody(SkylineTypography.bodyMedium, subTextScale),
-        bodySmall      = applyBody(SkylineTypography.bodySmall, subTextScale),
-        labelLarge     = applyMono(SkylineTypography.labelLarge),
-        labelMedium    = applyMono(SkylineTypography.labelMedium),
-        labelSmall     = applyMono(SkylineTypography.labelSmall)
+        displayLarge   = applyDisplay(base.displayLarge, mainTextScale),
+        displayMedium  = applyDisplay(base.displayMedium, mainTextScale),
+        displaySmall   = applyDisplay(base.displaySmall, mainTextScale),
+        headlineLarge  = applyDisplay(base.headlineLarge, mainTextScale),
+        headlineMedium = applyDisplay(base.headlineMedium, mainTextScale),
+        headlineSmall  = applyDisplay(base.headlineSmall, mainTextScale),
+        titleLarge     = applyBody(base.titleLarge, mainTextScale),
+        titleMedium    = applyBody(base.titleMedium, mainTextScale),
+        titleSmall     = applyBody(base.titleSmall, mainTextScale),
+        bodyLarge      = applyBody(base.bodyLarge, subTextScale),
+        bodyMedium     = applyBody(base.bodyMedium, subTextScale),
+        bodySmall      = applyBody(base.bodySmall, subTextScale),
+        labelLarge     = applyMono(base.labelLarge),
+        labelMedium    = applyMono(base.labelMedium),
+        labelSmall     = applyMono(base.labelSmall)
     )
 }
 

@@ -20,16 +20,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
+import androidx.compose.runtime.CompositionLocalProvider
+import com.ripple.filemanager.ui.expressive.DarkExpressiveColorScheme
+import com.ripple.filemanager.ui.expressive.LightExpressiveColorScheme
+import com.ripple.filemanager.ui.expressive.LocalExpressiveColors
+import com.ripple.filemanager.ui.expressive.ExpressiveColorScheme
+import com.ripple.filemanager.ui.expressive.ExpressiveTokens
 
 // Fixed light palette (fallback + base for everything non-accent)
-val LightBackground = Color(0xFFFAF6EF)   // parchment, was the striped bg
-val LightSurface    = Color(0xFFFFFFFF)
-val LightBorder     = Color(0xFFE4DFD3)
-val LightTextPrimary   = Color(0xFF2C2C2A)
-val LightTextSecondary = Color(0xFF8C897E)
+val LightBackground = Color(0xFFFDF6F0)   // crisp warm cream base
+val LightSurface    = Color(0xFFEAD0B4)   // warm card surface
+val LightBorder     = Color(0xFF2E1B10).copy(alpha = 0.14f)
+val LightTextPrimary   = Color(0xFF2E1B10)
+val LightTextSecondary = Color(0xFF7A5136)
 
 // Fixed dark palette (fallback + base for everything non-accent)
-val DarkBackground = Color(0xFF1E1711)   // deepest warm black/brown (header background)
+val DarkBackground = Color(0xFF1B1210)   // expressive warm cocoa base
 val DarkSurface    = Color(0xFF33281E)   // storage cards & chip area (elevated brown)
 val DarkSurface2   = Color(0xFF2B2218)   // bottom sheet layout (middle elevation)
 val DarkBorder     = Color(0xFF4F4235)
@@ -37,9 +43,9 @@ val DarkTextPrimary   = Color(0xFFEBE0D1)
 val DarkTextSecondary = Color(0xFFB5A99A)
 
 // Fixed amber fallback accent — used when dynamic color is off/unavailable
-val AmberPrimary          = Color(0xFFEF9F27)
-val AmberPrimaryContainer = Color(0xFFFAEEDA)
-val AmberOnPrimary        = Color(0xFF412402)
+val AmberPrimary          = Color(0xFFC1602F)
+val AmberPrimaryContainer = Color(0xFFF3E3D2)
+val AmberOnPrimary        = Color(0xFFFFF5EE)
 
 // Folder category tints — NEVER dynamic, these encode folder identity
 val FolderGreen  = Color(0xFF3B6D11) to Color(0xFFEAF3DE)
@@ -57,7 +63,7 @@ fun hsl(h: Float, s: Float, l: Float): Color {
 // ── Skyline Ledger design tokens ──────────────────────────────────────────────
 object SkylineColors {
 
-    var Background    by mutableStateOf(Color(0xFF161514))
+    var Background    by mutableStateOf(Color(0xFF1B1210))
     var Surface       by mutableStateOf(Color(0xFF1F1D1B))
     var Surface2      by mutableStateOf(Color(0xFF282522))
     var Border        by mutableStateOf(Color(0xFF3D3833))
@@ -92,91 +98,107 @@ object SkylineColors {
         } else {
             customHue
         }
+        val isCustomPreset = !dynamicColor && kotlin.math.abs(customHue - 14f) >= 4f
+        val isCocoa = !isCustomPreset
 
         if (isDark) {
-            // Dynamic Dark Mode using the exact depth & contrast ratios approved from the reference
-            // Background: ~9% lightness, 28% saturation
-            Background = hsl(effectiveHue, 28f, (9.2f + lightnessOffset).coerceIn(0f, 100f))
-            // Surface2 (Bottom sheet): ~13% lightness, 28% saturation 
-            Surface2 = hsl(effectiveHue, 28f, (13.1f + lightnessOffset).coerceIn(0f, 100f))
-            // Surface (Cards/Chips): ~16% lightness, 26% saturation
-            Surface = hsl(effectiveHue, 26f, (15.8f + lightnessOffset).coerceIn(0f, 100f))
-            // Border: ~26% lightness, 20% saturation
-            Border = hsl(effectiveHue, 20f, (25.8f + lightnessOffset).coerceIn(0f, 100f))
-            
-            if (dynamicColor && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                val dynamic = androidx.compose.material3.dynamicDarkColorScheme(context)
-                Amber = dynamic.primary
-                AmberDim = hsl(effectiveHue, 45f, 22f)
-                ContainerSecondary = hsl(effectiveHue, 35f, 22f)
-                ContainerTertiary = hsl(effectiveHue + 45f, 40f, 22f)
+            if (isCocoa) {
+                Background = Color(0xFF1B1210)
+                Surface2 = Color(0xFF3F2420)
+                Surface = Color(0xFF5E352D)
+                Border = Color(0xFFFFCDBE).copy(alpha = 0.14f)
+                Amber = Color(0xFFF8B8A8)
+                AmberDim = Color(0xFF5E352D)
+                ContainerSecondary = Color(0xFF3F2420)
+                ContainerTertiary = Color(0xFF71443A)
+                Dust = Color(0xFFD6A598)
+                Sage = Color(0xFF7FD9C8)
+                Rust = Color(0xFFFF9F88)
+                AccentGreen = Color(0xFFB6DB9C)
+                AccentBlue = Color(0xFF9FCBF5)
+                AccentTeal = Color(0xFF7FD9C8)
+                AccentPrimary = Amber
+                AccentRed = Color(0xFFF5A9C3)
+                AccentPink = Color(0xFFF5A9C3)
+                AccentViolet = Color(0xFFB892F2)
             } else {
-                Amber = hsl(effectiveHue, 80f, 68f)
-                AmberDim = hsl(effectiveHue, 45f, 22f)
-                ContainerSecondary = hsl(effectiveHue, 35f, 22f)
-                ContainerTertiary = hsl(effectiveHue + 45f, 40f, 22f)
+                Background = hsl(effectiveHue, 18f, (8f + lightnessOffset).coerceIn(4f, 20f))
+                Surface2 = hsl(effectiveHue, 26f, (11f + lightnessOffset).coerceIn(5f, 25f))
+                Surface = hsl(effectiveHue, 24f, (16f + lightnessOffset).coerceIn(8f, 35f))
+                Border = hsl(effectiveHue, 25f, 85f).copy(alpha = 0.14f)
+                Amber = hsl(effectiveHue, 82f, (74f + lightnessOffset).coerceIn(45f, 90f))
+                AmberDim = hsl(effectiveHue, 24f, 16f)
+                ContainerSecondary = hsl(effectiveHue, 26f, 11f)
+                ContainerTertiary = hsl(effectiveHue, 22f, 22f)
+                Dust = hsl(effectiveHue, 20f, 72f)
+                Sage = hsl(effectiveHue + 90f, 40f, 75f)
+                Rust = hsl(effectiveHue + 180f, 40f, 75f)
+                AccentGreen = hsl(101f, 40f, 75f)
+                AccentBlue = hsl(203f, 75f, 75f)
+                AccentTeal = hsl(173f, 61f, 75f)
+                AccentPrimary = Amber
+                AccentRed = hsl(7f, 80f, 75f)
+                AccentPink = hsl(339f, 80f, 78f)
+                AccentViolet = hsl(263f, 78f, 78f)
             }
-            
-            Dust = hsl(effectiveHue + 180f, 35f, 58f)
-            Sage = hsl(effectiveHue + 90f, 35f, 62f)
-            Rust = hsl(12f, 65f, 54f)
-            
-            AccentGreen = hsl(101f, 40f, 59f)
-            AccentBlue = hsl(203f, 75f, 64f)
-            AccentTeal = hsl(173f, 61f, 54f)
-            AccentPrimary = Amber
-            AccentRed = hsl(7f, 100f, 68f)
-            AccentPink = hsl(339f, 100f, 78f)
-            AccentViolet = hsl(263f, 78f, 74f)
         } else {
-            // Dynamic Light Mode preserving the clean parchment curves
-            Background = hsl(effectiveHue, 35f, 96f)
-            Surface = hsl(effectiveHue, 0f, 100f)
-            Surface2 = hsl(effectiveHue, 35f, 90f)
-            Border = hsl(effectiveHue, 25f, 86f)
-            
-            if (dynamicColor && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                val dynamic = androidx.compose.material3.dynamicLightColorScheme(context)
-                Amber = dynamic.primary
-                AmberDim = dynamic.primaryContainer
-                ContainerSecondary = dynamic.secondaryContainer
-                ContainerTertiary = dynamic.tertiaryContainer
+            if (isCocoa) {
+                Background = Color(0xFFFDF8F3)
+                Surface = Color(0xFFE8CBA5)
+                Surface2 = Color(0xFFF2E1CB)
+                Border = Color(0xFF2B1A10).copy(alpha = 0.09f)
+                Amber = Color(0xFFB85A2C)
+                AmberDim = Color(0xFFF2E1CB)
+                ContainerSecondary = Color(0xFFD9AE78)
+                ContainerTertiary = Color(0xFFE8CBA5)
+                Dust = Color(0xFF7C5A3E)
+                Sage = Color(0xFF7FD9C8)
+                Rust = Color(0xFFFF9F88)
+                AccentGreen = Color(0xFF3B6D11)
+                AccentBlue = Color(0xFF185FA5)
+                AccentTeal = Color(0xFF0F6E56)
+                AccentPrimary = Amber
+                AccentRed = Color(0xFF993C1D)
+                AccentPink = Color(0xFF993556)
+                AccentViolet = Color(0xFF6B4BA3)
             } else {
-                Amber = hsl(effectiveHue, 80f, 60f)
-                AmberDim = hsl(effectiveHue, 60f, 90f)
-                ContainerSecondary = hsl(effectiveHue, 40f, 90f)
-                ContainerTertiary = hsl(effectiveHue + 45f, 40f, 90f)
+                Background = hsl(effectiveHue, 25f, (97f + lightnessOffset).coerceIn(90f, 99f))
+                Surface = hsl(effectiveHue, 30f, (81f + lightnessOffset).coerceIn(68f, 88f))
+                Surface2 = hsl(effectiveHue, 32f, (89f + lightnessOffset).coerceIn(78f, 95f))
+                Border = hsl(effectiveHue, 25f, 25f).copy(alpha = 0.14f)
+                Amber = hsl(effectiveHue, 72f, (48f + lightnessOffset).coerceIn(30f, 70f))
+                AmberDim = hsl(effectiveHue, 32f, 89f)
+                ContainerSecondary = hsl(effectiveHue, 32f, 71f)
+                ContainerTertiary = hsl(effectiveHue, 30f, 81f)
+                Dust = hsl(effectiveHue, 25f, 35f)
+                Sage = hsl(effectiveHue + 90f, 45f, 50f)
+                Rust = hsl(effectiveHue + 180f, 45f, 50f)
+                AccentGreen = hsl(101f, 40f, 50f)
+                AccentBlue = hsl(203f, 75f, 50f)
+                AccentTeal = hsl(173f, 61f, 45f)
+                AccentPrimary = Amber
+                AccentRed = hsl(7f, 70f, 50f)
+                AccentPink = hsl(339f, 70f, 55f)
+                AccentViolet = hsl(263f, 70f, 55f)
             }
-            
-            Dust = hsl(effectiveHue + 180f, 35f, 58f)
-            Sage = hsl(effectiveHue + 90f, 35f, 62f)
-            Rust = hsl(12f, 65f, 54f)
-            
-            AccentGreen = hsl(101f, 40f, 59f)
-            AccentBlue = hsl(203f, 75f, 64f)
-            AccentTeal = hsl(173f, 61f, 54f)
-            AccentPrimary = Amber
-            AccentRed = hsl(7f, 100f, 68f)
-            AccentPink = hsl(339f, 100f, 78f)
-            AccentViolet = hsl(263f, 78f, 74f)
         }
         
         if (invertText) {
-            TextPrimary = Color.Black
-            TextPrimary2 = Color(0xFF222222)
-            TextDim = Color(0xFF444444)
-            TextDim2 = Color(0xFF666666)
+            TextPrimary = if (isDark) Color.Black else Color.White
+            TextPrimary2 = if (isDark) Color(0xFF222222) else Color(0xFFEEEEEE)
+            TextDim = if (isDark) Color(0xFF444444) else Color(0xFFCCCCCC)
+            TextDim2 = if (isDark) Color(0xFF666666) else Color(0xFFAAAAAA)
         } else {
             if (isDark) {
-                TextPrimary = Color.White
-                TextPrimary2 = Color(0xFFF0F0F0)
-                TextDim = Color(0xFFCCCCCC)
-                TextDim2 = Color(0xFFAAAAAA)
+                TextPrimary = if (isCocoa) Color(0xFFFFE4DC) else hsl(effectiveHue, 25f, 94f)
+                TextPrimary2 = TextPrimary
+                TextDim = if (isCocoa) Color(0xFFD6A598) else hsl(effectiveHue, 20f, 72f)
+                TextDim2 = TextDim
             } else {
-                TextPrimary = LightTextPrimary
-                TextPrimary2 = LightTextPrimary
-                TextDim = LightTextSecondary
-                TextDim2 = LightTextSecondary
+                TextPrimary = if (isCocoa) Color(0xFF2B1A10) else hsl(effectiveHue, 40f, 12f)
+                TextPrimary2 = TextPrimary
+                TextDim = if (isCocoa) Color(0xFF7C5A3E) else hsl(effectiveHue, 25f, 35f)
+                TextDim2 = TextDim
             }
         }
     }
@@ -217,6 +239,7 @@ fun SiftTheme(
     mainTextScale: Float = 1.0f,
     subTextScale: Float = 1.0f,
     invertText: Boolean = false,
+    cornerRoundness: Float = 0.5f,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -240,7 +263,7 @@ fun SiftTheme(
             onError              = SkylineColors.TextPrimary,
             errorContainer       = Color(0xFF5A2015),
             onErrorContainer     = SkylineColors.TextPrimary,
-            background           = SkylineColors.Background,
+            background           = Color(0xFF1B1210),
             onBackground         = SkylineColors.TextPrimary,
             surface              = SkylineColors.Surface,
             onSurface            = SkylineColors.TextPrimary,
@@ -306,6 +329,10 @@ fun SiftTheme(
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
             window.navigationBarColor = Color.Transparent.toArgb()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced = false
+                window.isStatusBarContrastEnforced = false
+            }
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
             WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
@@ -313,9 +340,78 @@ fun SiftTheme(
 
     val customTypography = getSkylineTypography(fontStyle, textDecorations, mainTextScale, subTextScale)
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = customTypography,
-        content = content
-    )
+    val effectiveHue = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val scheme = if (darkTheme) androidx.compose.material3.dynamicDarkColorScheme(context) else androidx.compose.material3.dynamicLightColorScheme(context)
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(scheme.primary.toArgb(), hsv)
+        hsv[0]
+    } else {
+        customHue
+    }
+    val isCustomPreset = !dynamicColor && kotlin.math.abs(customHue - 14f) >= 4f
+    val isCocoa = !isCustomPreset
+
+    val expressiveColors = if (darkTheme) {
+        if (isCocoa) {
+            DarkExpressiveColorScheme.copy(
+                accent = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SkylineColors.Amber else ExpressiveTokens.DarkAccent,
+                text = if (invertText) Color.Black else ExpressiveTokens.DarkText,
+                muted = if (invertText) Color(0xFF444444) else ExpressiveTokens.DarkMuted
+            )
+        } else {
+            ExpressiveColorScheme(
+                bg = hsl(effectiveHue, 18f, (8f + lightnessOffset).coerceIn(4f, 20f)),
+                container = hsl(effectiveHue, 24f, (16f + lightnessOffset).coerceIn(8f, 35f)),
+                card = hsl(effectiveHue, 22f, (22f + lightnessOffset).coerceIn(12f, 45f)),
+                insetCard = hsl(effectiveHue, 26f, (11f + lightnessOffset).coerceIn(5f, 25f)),
+                accent = hsl(effectiveHue, 82f, (74f + lightnessOffset).coerceIn(45f, 90f)),
+                ink = hsl(effectiveHue, 40f, 15f),
+                sand = hsl(effectiveHue + 25f, 70f, 75f),
+                text = if (invertText) Color.Black else hsl(effectiveHue, 25f, 94f),
+                muted = if (invertText) Color(0xFF444444) else hsl(effectiveHue, 20f, 72f),
+                line = hsl(effectiveHue, 25f, 85f),
+                lineAlpha = 0.14f,
+                shadow = Color(0x47000000),
+                glow = hsl(effectiveHue, 25f, 35f)
+            )
+        }
+    } else {
+        if (isCocoa) {
+            LightExpressiveColorScheme.copy(
+                accent = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SkylineColors.Amber else ExpressiveTokens.LightAccent,
+                text = if (invertText) Color.White else ExpressiveTokens.LightText,
+                muted = if (invertText) Color(0xFFCCCCCC) else ExpressiveTokens.LightMuted
+            )
+        } else {
+            ExpressiveColorScheme(
+                bg = hsl(effectiveHue, 25f, (97f + lightnessOffset).coerceIn(90f, 99f)),
+                container = hsl(effectiveHue, 32f, (89f + lightnessOffset).coerceIn(78f, 95f)),
+                card = hsl(effectiveHue, 30f, (81f + lightnessOffset).coerceIn(68f, 88f)),
+                insetCard = hsl(effectiveHue, 32f, (71f + lightnessOffset).coerceIn(58f, 80f)),
+                accent = hsl(effectiveHue, 72f, (48f + lightnessOffset).coerceIn(30f, 70f)),
+                ink = Color(0xFFFFF8F2),
+                sand = hsl(effectiveHue + 25f, 65f, 35f),
+                text = if (invertText) Color.White else hsl(effectiveHue, 40f, 12f),
+                muted = if (invertText) Color(0xFFCCCCCC) else hsl(effectiveHue, 25f, 35f),
+                line = hsl(effectiveHue, 25f, 25f),
+                lineAlpha = 0.09f,
+                shadow = hsl(effectiveHue, 35f, 25f).copy(alpha = 0.22f),
+                glow = hsl(effectiveHue, 45f, (80f + lightnessOffset).coerceIn(60f, 85f))
+            )
+        }
+    }
+
+    val currentAppFont = getFontFamilyForStyle(fontStyle)
+
+    CompositionLocalProvider(
+        LocalExpressiveColors provides expressiveColors,
+        com.ripple.filemanager.ui.expressive.LocalCornerRoundness provides cornerRoundness,
+        LocalAppFont provides currentAppFont
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = customTypography,
+            content = content
+        )
+    }
 }

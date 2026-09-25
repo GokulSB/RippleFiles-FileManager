@@ -1,5 +1,6 @@
 package com.ripple.filemanager.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -8,22 +9,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
+import com.ripple.filemanager.ui.expressive.ExpressiveTheme
 
 @Composable
 fun GradientDialogSurface(
     modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(24.dp),
     content: @Composable BoxScope.() -> Unit
 ) {
+    val colors = ExpressiveTheme.colors
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(0.dp)) // match Skyline Ledger 0dp radius
-            .appGradientBackground()
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(0.dp)),
+            .clip(shape)
+            .background(colors.card)
+            .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), shape),
         content = content
     )
 }
-
 
 @Composable
 fun GradientAlertDialog(
@@ -35,24 +40,25 @@ fun GradientAlertDialog(
     title: @Composable (() -> Unit)? = null,
     text: @Composable (() -> Unit)? = null,
     icon: @Composable (() -> Unit)? = null,
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(0.dp),
-    containerColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent
+    shape: Shape = RoundedCornerShape(24.dp),
+    containerColor: Color = Color.Unspecified
 ) {
+    val colors = ExpressiveTheme.colors
+    val effectiveBg = if (containerColor != Color.Unspecified) containerColor else colors.card
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismissRequest,
         properties = properties,
         confirmButton = confirmButton,
         modifier = modifier
             .clip(shape)
-            .appGradientBackground()
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), shape),
+            .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), shape),
         dismissButton = dismissButton,
         title = title,
         text = text,
         icon = icon,
         shape = shape,
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-        titleContentColor = MaterialTheme.colorScheme.onSurface,
-        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        containerColor = effectiveBg,
+        titleContentColor = colors.text,
+        textContentColor = colors.muted
     )
 }

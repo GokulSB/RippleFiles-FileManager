@@ -8,7 +8,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
+import kotlin.math.min
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -141,18 +143,56 @@ fun rememberAuroraColors(): AuroraColors {
 }
 
 fun Modifier.appGradientBackground(): Modifier = composed {
-    val colorScheme = androidx.compose.material3.MaterialTheme.colorScheme
-    val density = androidx.compose.ui.platform.LocalDensity.current
+    val exprColors = com.ripple.filemanager.ui.expressive.LocalExpressiveColors.current
+    val fallback = Color(0xFF1B1210)
+    val bg = if (exprColors.bg != Color.Unspecified) exprColors.bg else fallback
+    val textColor = if (exprColors.text != Color.Unspecified) exprColors.text else Color(0xFFFFE4DC)
+    val glowColor = if (exprColors.glow != Color.Unspecified) exprColors.glow else Color(0xFF7A4A3F)
+    val lineStrokeColor = if (exprColors.line != Color.Unspecified) exprColors.line.copy(alpha = exprColors.lineAlpha) else textColor.copy(alpha = 0.14f)
     this.drawWithCache {
-        val bgGradient = androidx.compose.ui.graphics.Brush.verticalGradient(
-            colors = listOf(
-                colorScheme.surface,
-                colorScheme.background
-            )
-        )
-        
         onDrawBehind {
-            drawRect(color = colorScheme.background)
+            drawRect(color = bg)
+
+            // Layer 1: Radial gradient centered at top-right corner (~90% width, 0% height), radius ~46% of height
+            val trCenter = Offset(size.width * 0.90f, 0f)
+            val trRadius = size.height * 0.46f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(glowColor, Color.Transparent),
+                    center = trCenter,
+                    radius = trRadius
+                ),
+                radius = trRadius,
+                center = trCenter
+            )
+
+            // Layer 2: Second faint radial gradient top-left (~10% width, 0% height), ~35% opacity, radius ~30% of height
+            val tlCenter = Offset(size.width * 0.10f, 0f)
+            val tlRadius = size.height * 0.30f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(glowColor.copy(alpha = 0.35f), Color.Transparent),
+                    center = tlCenter,
+                    radius = tlRadius
+                ),
+                radius = tlRadius,
+                center = tlCenter
+            )
+
+            // Layer 3: Concentric ring outlines, stroke colour = line colour at lineAlpha, stroke width ~1.4dp, drawn off-canvas bottom-right
+            val brCenter = Offset(size.width * 1.05f, size.height * 0.95f)
+            val maxRadius = size.width * 0.90f
+            val ringCount = 5
+            val strokeWidthPx = 1.4f.dp.toPx()
+            for (i in 1..ringCount) {
+                val r = maxRadius * (i.toFloat() / ringCount)
+                drawCircle(
+                    color = lineStrokeColor,
+                    radius = r,
+                    center = brCenter,
+                    style = Stroke(width = strokeWidthPx)
+                )
+            }
         }
     }
 }

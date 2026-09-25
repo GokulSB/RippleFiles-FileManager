@@ -146,6 +146,11 @@ data class HapticsSettings(
     }
 }
 
+data class ReceivedFilesPrompt(
+    val peerAlias: String,
+    val files: List<FileItem>
+)
+
 @androidx.compose.runtime.Immutable
 data class AppState(
     val navBarState: NavBarState = NavBarState(),
@@ -164,11 +169,11 @@ data class AppState(
     val selectedFiles: ImmutableSet<Int> = persistentSetOf(),
     val sortMode: SortMode = SortMode.ALPHABETICAL,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val themeHue: Float = 262f,
+    val themeHue: Float = 14f,
     val themeLightnessOffset: Float = 0f,
     val showThemeSheet: Boolean = false,
     val showSettingsScreen: Boolean = false,
-    val useDynamicSystemTheme: Boolean = true,
+    val useDynamicSystemTheme: Boolean = false,
     val isGoogleDriveAuthenticated: Boolean = false,
     val googleDriveAccountEmail: String? = null,
     val isMegaAuthenticated: Boolean = false,
@@ -178,6 +183,7 @@ data class AppState(
     val isDropboxAuthenticated: Boolean = false,
     val dropboxAccountEmail: String? = null,
     val files: ImmutableList<FileItem> = persistentListOf(),
+    val recentFiles: ImmutableList<FileItem> = persistentListOf(),
     val folderCache: kotlinx.collections.immutable.PersistentMap<String, ImmutableList<FileItem>> = kotlinx.collections.immutable.persistentMapOf(),
     val isLoading: Boolean = false,
     val viewingFile: FileItem? = null,
@@ -198,7 +204,7 @@ data class AppState(
     val showBatchRenameDialog: Boolean = false,
     val iconShapeSetting: IconShapeType = IconShapeType.SYSTEM,
     val activeIconShape: IconShapeType = IconShapeType.SYSTEM,
-    val fontStyle: String = "System",
+    val fontStyle: String = "Outfit",
     val textDecorations: ImmutableSet<String> = persistentSetOf(),
     val mainTextScale: Float = 1.0f,
     val subTextScale: Float = 1.0f,
@@ -263,7 +269,18 @@ data class AppState(
     // once dualPaneMode is not OFF, and lives entirely in secondPaneState.
     val dualPaneMode: DualPaneMode = DualPaneMode.OFF,
     val activePaneSide: PaneSide = PaneSide.LEFT,
-    val secondPaneState: PaneState = PaneState()
+    val secondPaneState: PaneState = PaneState(),
+
+    // Nearby Share (LocalSend Protocol v2)
+    val nearbyPeers: kotlinx.collections.immutable.ImmutableList<com.ripple.filemanager.localsend.NearbyPeer> = kotlinx.collections.immutable.persistentListOf(),
+    val isNearbyReceiving: Boolean = false,
+    val activeNearbyTransfer: com.ripple.filemanager.localsend.TransferSession? = null,
+    val incomingNearbyRequest: com.ripple.filemanager.localsend.IncomingTransferRequest? = null,
+    val stagedNearbyFiles: kotlinx.collections.immutable.ImmutableList<FileItem> = kotlinx.collections.immutable.persistentListOf(),
+    val nearbyDeviceName: String = "",
+    val nearbyReceivePath: String = "",
+    val nearbyAskBeforeReceiving: Boolean = true,
+    val receivedFilesPrompt: ReceivedFilesPrompt? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -272,6 +289,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _snackbarMessage = MutableSharedFlow<String>()
     val snackbarMessage: SharedFlow<String> = _snackbarMessage.asSharedFlow()
+
+    fun showToast(message: String) {
+        viewModelScope.launch {
+            _snackbarMessage.emit(message)
+        }
+    }
 
     private val repository = FileRepository(application)
     private var rawFiles: List<FileItem> = emptyList()
@@ -297,18 +320,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val webDavProvider = com.ripple.filemanager.data.webdav.WebDavStorageProvider()
 
     init {
-        val savedTheme = prefs.getString("theme_mode", "SYSTEM") ?: "SYSTEM"
-        val savedHue = prefs.getFloat("theme_hue", 262f)
+        val savedTheme = if (prefs.contains("theme_mode")) prefs.getString("theme_mode", "SYSTEM") else (prefs.getString("themeMode", "SYSTEM") ?: "SYSTEM")
+        val rawHue = if (prefs.contains("theme_hue")) prefs.getFloat("theme_hue", 14f) else prefs.getFloat("themeHue", 14f)
+        val savedHue = if (rawHue == 262f && !prefs.contains("theme_hue_explicit")) 14f else rawHue
         val savedThemeLightness = prefs.getFloat("theme_lightness", 0f)
-        val savedDynamic = prefs.getBoolean("theme_dynamic", true)
+        val savedDynamic = if (prefs.contains("theme_dynamic_explicit")) prefs.getBoolean("theme_dynamic", false) else false
         val savedIconShape = prefs.getString("icon_shape", "SYSTEM") ?: "SYSTEM"
-        val savedFontStyle = prefs.getString("font_style", "System") ?: "System"
+        val savedFontStyle = prefs.getString("font_style", "Outfit") ?: "Outfit"
         val savedDecorations = prefs.getStringSet("text_decorations", emptySet()) ?: emptySet()
         val savedMainScale = prefs.getFloat("main_text_scale", 1.0f)
         val savedSubScale = prefs.getFloat("sub_text_scale", 1.0f)
         val savedInvertText = prefs.getBoolean("invert_text", false)
         val savedGridColumns = prefs.getInt("grid_columns", 2)
         val savedCornerRoundness = prefs.getFloat("corner_roundness", 0.5f)
+        val savedIsListMode = prefs.getBoolean("is_list_mode", false)
         
         val hapticsMaster = prefs.getBoolean("haptics_master", true)
         val hapticsFileOpen = prefs.getBoolean("haptics_file_open", true)
@@ -331,10 +356,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val savedMusic = prefs.getString("org_dest_music", defaultMusic) ?: defaultMusic
         val savedVideos = prefs.getString("org_dest_videos", defaultVideos) ?: defaultVideos
 
+        val defaultDeviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+        val savedDeviceName = prefs.getString("device_name", defaultDeviceName) ?: defaultDeviceName
+        val defaultReceivePath = "$downloadPath/RippleReceived"
+        val savedReceivePath = prefs.getString("nearby_receive_path", defaultReceivePath) ?: defaultReceivePath
+        val savedAskBeforeReceiving = prefs.getBoolean("nearby_ask_before_receiving", true)
+
         _state.update { it.copy(
             hasShizuku = repository.hasShizuku(), 
             isLoading = true,
-            themeMode = try { ThemeMode.valueOf(savedTheme) } catch(e: Exception) { ThemeMode.SYSTEM },
+            themeMode = try { ThemeMode.valueOf(savedTheme ?: "SYSTEM") } catch(e: Exception) { ThemeMode.SYSTEM },
             themeHue = savedHue,
             themeLightnessOffset = savedThemeLightness,
             useDynamicSystemTheme = savedDynamic,
@@ -345,6 +376,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             mainTextScale = savedMainScale,
             subTextScale = savedSubScale,
             invertText = savedInvertText,
+            isListMode = savedIsListMode,
             gridColumns = savedGridColumns,
             cornerRoundness = savedCornerRoundness,
             isRecycleBinEnabled = prefs.getBoolean("recycle_bin_enabled", true),
@@ -358,6 +390,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             viewerTextPdf = prefs.getString("viewer_text_pdf", "In-app") ?: "In-app",
             viewerMusic = prefs.getString("viewer_music", "In-app") ?: "In-app",
             viewerImage = prefs.getString("viewer_image", "In-app") ?: "In-app",
+            nearbyDeviceName = savedDeviceName,
+            nearbyReceivePath = savedReceivePath,
+            nearbyAskBeforeReceiving = savedAskBeforeReceiving,
             haptics = HapticsSettings(
                 masterEnabled = hapticsMaster,
                 fileOpen = hapticsFileOpen,
@@ -436,7 +471,91 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             
             updateStorageStats()
         }
+
+        // Observe NearbyShareRepository flows
+        viewModelScope.launch {
+            com.ripple.filemanager.localsend.NearbyShareRepository.peers.collect { peers ->
+                _state.update { it.copy(nearbyPeers = peers.toImmutableList()) }
+            }
+        }
+        viewModelScope.launch {
+            com.ripple.filemanager.localsend.NearbyShareRepository.isReceiving.collect { receiving ->
+                _state.update { it.copy(isNearbyReceiving = receiving) }
+            }
+        }
+        viewModelScope.launch {
+            com.ripple.filemanager.localsend.NearbyShareRepository.activeTransfer.collect { transfer ->
+                _state.update { it.copy(activeNearbyTransfer = transfer) }
+            }
+        }
+        viewModelScope.launch {
+            com.ripple.filemanager.localsend.NearbyShareRepository.incomingRequest.collect { req ->
+                _state.update { it.copy(incomingNearbyRequest = req) }
+            }
+        }
+        viewModelScope.launch {
+            com.ripple.filemanager.localsend.NearbyShareRepository.stagedFiles.collect { files ->
+                _state.update { it.copy(stagedNearbyFiles = files.toImmutableList()) }
+            }
+        }
+        viewModelScope.launch {
+            com.ripple.filemanager.localsend.NearbyShareRepository.events.collect { event ->
+                when (event) {
+                    is com.ripple.filemanager.localsend.NearbyShareEvent.Success -> showToast(event.message)
+                    is com.ripple.filemanager.localsend.NearbyShareEvent.Error -> showToast(event.message)
+                    is com.ripple.filemanager.localsend.NearbyShareEvent.FilesReceived -> {
+                        val fileItems = event.files.map { fileToFileItem(it) }
+                        loadRecentFiles()
+                        _state.update {
+                            it.copy(
+                                receivedFilesPrompt = ReceivedFilesPrompt(
+                                    peerAlias = event.peerAlias,
+                                    files = fileItems
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Migration: Ensure any legacy service instance holding port 53317 is cleanly stopped
+        try {
+            val prefs = getApplication<Application>().getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("nearby_migrated_to_port_53318", false)) {
+                prefs.edit().putBoolean("nearby_migrated_to_port_53318", true).apply()
+                com.ripple.filemanager.localsend.NearbyShareService.stop(getApplication())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         loadFiles("home")
+        loadRecentFiles()
+        scanDeviceForCleaner(showLoading = false)
+    }
+
+    fun loadRecentFiles() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val recent = repository.getFiles("recent")
+                _state.update { it.copy(recentFiles = recent.toImmutableList()) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun logRecentAction(path: String, action: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.logRecentAction(path, action)
+                val recent = repository.getFiles("recent")
+                _state.update { it.copy(recentFiles = recent.toImmutableList()) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     private fun updateStorageStats() {
@@ -472,6 +591,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun reload() {
         loadFiles(_state.value.location)
+        loadRecentFiles()
     }
 
     fun togglePin(path: String) {
@@ -533,12 +653,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 res = webDavProvider.listFiles(location, connectionId)
             }
             res.getOrThrow()
+        } else if (location.startsWith("category/")) {
+            val categoryKey = location.removePrefix("category/")
+            repository.getCategoryFiles(categoryKey, _state.value.cleanerData)
         } else {
             repository.getFiles(location)
         }
     }
 
     private fun loadFiles(location: String) {
+        if (location == "send") {
+            _state.update { it.copy(isLoading = false, files = persistentListOf(), location = location) }
+            return
+        }
         loadJob?.cancel()
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), isLoading = true, location = location, errorMessage = null) }
         loadJob = viewModelScope.launch {
@@ -860,8 +987,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val cachedFiles = current.folderCache[location] ?: kotlinx.collections.immutable.persistentListOf()
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), location = location, currentFolderName = folderName, driveFolderStack = newStack, isLoading = true, files = cachedFiles) }
-        repository.logRecentAction(location, "Explored")
+        if (location == "send") {
+            if (!_state.value.isNearbyReceiving) {
+                com.ripple.filemanager.localsend.NearbyShareRepository.startService(getApplication())
+            }
+        }
+        if (location.startsWith("/")) {
+            repository.logRecentAction(location, "Visited")
+        }
         loadFiles(location)
+        loadRecentFiles()
     }
 
     fun navigateBackInDrive() {
@@ -917,7 +1052,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _snackbarMessage.emit("Successfully installed $successCount of ${paths.size} apps")
             } else {
-                _snackbarMessage.emit("Normal batch install requires Shizuku for automation. Please use Silent Mode!")
+                _snackbarMessage.emit("Batch install needs Shizuku for automation — use Silent mode instead.")
             }
         }
     }
@@ -952,10 +1087,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleViewMode() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isListMode = !it.isListMode) }
+        val nextMode = !_state.value.isListMode
+        prefs.edit().putBoolean("is_list_mode", nextMode).apply()
+        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isListMode = nextMode) }
     }
 
     fun setListMode(isList: Boolean) {
+        prefs.edit().putBoolean("is_list_mode", isList).apply()
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), isListMode = isList) }
     }
 
@@ -974,7 +1112,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun applyFiltersAndSort(raw: List<FileItem>, st: AppState): List<FileItem> {
         return raw.filter {
-            val filterMatch = st.filter == "all" || 
+            val filterMatch = st.location.startsWith("category/") || st.filter == "all" || 
                 (st.filter == "music" && it.type == "audio") ||
                 (st.filter == "apk" && it.type == "apk") ||
                 (st.filter == "media" && (it.type == "image" || it.type == "video" || it.type == "audio")) ||
@@ -1009,9 +1147,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun scanDeviceForCleaner() {
+    fun scanDeviceForCleaner(showLoading: Boolean = true) {
         viewModelScope.launch {
-            _state.update { it.copy(hasShizuku = repository.hasShizuku(), cleanerLoading = true) }
+            if (showLoading) {
+                _state.update { it.copy(hasShizuku = repository.hasShizuku(), cleanerLoading = true) }
+            }
             val data = repository.scanDeviceForCleaner()
             _state.update { it.copy(hasShizuku = repository.hasShizuku(), cleanerData = data, cleanerLoading = false) }
         }
@@ -1130,18 +1270,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), selectedFiles = persistentSetOf(), isSelectionMode = false) }
     }
 
-    fun selectAll() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), selectedFiles = it.files.map { f -> f.id }.toImmutableSet()) }
+    fun selectAll(ids: Collection<Int>? = null) {
+        val targetIds = (ids ?: _state.value.files.map { it.id }).toImmutableSet()
+        _state.update { 
+            it.copy(
+                hasShizuku = repository.hasShizuku(), 
+                selectedFiles = targetIds,
+                isSelectionMode = targetIds.isNotEmpty()
+            ) 
+        }
     }
 
     fun selectNone() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), selectedFiles = persistentSetOf()) }
+        _state.update { 
+            it.copy(
+                hasShizuku = repository.hasShizuku(), 
+                selectedFiles = persistentSetOf(),
+                isSelectionMode = false
+            ) 
+        }
     }
 
     fun deleteSelectedFiles() {
         viewModelScope.launch {
             val selected = _state.value.selectedFiles
-            val allFiles = _state.value.files
+            val allFiles = (_state.value.files + (_state.value.cleanerData?.let { cd ->
+                cd.documents.files + cd.images.files + cd.videos.files +
+                cd.audio.files + cd.apps.files + cd.archives.files +
+                cd.downloads.files + cd.large.files + cd.duplicates.files + cd.emptyFolders.files
+            } ?: emptyList())).distinctBy { it.id }
+
             val pathsToTrash = mutableListOf<String>()
             val pathsToDeletePermanently = mutableListOf<String>()
             val isTrashEnabled = _state.value.isRecycleBinEnabled
@@ -1176,7 +1334,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (pathsToDeletePermanently.isNotEmpty()) {
                 // Not in trash, permanent delete
                 pathsToDeletePermanently.forEach { path ->
-                    val f = java.io.File(path)
                     repository.deleteRestrictedPath(path)
                 }
             }
@@ -1184,9 +1341,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _snackbarMessage.emit("Failed to delete some Google Drive files: $driveError")
             }
             
-            _state.update { it.copy(hasShizuku = repository.hasShizuku(), selectedFiles = persistentSetOf(), isSelectionMode = false) }
+            val deletedPaths = (pathsToTrash + pathsToDeletePermanently).toSet()
+            _state.update { current ->
+                val updatedCleaner = current.cleanerData?.removePaths(deletedPaths)
+                val updatedFiles = current.files.filterNot { it.path in deletedPaths }.toImmutableList()
+                current.copy(
+                    hasShizuku = repository.hasShizuku(),
+                    files = updatedFiles,
+                    cleanerData = updatedCleaner,
+                    selectedFiles = persistentSetOf(),
+                    isSelectionMode = false
+                )
+            }
             loadFiles(_state.value.location)
             updateStorageStats()
+            if (deletedPaths.isNotEmpty()) {
+                scanDeviceForCleaner(showLoading = false)
+            }
         }
     }
 
@@ -1347,7 +1518,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 else -> 7L * 24L * 60L * 60L * 1000L
             }
             val expiryMs = value * multiplier
-            val files = repository.getTrashFiles(expiryMs)
+            val files = repository.getTrashFiles(expiryMs).distinctBy { it.encodedTrashName ?: "${it.path}_${it.id}" }
             _state.update { it.copy(hasShizuku = repository.hasShizuku(), trashFiles = files.toImmutableList(), trashIsLoading = false) }
         }
     }
@@ -1510,17 +1681,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setThemeMode(mode: ThemeMode) {
-        prefs.edit().putString("themeMode", mode.name).apply()
+        prefs.edit().putString("theme_mode", mode.name).putString("themeMode", mode.name).apply()
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), themeMode = mode) }
     }
 
     fun setDynamicSystemTheme(useDynamic: Boolean) {
-        prefs.edit().putBoolean("useDynamicSystemTheme", useDynamic).apply()
+        prefs.edit().putBoolean("theme_dynamic", useDynamic).putBoolean("useDynamicSystemTheme", useDynamic).putBoolean("theme_dynamic_explicit", true).apply()
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), useDynamicSystemTheme = useDynamic) }
     }
 
     fun setThemeHue(hue: Float) {
-        prefs.edit().putFloat("themeHue", hue).apply()
+        prefs.edit()
+            .putFloat("theme_hue", hue)
+            .putFloat("themeHue", hue)
+            .putBoolean("theme_hue_explicit", true)
+            .putBoolean("theme_dynamic", false)
+            .putBoolean("useDynamicSystemTheme", false)
+            .apply()
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), themeHue = hue, useDynamicSystemTheme = false) }
     }
 
@@ -1610,9 +1787,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openFileViewer(id: Int) {
-        val file = _state.value.files.find { it.id == id }
+        val file = _state.value.files.find { it.id == id } ?: _state.value.recentFiles.find { it.id == id }
         if (file != null) {
             repository.logRecentAction(file.path, "Opened")
+            loadRecentFiles()
             if (file.path.startsWith("drive_id:")) {
                 // Download and then view
                 _state.update { it.copy(hasShizuku = repository.hasShizuku(), isDownloading = true) }
@@ -1638,6 +1816,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeFileViewer() {
         _state.update { it.copy(hasShizuku = repository.hasShizuku(), viewingFile = null) }
+    }
+
+    fun viewFile(file: FileItem) {
+        repository.logRecentAction(file.path, "Opened")
+        loadRecentFiles()
+        _state.update { it.copy(hasShizuku = repository.hasShizuku(), viewingFile = file) }
+    }
+
+    fun dismissReceivedFilesPrompt() {
+        _state.update { it.copy(receivedFilesPrompt = null) }
+    }
+
+    fun fileToFileItem(file: java.io.File): FileItem {
+        val ext = file.extension.lowercase(java.util.Locale.getDefault())
+        val typeStr = when {
+            ext in setOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic") -> "image"
+            ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm") -> "video"
+            ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac") -> "audio"
+            ext in setOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz") -> "archive"
+            ext in setOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "csv") -> "doc"
+            ext in setOf("apk", "xapk", "aab") -> "apk"
+            else -> "file"
+        }
+        val sizeBytes = file.length()
+        val sizeStr = android.text.format.Formatter.formatFileSize(getApplication(), sizeBytes)
+        val changedStr = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(file.lastModified()))
+        return FileItem(
+            id = (file.absolutePath.hashCode() and 0x7FFFFFFF),
+            path = file.absolutePath,
+            name = file.name,
+            type = typeStr,
+            kind = if (file.isDirectory) "folder" else "file",
+            size = sizeStr,
+            changed = changedStr,
+            owner = "Me",
+            sizeBytes = sizeBytes,
+            lastModified = file.lastModified()
+        )
     }
 
     fun clearUnlockedFileToOpen() {
@@ -2376,6 +2592,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             is AppAction.SftpAction.NavigateTo -> {
                 setLocation(action.path)
+            }
+        }
+    }
+
+    fun handleNearbyShareAction(action: AppAction.NearbyShareAction) {
+        when (action) {
+            is AppAction.NearbyShareAction.ToggleReceive -> {
+                com.ripple.filemanager.localsend.NearbyShareRepository.toggleReceiving(getApplication(), action.enabled)
+            }
+            is AppAction.NearbyShareAction.StageFiles -> {
+                com.ripple.filemanager.localsend.NearbyShareRepository.stageFiles(action.files)
+            }
+            is AppAction.NearbyShareAction.RemoveStagedFile -> {
+                com.ripple.filemanager.localsend.NearbyShareRepository.removeStagedFile(action.file)
+            }
+            is AppAction.NearbyShareAction.ClearStagedFiles -> {
+                com.ripple.filemanager.localsend.NearbyShareRepository.clearStagedFiles()
+            }
+            is AppAction.NearbyShareAction.SendToPeer -> {
+                com.ripple.filemanager.localsend.NearbyShareRepository.sendStagedFiles(getApplication(), action.peer)
+            }
+            is AppAction.NearbyShareAction.AcceptIncoming -> {
+                com.ripple.filemanager.localsend.NearbyShareRepository.acceptIncomingRequest(action.sessionId)
+            }
+            is AppAction.NearbyShareAction.DeclineIncoming -> {
+                com.ripple.filemanager.localsend.NearbyShareRepository.declineIncomingRequest(action.sessionId)
+            }
+            is AppAction.NearbyShareAction.CancelTransfer -> {
+                com.ripple.filemanager.localsend.NearbyShareRepository.cancelActiveTransfer()
+            }
+            is AppAction.NearbyShareAction.DismissTransfer -> {
+                com.ripple.filemanager.localsend.NearbyShareRepository.dismissTransferCard()
+            }
+            is AppAction.NearbyShareAction.DismissReceivedFilesPrompt -> {
+                dismissReceivedFilesPrompt()
+            }
+            is AppAction.NearbyShareAction.SetDeviceName -> {
+                prefs.edit().putString("device_name", action.name).apply()
+                _state.update { it.copy(nearbyDeviceName = action.name) }
+                com.ripple.filemanager.localsend.NearbyShareRepository.broadcastAnnouncement()
+            }
+            is AppAction.NearbyShareAction.SetReceivePath -> {
+                prefs.edit().putString("nearby_receive_path", action.path).apply()
+                _state.update { it.copy(nearbyReceivePath = action.path) }
+            }
+            is AppAction.NearbyShareAction.SetAskBeforeReceiving -> {
+                prefs.edit().putBoolean("nearby_ask_before_receiving", action.ask).apply()
+                _state.update { it.copy(nearbyAskBeforeReceiving = action.ask) }
             }
         }
     }

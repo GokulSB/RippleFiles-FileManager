@@ -1,5 +1,7 @@
 package com.ripple.filemanager.ui
 
+import com.ripple.filemanager.ui.expressive.CookieIcon
+import com.ripple.filemanager.ui.expressive.ExpressiveMotion
 import com.ripple.filemanager.ui.theme.ProvideSkylineLedgerColors
 import kotlinx.collections.immutable.persistentListOf
 import androidx.compose.animation.togetherWith
@@ -8,6 +10,7 @@ import androidx.compose.foundation.background
 import coil.decode.VideoFrameDecoder
 import coil.request.videoFrameMillis
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -224,26 +227,30 @@ fun FileGrid(
             .map { it.id }
             .toSet()
     }
-
-    val initialLoadComplete = androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(currentFiles) {
-        if (!initialLoadComplete.value && currentFiles.isNotEmpty()) {
-            kotlinx.coroutines.delay(1000)
-            initialLoadComplete.value = true
-        }
-    }
-
     Column(modifier = modifier.fillMaxSize()) {
         header()
         
-        if (isListMode) {
-            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(bottom = 96.dp, top = 8.dp, start = 8.dp, end = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
+        val reducedMotion = ExpressiveMotion.isReducedMotion()
+        androidx.compose.animation.AnimatedContent(
+            targetState = isListMode,
+            transitionSpec = {
+                if (reducedMotion) {
+                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.snap()) togetherWith androidx.compose.animation.fadeOut(androidx.compose.animation.core.snap())
+                } else {
+                    androidx.compose.animation.fadeIn(ExpressiveMotion.FastTween) togetherWith androidx.compose.animation.fadeOut(ExpressiveMotion.FadeTween)
+                }
+            },
+            label = "file_grid_list_toggle",
+            modifier = Modifier.weight(1f).fillMaxWidth()
+        ) { currentListMode ->
+            if (currentListMode) {
+                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 96.dp, top = 8.dp, start = 8.dp, end = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                 
                 if (currentIsLoading) {
                     items(6) { index ->
@@ -257,35 +264,17 @@ fun FileGrid(
                         if (index < currentFiles.size) {
                             val file = currentFiles[index]
                             
-                            val animate = !initialLoadComplete.value && index < 20
-                            val alpha = remember { androidx.compose.animation.core.Animatable(if (animate) 0f else 1f) }
-                            val offsetY = remember { androidx.compose.animation.core.Animatable(if (animate) 10f else 0f) }
-                        
-                            LaunchedEffect(animate) {
-                                if (animate) {
-                                    val delay = (index * 50).coerceAtMost(500)
-                                    kotlinx.coroutines.delay(delay.toLong())
-                                    launch { alpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(500)) }
-                                    launch { offsetY.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
-                                }
-                            }
-                            
-                            val staggerMod = Modifier.graphicsLayer {
-                                this.alpha = alpha.value
-                                this.translationY = offsetY.value.dp.toPx()
-                            }
-                            
                             val itemExitTransition = remember {
                                 androidx.compose.animation.shrinkOut(
                                     shrinkTowards = Alignment.Center,
-                                    animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160))
+                                    animationSpec = ExpressiveMotion.IntSizeSpringSpec
+                                ) + androidx.compose.animation.fadeOut(ExpressiveMotion.FadeTween)
                             }
 
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = !deletingIds.contains(file.id),
                                 exit = itemExitTransition,
-                                modifier = Modifier.animateItem().then(staggerMod)
+                                modifier = Modifier.animateItem()
                             ) {
                                 if (file.type == "video" || file.type == "audio" || file.type == "image" || file.type == "doc") {
                                     ProvideSkylineLedgerColors {
@@ -337,7 +326,7 @@ fun FileGrid(
             androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid(
                 state = gridState,
                 columns = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells.Fixed(gridColumns),
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 96.dp, top = 8.dp, start = 8.dp, end = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(gridSpacing),
                 verticalItemSpacing = gridSpacing
@@ -355,35 +344,17 @@ fun FileGrid(
                         if (index < currentFiles.size) {
                             val file = currentFiles[index]
                             
-                            val animate = !initialLoadComplete.value && index < 20
-                            val alpha = remember { androidx.compose.animation.core.Animatable(if (animate) 0f else 1f) }
-                            val offsetY = remember { androidx.compose.animation.core.Animatable(if (animate) 10f else 0f) }
-                        
-                            LaunchedEffect(animate) {
-                                if (animate) {
-                                    val delay = (index * 50).coerceAtMost(500)
-                                    kotlinx.coroutines.delay(delay.toLong())
-                                    launch { alpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(500)) }
-                                    launch { offsetY.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
-                                }
-                            }
-                            
-                            val staggerMod = Modifier.graphicsLayer {
-                                this.alpha = alpha.value
-                                this.translationY = offsetY.value.dp.toPx()
-                            }
-                            
                             val itemExitTransition = remember {
                                 androidx.compose.animation.shrinkOut(
                                     shrinkTowards = Alignment.Center,
-                                    animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160))
+                                    animationSpec = ExpressiveMotion.IntSizeSpringSpec
+                                ) + androidx.compose.animation.fadeOut(ExpressiveMotion.FadeTween)
                             }
 
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = !deletingIds.contains(file.id),
                                 exit = itemExitTransition,
-                                modifier = Modifier.animateItem().then(staggerMod)
+                                modifier = Modifier.animateItem()
                             ) {
                                 if (file.type == "video" || file.type == "audio" || file.type == "image" || file.type == "doc") {
                                     ProvideSkylineLedgerColors {
@@ -431,6 +402,7 @@ fun FileGrid(
                     }
                 }
             }
+        }
         }
     }
     
@@ -509,6 +481,29 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
         shadowElevation = if (!isDarkTheme) 3.dp else 0.dp
     ) {
         Box(modifier = Modifier.fillMaxWidth().wrapContentHeight().defaultMinSize(minHeight = 100.dp).then(if (isMediaOrDoc) Modifier.aspectRatio(if (gridColumns > 2) 1f else 0.85f) else Modifier)) {
+            val reduced = ExpressiveMotion.isReducedMotion()
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isSelected,
+                enter = androidx.compose.animation.scaleIn(
+                    initialScale = 0f,
+                    animationSpec = if (reduced) androidx.compose.animation.core.snap() else ExpressiveMotion.SpringSpec
+                ) + androidx.compose.animation.fadeIn(ExpressiveMotion.FastTween),
+                exit = androidx.compose.animation.scaleOut(
+                    targetScale = 0f,
+                    animationSpec = if (reduced) androidx.compose.animation.core.snap() else ExpressiveMotion.FastTween
+                ) + androidx.compose.animation.fadeOut(ExpressiveMotion.FadeTween),
+                modifier = Modifier.align(Alignment.TopStart).zIndex(2f)
+            ) {
+                CookieIcon(
+                    icon = Icons.Filled.Check,
+                    bgColor = MaterialTheme.colorScheme.primary,
+                    iconTint = MaterialTheme.colorScheme.onPrimary,
+                    size = 28.dp,
+                    lobes = 8,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+
             if (isMediaOrDoc) {
                 val isImageOrVideo = file.type == "image" || file.type == "video"
 
@@ -709,6 +704,27 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 FileShapeIcon(file.type, name = file.name, size = 42, path = file.path, iconShape = iconShape, duration = file.duration, thumbnailLink = file.thumbnailLink)
+                val reduced = ExpressiveMotion.isReducedMotion()
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isSelected,
+                    enter = androidx.compose.animation.scaleIn(
+                        initialScale = 0f,
+                        animationSpec = if (reduced) androidx.compose.animation.core.snap() else ExpressiveMotion.SpringSpec
+                    ) + androidx.compose.animation.fadeIn(ExpressiveMotion.FastTween),
+                    exit = androidx.compose.animation.scaleOut(
+                        targetScale = 0f,
+                        animationSpec = if (reduced) androidx.compose.animation.core.snap() else ExpressiveMotion.FastTween
+                    ) + androidx.compose.animation.fadeOut(ExpressiveMotion.FadeTween)
+                ) {
+                    CookieIcon(
+                        icon = Icons.Filled.Check,
+                        bgColor = MaterialTheme.colorScheme.primary,
+                        iconTint = MaterialTheme.colorScheme.onPrimary,
+                        size = 28.dp,
+                        lobes = 8,
+                        modifier = Modifier.padding(start = 6.dp)
+                    )
+                }
                 Spacer(modifier = Modifier.width(16.dp))
                 if (isEditingName) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {

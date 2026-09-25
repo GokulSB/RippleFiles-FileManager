@@ -17,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.core.content.ContextCompat
@@ -47,29 +48,56 @@ class MainActivity : FragmentActivity() {
         if (crashLogPath != null) {
             super.onCreate(savedInstanceState)
             setContent {
-                val text = java.io.File(crashLogPath).readText()
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = {},
-                    title = { androidx.compose.material3.Text("App Crashed!") },
-                    text = { 
-                        androidx.compose.foundation.lazy.LazyColumn { 
-                            item { androidx.compose.material3.Text(text, style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)) } 
-                        } 
-                    },
-                    confirmButton = {
-                        androidx.compose.material3.TextButton(onClick = { finish() }) {
-                            androidx.compose.material3.Text("Close")
-                        }
+                val text = try { java.io.File(crashLogPath).readText() } catch (e: Exception) { "Error reading crash log: ${e.message}" }
+                androidx.compose.material3.MaterialTheme {
+                    androidx.compose.material3.Surface(
+                        modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.background
+                    ) {
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = {},
+                            title = { androidx.compose.material3.Text("App Crashed!") },
+                            text = { 
+                                androidx.compose.foundation.lazy.LazyColumn { 
+                                    item { androidx.compose.material3.Text(text, style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)) } 
+                                } 
+                            },
+                            confirmButton = {
+                                androidx.compose.material3.TextButton(onClick = {
+                                    val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Crash Log", text))
+                                    android.widget.Toast.makeText(this@MainActivity, "Crash log copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                                }) {
+                                    androidx.compose.material3.Text("Copy Log")
+                                }
+                            },
+                            dismissButton = {
+                                androidx.compose.material3.TextButton(onClick = { finish() }) {
+                                    androidx.compose.material3.Text("Close")
+                                }
+                            }
+                        )
                     }
-                )
+                }
             }
             return
         }
 
         Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
             try {
+                val trace = android.util.Log.getStackTraceString(throwable)
+                android.util.Log.e("RippleCrash", "Fatal exception in Ripple Files", throwable)
                 val crashLog = java.io.File(filesDir, "crash_log.txt")
-                crashLog.writeText(android.util.Log.getStackTraceString(throwable))
+                crashLog.writeText(trace)
+                try {
+                    val extLog = java.io.File(getExternalFilesDir(null), "crash_log.txt")
+                    extLog.writeText(trace)
+                } catch (e: Exception) {}
+                try {
+                    val dlLog = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "ripple_crash_log.txt")
+                    dlLog.writeText(trace)
+                } catch (e: Exception) {}
+
                 val intent = Intent(this, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                     putExtra("CRASH_LOG", crashLog.absolutePath)
@@ -85,12 +113,20 @@ class MainActivity : FragmentActivity() {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
         
         splashScreen.setKeepOnScreenCondition {
             viewModel.state.value.isLoading
         }
         
-        com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(applicationContext)
+        try {
+            com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(applicationContext)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "PDFBoxResourceLoader init failed", e)
+        }
         
         try {
             rikka.shizuku.Shizuku.addRequestPermissionResultListener { requestCode: Int, grantResult: Int ->
@@ -129,9 +165,10 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetShowBatchRenameDialog -> viewModel.setShowBatchRenameDialog(action.show)
                         is AppAction.ClearSelection -> viewModel.clearSelection()
                         is AppAction.ToggleSelection -> viewModel.toggleSelection(action.id)
-                        is AppAction.SelectAll -> viewModel.selectAll()
+                        is AppAction.SelectAll -> viewModel.selectAll(action.ids)
                         is AppAction.SelectNone -> viewModel.selectNone()
                         is AppAction.OpenFileViewer -> viewModel.openFileViewer(action.id)
+                        is AppAction.ViewFile -> viewModel.viewFile(action.file)
                         is AppAction.CloseFileViewer -> viewModel.closeFileViewer()
                         is AppAction.ClearUnlockedFileToOpen -> viewModel.clearUnlockedFileToOpen()
                         is AppAction.CreateFolder -> viewModel.createFolder(action.name)
@@ -140,6 +177,7 @@ class MainActivity : FragmentActivity() {
                         is AppAction.RenameFile -> viewModel.renameFile(action.path, action.newName)
                         is AppAction.BatchRenameFiles -> viewModel.batchRenameFiles(action.baseName, action.extension, action.padding, action.startNumber, action.isPrefix, action.style)
                         is AppAction.DeleteSelectedFiles -> viewModel.deleteSelectedFiles()
+                        is AppAction.LogRecentAction -> viewModel.logRecentAction(action.path, action.action)
                         is AppAction.SetClipboard -> viewModel.setClipboard(action.action)
                         is AppAction.ClearClipboard -> viewModel.clearClipboard()
                         is AppAction.PasteClipboard -> viewModel.pasteClipboard(action.location)
@@ -161,9 +199,11 @@ class MainActivity : FragmentActivity() {
                                     rikka.shizuku.Shizuku.requestPermission(100)
                                 }
                             } catch (e: Exception) {
-                                android.widget.Toast.makeText(this@MainActivity, "Shizuku not detected or not running", android.widget.Toast.LENGTH_SHORT).show()
+                                viewModel.showToast("Shizuku not detected or not running")
                             }
                         }
+                        is AppAction.ShowToast -> viewModel.showToast(action.message)
+                        is AppAction.NearbyShareAction -> viewModel.handleNearbyShareAction(action)
                         is AppAction.SmbAction -> viewModel.handleSmbAction(action)
                         is AppAction.FtpAction -> viewModel.handleFtpAction(action)
                         is AppAction.SftpAction -> viewModel.handleSftpAction(action)
@@ -193,6 +233,7 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetInvertText -> viewModel.setInvertText(action.invert)
                         is AppAction.SetCornerRoundness -> viewModel.setCornerRoundness(action.roundness)
                         is AppAction.SetGridColumns -> viewModel.setGridColumns(action.columns)
+                        is AppAction.SetListMode -> viewModel.setListMode(action.isList)
                         is AppAction.SetCleanerCategory -> viewModel.setCleanerCategory(action.category)
                         is AppAction.SelectAllCleanerFiles -> viewModel.selectAllCleanerFiles(action.ids)
                         is AppAction.ClearCleanerSelection -> viewModel.clearCleanerSelection()
@@ -233,7 +274,7 @@ class MainActivity : FragmentActivity() {
                                     is MainViewModel.TransferOutcome.Failed -> "Transfer failed: ${outcome.message}"
                                     is MainViewModel.TransferOutcome.UnsupportedFolderTransfer -> "Copying folders between different storage types isn't supported yet"
                                 }
-                                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                                viewModel.showToast(message)
                             }
                         }
                     }

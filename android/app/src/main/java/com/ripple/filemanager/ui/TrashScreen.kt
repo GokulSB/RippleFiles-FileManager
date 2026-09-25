@@ -1,42 +1,58 @@
 package com.ripple.filemanager.ui
 
+import android.text.format.DateFormat
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import com.ripple.filemanager.ui.expressive.ExpressiveMotion
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.Deselect
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.ViewList
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Restore
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.outlined.InsertDriveFile
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import com.ripple.filemanager.FileItem
-import com.ripple.filemanager.AppState
-import com.ripple.filemanager.AppAction
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.ripple.filemanager.*
 import com.ripple.filemanager.R
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.ImmutableSet
-import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.persistentSetOf
-import kotlinx.collections.immutable.toImmutableList
-import kotlinx.collections.immutable.toImmutableSet
+import com.ripple.filemanager.ui.expressive.*
+import com.ripple.filemanager.ui.theme.LocalAppFont
+import kotlinx.collections.immutable.*
 import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,297 +63,503 @@ fun TrashScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
-    var selectedFiles by remember { mutableStateOf<ImmutableSet<Int>>(persistentSetOf()) }
     var showSettings by remember { mutableStateOf(false) }
-    var deletingIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    val context = LocalContext.current
+    var fileToDeleteForever by remember { mutableStateOf<FileItem?>(null) }
+    var showEmptyBinConfirm by remember { mutableStateOf(false) }
+    val colors = ExpressiveTheme.colors
 
     BackHandler(enabled = true) {
-        if (selectedFiles.isNotEmpty()) {
-            selectedFiles = persistentSetOf()
-        } else {
-            onClose()
-        }
+        onClose()
     }
 
     LaunchedEffect(Unit) {
         onAction(AppAction.RefreshTrash)
     }
 
-    Scaffold(
-        modifier = Modifier.appGradientBackground(),
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-        topBar = {
-            TopAppBar(
-                title = { 
-                    Column {
-                        if (state.isRecycleBinEnabled) {
-                            Text(stringResource(R.string.bin_retention_title, state.recycleBinRetentionValue, state.recycleBinRetentionUnit.uppercase()), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(stringResource(R.string.bin_retention_desc, state.recycleBinRetentionValue, state.recycleBinRetentionUnit.lowercase()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        } else {
-                            Text(stringResource(R.string.bin_disabled), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(stringResource(R.string.files_deleted_permanently), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = { haptics.tap(); onClose() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { haptics.tap(); 
-                        if (selectedFiles.size == state.trashFiles.size && state.trashFiles.isNotEmpty()) {
-                            selectedFiles = persistentSetOf()
-                        } else {
-                            selectedFiles = state.trashFiles.map { it.id }.toImmutableSet()
-                        }
-                    }) {
-                        if (selectedFiles.size == state.trashFiles.size && state.trashFiles.isNotEmpty()) {
-                            Icon(Icons.Default.Deselect, contentDescription = stringResource(R.string.deselect_all))
-                        } else {
-                            Icon(Icons.Default.SelectAll, contentDescription = stringResource(R.string.select_all))
-                        }
-                    }
-                    IconButton(onClick = { haptics.tap(); onAction(AppAction.ToggleViewMode) }) {
-                        Icon(if (state.isListMode) Icons.Default.GridView else Icons.Default.ViewList, contentDescription = stringResource(R.string.toggle_view_content_desc))
-                    }
-                    IconButton(onClick = { haptics.tap(); showSettings = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_title))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
-        },
-        bottomBar = {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = selectedFiles.isNotEmpty(),
-                enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
-                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it })
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 8.dp
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        Button(
-                            onClick = { haptics.tap();
-                                val filesToRestore = state.trashFiles.filter { it.id in selectedFiles }.mapNotNull { it.encodedTrashName }
-                                onAction(AppAction.RestoreTrashFiles(filesToRestore))
-                                selectedFiles = kotlinx.collections.immutable.persistentSetOf()
-                            },
-                            shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
-                            colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Amber, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
-                        ) {
-                            Icon(androidx.compose.material.icons.Icons.Outlined.Restore, contentDescription = stringResource(R.string.restore_action), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            com.ripple.filemanager.ui.MonoLabel("RESTORE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
-                        }
-                        
-                        var showDeleteConfirm by remember { mutableStateOf(false) }
-                        
-                        Button(
-                            onClick = { haptics.tap(); showDeleteConfirm = true },
-                            shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
-                            colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
-                        ) {
-                            Icon(androidx.compose.material.icons.Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete_permanently_action), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            com.ripple.filemanager.ui.MonoLabel("DELETE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
-                        }
-                        
-                        if (showDeleteConfirm) {
-                            com.ripple.filemanager.ui.GradientAlertDialog(
-                                onDismissRequest = { showDeleteConfirm = false },
-                                title = { com.ripple.filemanager.ui.MonoLabel("DELETE PERMANENTLY?", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
-                                text = { Text(stringResource(R.string.delete_forever_warning)) },
-                                confirmButton = {
-                                    Button(
-                                        onClick = {
-                                            haptics.delete()
-                                            showDeleteConfirm = false
-                                            val filesToDelete = state.trashFiles.filter { it.id in selectedFiles }.mapNotNull { it.encodedTrashName }
-                                            val idsToRemove = selectedFiles
-                                            deletingIds = deletingIds + idsToRemove
-                                            selectedFiles = persistentSetOf()
-                                            
-                                            coroutineScope.launch {
-                                                kotlinx.coroutines.delay(220)
-                                                onAction(AppAction.PermanentlyDeleteTrashFiles(filesToDelete))
-                                                deletingIds = deletingIds - idsToRemove
-                                            }
-                                        },
-                                        shape = com.ripple.filemanager.ui.getDynamicCornerShape(0f, state.cornerRoundness),
-                                        colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
-                                    ) {
-                                        Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete_label), modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        com.ripple.filemanager.ui.MonoLabel("DELETE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { haptics.tap(); showDeleteConfirm = false }) {
-                                        Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
-                                    }
-                                },
-                                containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
-                                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    ) { innerPadding ->
-        Surface(
+    val count = state.trashFiles.size
+    val countText = pluralStringResource(R.plurals.items_count, count, count)
+    val retentionSubtitle = if (state.isRecycleBinEnabled) {
+        "$countText · ${state.recycleBinRetentionValue} ${state.recycleBinRetentionUnit.lowercase()}"
+    } else {
+        "$countText (disabled)"
+    }
+
+    RippleBackground(modifier = Modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            color = MaterialTheme.colorScheme.background
+                .navigationBarsPadding()
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                if (state.trashIsLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+        // PageHeader "Bin" + subtitle + right actions
+        PageHeader(
+            title = "Bin",
+            subtitle = retentionSubtitle,
+            onBack = onClose,
+            actions = {
+                // List / Grid toggle
+                CookieIconButton(
+                    onClick = {
+                        haptics.tap()
+                        onAction(AppAction.ToggleViewMode)
+                    },
+                    icon = if (state.isListMode) Icons.Default.GridView else Icons.AutoMirrored.Filled.ViewList,
+                    bgColor = colors.card,
+                    iconTint = colors.text,
+                    description = "Toggle view",
+                    size = 38.dp,
+                    lobes = 8
+                )
+
+                // Settings gear
+                CookieIconButton(
+                    onClick = {
+                        haptics.tap()
+                        showSettings = true
+                    },
+                    icon = Icons.Default.Settings,
+                    bgColor = colors.card,
+                    iconTint = colors.text,
+                    description = "Bin settings",
+                    size = 38.dp,
+                    lobes = 8
+                )
+            }
+        )
+
+        // Chips: Restore all, Empty bin
+        if (state.trashFiles.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ExpressiveChip(
+                    label = "Restore all",
+                    selected = false,
+                    icon = Icons.Outlined.Restore,
+                    onClick = {
+                        val allFiles = state.trashFiles.mapNotNull { it.encodedTrashName }
+                        onAction(AppAction.RestoreTrashFiles(allFiles))
                     }
-                } else if (state.trashFiles.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(stringResource(R.string.bin_is_empty), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                } else {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        FileGrid(
-                            folderState = FolderListUiState.Loaded(state.trashFiles),
-                            selectedFiles = selectedFiles,
-                            deletingIds = deletingIds,
-                            isListMode = state.isListMode,
-                            iconShape = com.ripple.filemanager.IconShapeType.SYSTEM,
-                            cornerRoundness = state.cornerRoundness,
-                            searchQuery = "",
-                            onFileClick = { file -> haptics.tap();
-                                if (selectedFiles.isNotEmpty()) {
-                                    selectedFiles = if (selectedFiles.contains(file.id)) {
-                                        selectedFiles.minus(file.id).toImmutableSet()
-                                    } else {
-                                        selectedFiles.plus(file.id).toImmutableSet()
-                                    }
-                                } else {
-                                    // Handle single tap... maybe view? (Not fully supported for trash)
-                                }
-                            },
-                            onFileLongClick = { file -> haptics.tap();
-                                selectedFiles = if (selectedFiles.contains(file.id)) {
-                                    selectedFiles.minus(file.id).toImmutableSet()
-                                } else {
-                                    selectedFiles.plus(file.id).toImmutableSet()
-                                }
-                            },
-                            onPinClick = {},
-                            onInfoClick = {},
-                            onRenameClick = { _, _ -> },
-                            onExtractClick = {}
-                        )
-                    }
-                }
+                )
+                ExpressiveChip(
+                    label = "Empty bin",
+                    selected = false,
+                    icon = Icons.Outlined.Delete,
+                    onClick = { showEmptyBinConfirm = true }
+                )
             }
         }
-    }
-    
-    if (showSettings) {
-        var isEnabled by remember { mutableStateOf(state.isRecycleBinEnabled) }
-        var retentionValue by remember { mutableStateOf(state.recycleBinRetentionValue.toString()) }
-        var retentionUnit by remember { mutableStateOf(state.recycleBinRetentionUnit) }
-        var expanded by remember { mutableStateOf(false) }
-        val units = listOf("Seconds", "Minutes", "Hours", "Days", "Weeks", "Months", "Years")
 
-        com.ripple.filemanager.ui.GradientAlertDialog(
-            onDismissRequest = { showSettings = false },
-            title = { com.ripple.filemanager.ui.MonoLabel("BIN SETTINGS", color = com.ripple.filemanager.ui.theme.SkylineColors.Amber, fontSize = 14) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(R.string.enable_bin))
-                        Switch(checked = isEnabled, onCheckedChange = { haptics.settingsToggle(); isEnabled = it })
-                    }
-                    if (isEnabled) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Content
+        Box(
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            if (state.trashIsLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = colors.accent)
+                }
+            } else if (state.trashFiles.isEmpty()) {
+                SectionContainer(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
+                    InnerCard {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            OutlinedTextField(
-                                value = retentionValue,
-                                onValueChange = { if (it.isEmpty() || it.all { char -> char.isDigit() }) retentionValue = it },
-                                label = { Text(stringResource(R.string.time_label)) },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
+                            Text(
+                                text = stringResource(R.string.bin_is_empty),
+                                fontSize = 15.sp,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.muted,
+                                textAlign = TextAlign.Center
                             )
-                            ExposedDropdownMenuBox(
-                                expanded = expanded,
-                                onExpandedChange = { expanded = !expanded },
-                                modifier = Modifier.weight(1f)
+                        }
+                    }
+                }
+            } else {
+                SectionContainer(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
+                    val reduced = ExpressiveMotion.isReducedMotion()
+                    AnimatedContent(
+                        targetState = state.isListMode,
+                        transitionSpec = {
+                            if (reduced) {
+                                fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
+                            } else {
+                                fadeIn(ExpressiveMotion.FastTween) togetherWith fadeOut(ExpressiveMotion.FadeTween)
+                            }
+                        },
+                        label = "trash_list_grid_toggle"
+                    ) { isListMode ->
+                        if (isListMode) {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(bottom = 16.dp)
                             ) {
-                                OutlinedTextField(
-                                    value = retentionUnit,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text(stringResource(R.string.unit_label)) },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                                    modifier = Modifier.menuAnchor(),
-                                    shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
-                                )
-                                ExposedDropdownMenu(
-                                    expanded = expanded,
-                                    onDismissRequest = { expanded = false }
-                                ) {
-                                    units.forEach { selectionOption ->
-                                        DropdownMenuItem(
-                                            text = { Text(selectionOption) },
-                                            onClick = { haptics.tap();
-                                                retentionUnit = selectionOption
-                                                expanded = false
+                                itemsIndexed(
+                                    items = state.trashFiles,
+                                    key = { index, file -> file.encodedTrashName?.let { "${it}_$index" } ?: "${file.id}_$index" }
+                                ) { _, file ->
+                                    TrashListRow(
+                                        file = file,
+                                        modifier = Modifier.animateItem(),
+                                        onRestore = {
+                                            file.encodedTrashName?.let {
+                                                onAction(AppAction.RestoreTrashFiles(listOf(it)))
                                             }
-                                        )
-                                    }
+                                        },
+                                        onDeleteForever = {
+                                            fileToDeleteForever = file
+                                        }
+                                    )
+                                }
+                            }
+                        } else {
+                            // Grid Mode
+                            val columns = state.gridColumns.coerceIn(2, 4)
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(columns),
+                                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                contentPadding = PaddingValues(bottom = 16.dp)
+                            ) {
+                                itemsIndexed(
+                                    items = state.trashFiles,
+                                    key = { index, file -> file.encodedTrashName?.let { "${it}_$index" } ?: "${file.id}_$index" }
+                                ) { _, file ->
+                                    TrashGridCard(
+                                        file = file,
+                                        modifier = Modifier.animateItem(),
+                                        onRestore = {
+                                            file.encodedTrashName?.let {
+                                                onAction(AppAction.RestoreTrashFiles(listOf(it)))
+                                            }
+                                        },
+                                        onDeleteForever = {
+                                            fileToDeleteForever = file
+                                        }
+                                    )
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+    // Delete Forever Sheet
+    if (fileToDeleteForever != null) {
+        val file = fileToDeleteForever!!
+        ExpressiveConfirmationSheet(
+            title = "Delete permanently?",
+            subtitle = "\"${file.name}\" will be permanently deleted.",
+            confirmLabel = "Delete",
+            cancelLabel = "Cancel",
+            onConfirm = {
+                haptics.delete()
+                val encoded = file.encodedTrashName
+                fileToDeleteForever = null
+                if (encoded != null) {
+                    onAction(AppAction.PermanentlyDeleteTrashFiles(listOf(encoded)))
+                }
+            },
+            onDismissRequest = {
+                fileToDeleteForever = null
+            }
+        )
+    }
+
+    // Empty Bin Sheet
+    if (showEmptyBinConfirm) {
+        ExpressiveConfirmationSheet(
+            title = "Empty bin?",
+            subtitle = "All items in the bin will be permanently deleted.",
+            confirmLabel = "Empty bin",
+            cancelLabel = "Cancel",
+            onConfirm = {
+                haptics.delete()
+                showEmptyBinConfirm = false
+                val allFiles = state.trashFiles.mapNotNull { it.encodedTrashName }
+                onAction(AppAction.PermanentlyDeleteTrashFiles(allFiles))
+            },
+            onDismissRequest = {
+                showEmptyBinConfirm = false
+            }
+        )
+    }
+
+    // Bin Settings Dialog
+    if (showSettings) {
+        var isEnabled by remember { mutableStateOf(state.isRecycleBinEnabled) }
+        var retentionValue by remember { mutableStateOf(state.recycleBinRetentionValue.toString()) }
+        var retentionUnit by remember { mutableStateOf(state.recycleBinRetentionUnit) }
+
+        AlertDialog(
+            onDismissRequest = { showSettings = false },
+            containerColor = colors.container,
+            shape = RoundedCornerShape(26.dp),
+            title = { Text("Bin settings", color = colors.text) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Enable recycle bin", color = colors.text)
+                        ExpressiveSwitch(checked = isEnabled, onCheckedChange = { isEnabled = it })
+                    }
+                    if (isEnabled) {
+                        OutlinedTextField(
+                            value = retentionValue,
+                            onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) retentionValue = it },
+                            label = { Text("Days to keep files") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             },
             confirmButton = {
-                TextButton(
-                    onClick = { haptics.tap();
-                        val value = retentionValue.toIntOrNull() ?: 7
-                        onAction(AppAction.SetRecycleBinSettings(isEnabled, value, retentionUnit))
+                Button(
+                    onClick = {
                         showSettings = false
-                        onAction(AppAction.RefreshTrash)
-                    }
+                        val valueInt = retentionValue.toIntOrNull() ?: 7
+                        onAction(AppAction.SetRecycleBinSettings(isEnabled, valueInt, retentionUnit))
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.ink)
                 ) {
-                    Text(stringResource(R.string.save_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                    Text("Save")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { haptics.tap(); showSettings = false }) {
-                    Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
+                TextButton(onClick = { showSettings = false }) {
+                    Text("Cancel", color = colors.muted)
                 }
-            },
-            containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
-            shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, state.cornerRoundness)
+            }
         )
+    }
+}
+
+@Composable
+private fun TrashListRow(
+    file: FileItem,
+    onRestore: () -> Unit,
+    onDeleteForever: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExpressiveTheme.colors
+    val roundness = LocalCornerRoundness.current
+    val rowShape = RoundedCornerShape((26f * (roundness * 2).coerceIn(0f, 2f)).dp)
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(rowShape)
+            .background(colors.card)
+            .clickable { menuExpanded = true }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CookieIcon(
+            icon = Icons.Outlined.Delete,
+            bgColor = colors.insetCard,
+            iconTint = colors.text,
+            size = 46.dp,
+            lobes = 8
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = file.name,
+                fontFamily = LocalAppFont.current,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.text,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+            val dateStr = DateFormat.format("MMM d", file.lastModified)
+            Text(
+                text = "${file.size} · Deleted $dateStr",
+                fontFamily = LocalAppFont.current,
+                fontSize = 12.sp,
+                color = colors.muted
+            )
+        }
+
+        Box {
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Options",
+                    tint = colors.muted
+                )
+            }
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                modifier = Modifier.background(colors.card)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Restore", color = colors.text) },
+                    onClick = {
+                        menuExpanded = false
+                        onRestore()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Delete forever", color = Color(0xFFFF6B6B)) },
+                    onClick = {
+                        menuExpanded = false
+                        onDeleteForever()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrashGridCard(
+    file: FileItem,
+    onRestore: () -> Unit,
+    onDeleteForever: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExpressiveTheme.colors
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.card),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { menuExpanded = true }
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            // 4:3 thumbnail box
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(4f / 3f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.insetCard)
+            ) {
+                // Thumbnail
+                val isMedia = file.name.endsWith(".jpg", true) || file.name.endsWith(".png", true) || file.name.endsWith(".mp4", true)
+                if (isMedia && file.path.isNotEmpty()) {
+                    AsyncImage(
+                        model = File(file.path),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CookieIcon(
+                            icon = Icons.AutoMirrored.Outlined.InsertDriveFile,
+                            bgColor = colors.card,
+                            iconTint = colors.muted,
+                            size = 44.dp,
+                            lobes = 8
+                        )
+                    }
+                }
+
+                // 30dp translucent 3-dot button
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .clickable { menuExpanded = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        modifier = Modifier.background(colors.card)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Restore", color = colors.text) },
+                            onClick = { onRestore(); menuExpanded = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete forever", color = colors.accent) },
+                            onClick = { onDeleteForever(); menuExpanded = false }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 2-line name
+            Text(
+                text = file.name,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.text,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Size pill (sand) + deleted date
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.sand)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = file.size,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.ink
+                    )
+                }
+
+                Text(
+                    text = DateFormat.format("MMM d", file.lastModified).toString(),
+                    fontSize = 10.sp,
+                    color = colors.muted
+                )
+            }
+        }
     }
 }

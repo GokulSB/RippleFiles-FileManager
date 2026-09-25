@@ -18,8 +18,23 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.Unarchive
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material3.*
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
+import com.ripple.filemanager.ui.expressive.CookieIcon
+import com.ripple.filemanager.ui.expressive.ExpressiveTheme
+import com.ripple.filemanager.ui.expressive.ExpressiveTokens
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.ripple.filemanager.ui.theme.LocalAppFont
 import com.ripple.filemanager.ui.theme.FrauncesFontFamily
 import com.ripple.filemanager.ui.theme.JetBrainsMonoFamily
 import com.ripple.filemanager.ui.theme.ManropeFontFamily
@@ -118,9 +133,10 @@ fun ArchiveFileCard(
         }
     }
 }
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArchiveExtractDialog(
-    cornerRoundness: Float,
+    cornerRoundness: Float = 0.5f,
     archiveName: String,
     itemCount: String,
     isRar: Boolean,
@@ -131,157 +147,214 @@ fun ArchiveExtractDialog(
     onDismiss: () -> Unit
 ) {
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
-    Dialog(
+    val colors = ExpressiveTheme.colors
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false, 
-            decorFitsSystemWindows = false
-        )
+        sheetState = sheetState,
+        dragHandle = null,
+        containerColor = colors.container,
+        shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0x8C000000))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = { haptics.tap(); onDismiss() }
-                ),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .background(colors.container)
+                .navigationBarsPadding()
+                .padding(bottom = 24.dp),
+            horizontalAlignment = Alignment.Start
         ) {
-            // Card container
+            // Centered grab handle
             Box(
                 modifier = Modifier
-                    .padding(24.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {} // Consume clicks to avoid dismissal
-                    )
+                    .padding(top = 12.dp, bottom = 16.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(colors.muted.copy(alpha = 0.4f))
+                    .align(Alignment.CenterHorizontally)
+            )
+
+            // Header: CookieIcon + archiveName + format/itemCount
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Shadow
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .offset(5.dp, 5.dp)
-                        .clip(getDynamicCornerShape(12f, cornerRoundness))
-                        .background(androidx.compose.material3.MaterialTheme.colorScheme.outline)
+                val pastel = ExpressiveTokens.categoryPastel("archive")
+                CookieIcon(
+                    icon = Icons.Outlined.FolderZip,
+                    bgColor = pastel,
+                    iconTint = ExpressiveTokens.OnPastel,
+                    size = 46.dp,
+                    lobes = 8
                 )
-                
-                // Content
-                Column(
-                    modifier = Modifier
-                        .clip(getDynamicCornerShape(12f, cornerRoundness)).background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
-                        .border(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outline)
-                        .padding(20.dp)
-                        .fillMaxWidth()
-                ) {
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "ARCHIVE", 
-                        style = TextStyle(
-                            fontFamily = JetBrainsMonoFamily, 
-                            fontSize = 10.sp, 
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        text = archiveName,
+                        fontFamily = LocalAppFont.current,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = archiveName, 
-                        style = TextStyle(
-                            fontFamily = FrauncesFontFamily, 
-                            fontSize = 18.sp, 
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
-                        )
+                        text = if (itemCount.isNotBlank()) "$itemCount • ${if (isRar) "RAR Archive" else "Archive"}" else if (isRar) "RAR Archive" else "Archive",
+                        fontFamily = LocalAppFont.current,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = colors.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    // Action rows
-                    ArchiveActionRow("Extract here", itemCount, onClick = { haptics.tap(); onExtractHere() })
-                    ArchiveActionRow("Extract to...", "choose folder", onClick = { haptics.tap(); onExtractTo() })
-                    ArchiveActionRow("View contents", "", onClick = { haptics.tap(); onViewContents() })
-                    ArchiveActionRow(
-                        label = "Add to archive", 
-                        hint = if (isRar) "RAR unsupported" else "", 
-                        disabled = isRar, 
-                        onClick = {}
-                    )
-                    ArchiveActionRow("Delete", "", hideDivider = true, onClick = { haptics.delete(); onDelete() })
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Cancel button
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha=0.5f))
-                            .clickable(onClick = { haptics.tap(); onDismiss() })
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "CANCEL", 
-                            style = TextStyle(
-                                fontFamily = JetBrainsMonoFamily, 
-                                fontSize = 11.sp, 
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
-                    }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Action Items
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ExpressiveArchiveActionCard(
+                    icon = Icons.Outlined.Unarchive,
+                    title = "Extract here",
+                    subtitle = "Extract files to the current folder",
+                    onClick = {
+                        haptics.tap()
+                        onExtractHere()
+                    }
+                )
+
+                ExpressiveArchiveActionCard(
+                    icon = Icons.AutoMirrored.Outlined.DriveFileMove,
+                    title = "Extract to...",
+                    subtitle = "Choose destination folder",
+                    onClick = {
+                        haptics.tap()
+                        onExtractTo()
+                    }
+                )
+
+                ExpressiveArchiveActionCard(
+                    icon = Icons.Outlined.Visibility,
+                    title = "View contents",
+                    subtitle = "Browse files inside this archive",
+                    onClick = {
+                        haptics.tap()
+                        onViewContents()
+                    }
+                )
+
+                ExpressiveArchiveActionCard(
+                    icon = Icons.Outlined.Delete,
+                    title = "Delete archive",
+                    subtitle = "Move this archive to trash",
+                    isDestructive = true,
+                    onClick = {
+                        haptics.delete()
+                        onDelete()
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Cancel button
+            Button(
+                onClick = {
+                    haptics.tap()
+                    onDismiss()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .padding(horizontal = 24.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.card,
+                    contentColor = colors.text
+                )
+            ) {
+                Text(
+                    text = "Cancel",
+                    fontFamily = LocalAppFont.current,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
     }
 }
+
 @Composable
-private fun ArchiveActionRow(
-    label: String,
-    hint: String,
-    disabled: Boolean = false,
-    hideDivider: Boolean = false,
+private fun ExpressiveArchiveActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    isDestructive: Boolean = false,
     onClick: () -> Unit
 ) {
-    val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
-    Column(
+    val colors = ExpressiveTheme.colors
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !disabled, onClick = { haptics.tap(); onClick() })
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.card)
+            .border(1.dp, colors.line, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .size(38.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (isDestructive) colors.accent.copy(alpha = 0.15f) else colors.container),
+            contentAlignment = Alignment.Center
         ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isDestructive) colors.accent else colors.text,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(14.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = label,
-                style = TextStyle(
-                    fontFamily = ManropeFontFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    color = if (disabled) androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else androidx.compose.material3.MaterialTheme.colorScheme.onSurface
-                )
+                text = title,
+                fontFamily = LocalAppFont.current,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (isDestructive) colors.accent else colors.text
             )
-            if (hint.isNotEmpty()) {
-                Text(
-                    text = hint,
-                    style = TextStyle(
-                        fontFamily = JetBrainsMonoFamily,
-                        fontSize = 10.sp,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-            }
-        }
-        if (!hideDivider) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(Color(0x338A6A45))
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                fontFamily = LocalAppFont.current,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Normal,
+                color = colors.muted
             )
         }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
+            contentDescription = null,
+            tint = colors.muted.copy(alpha = 0.5f),
+            modifier = Modifier.size(14.dp)
+        )
     }
 }
 @Composable

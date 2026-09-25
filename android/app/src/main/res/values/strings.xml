@@ -246,6 +246,10 @@
         <item quantity="one">1 file selected</item>
         <item quantity="other">%1$d files selected</item>
     </plurals>
+    <plurals name="items_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
     <string name="file_size_and_date">%1$s - %2$s</string>
     <string name="page_number">Page %1$d</string>
 

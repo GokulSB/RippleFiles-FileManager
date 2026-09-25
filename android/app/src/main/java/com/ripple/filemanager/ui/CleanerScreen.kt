@@ -1,72 +1,53 @@
 package com.ripple.filemanager.ui
 
+import coil.request.videoFrameMillis
+
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Deselect
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.SdStorage
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.VideoFile
-import androidx.compose.material.icons.filled.AudioFile
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.ImageLoader
-import coil.compose.AsyncImage
-import coil.decode.VideoFrameDecoder
-import coil.request.videoFrameMillis
 import com.ripple.filemanager.*
-import kotlinx.collections.immutable.ImmutableSet
-import com.ripple.filemanager.AppAction
-import androidx.compose.material3.SnackbarHostState
-import com.ripple.filemanager.CleanerData
-import com.ripple.filemanager.CleanerCategoryData
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.res.pluralStringResource
 import com.ripple.filemanager.R
+import com.ripple.filemanager.ui.expressive.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) -> Unit, snackbarHostState: SnackbarHostState) {
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+fun CleanerScreen(
+    state: AppState,
+    onAction: (AppAction) -> Unit,
+    snackbarHostState: SnackbarHostState,
+    onNavigateToCategory: ((String) -> Unit)? = null
+) {
+    val colors = ExpressiveTheme.colors
+    val context = LocalContext.current
     val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
 
     BackHandler(enabled = state.currentCleanerCategory != null) {
@@ -77,428 +58,397 @@ fun CleanerScreen(state: com.ripple.filemanager.AppState, onAction: (AppAction) 
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().appGradientBackground()) {
+    RippleBackground(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+        ) {
         val data = state.cleanerData
+
         if (data != null) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { 
-                            Text(state.currentCleanerCategory ?: "Storage", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        },
-                        navigationIcon = {
-                            if (state.currentCleanerCategory != null) {
-                                IconButton(onClick = { haptics.tap(); onAction(AppAction.SetCleanerCategory(null)) }) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
-                                }
-                            } else {
-                                IconButton(onClick = { haptics.tap(); onAction(AppAction.SetCleanerScreenVisible(false)) }) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
-                                }
-                            }
-                        },
-                        actions = {
-                            if (state.currentCleanerCategory != null) {
-                                IconButton(onClick = { haptics.tap();
-                                    val catData = when (state.currentCleanerCategory) {
-                                        "Documents" -> data.documents
-                                        "Images" -> data.images
-                                        "Videos" -> data.videos
-                                        "Audio" -> data.audio
-                                        "Apps" -> data.apps
-                                        "Empty folders" -> data.emptyFolders
-                                        "Duplicates" -> data.duplicates
-                                        else -> null
-                                    }
-                                    if (catData != null) onAction(AppAction.SelectAllCleanerFiles(catData.files.map { it.id }))
-                                }) {
-                                    Icon(Icons.Default.SelectAll, contentDescription = stringResource(R.string.select_all))
-                                }
-                                IconButton(onClick = { haptics.tap(); onAction(AppAction.ClearCleanerSelection) }) {
-                                    Icon(Icons.Default.Deselect, contentDescription = stringResource(R.string.select_none))
-                                }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            titleContentColor = MaterialTheme.colorScheme.onBackground
-                        )
+            if (state.currentCleanerCategory == null) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    PageHeader(
+                        title = "Storage",
+                        onBack = { onAction(AppAction.SetCleanerScreenVisible(false)) }
                     )
-                },
-                bottomBar = {
-                    if (state.currentCleanerCategory != null && state.cleanerSelectedFiles.isNotEmpty()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.fillMaxWidth().height(64.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(pluralStringResource(R.plurals.files_selected, state.cleanerSelectedFiles.size, state.cleanerSelectedFiles.size), color = MaterialTheme.colorScheme.onSurface)
-                                Button(
-                                    onClick = { 
-                                        haptics.delete()
-                                        onAction(AppAction.DeleteSelectedCleanerFiles) 
-                                    },
-                                    shape = com.ripple.filemanager.ui.getDynamicCornerShape(24f, state.cornerRoundness),
-                                    colors = ButtonDefaults.buttonColors(containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Rust, contentColor = androidx.compose.ui.graphics.Color(0xFF161009))
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    com.ripple.filemanager.ui.MonoLabel("DELETE", color = androidx.compose.ui.graphics.Color(0xFF161009), fontSize = 12)
-                                }
+
+                    ExpressiveStorageOverview(
+                        data = data,
+                        onCategoryClick = { categoryName ->
+                            haptics.cleaner()
+                            val filterKey = when (categoryName.lowercase()) {
+                                "documents", "docs", "doc" -> "doc"
+                                "images", "image" -> "image"
+                                "videos", "video" -> "video"
+                                "audio" -> "audio"
+                                "apps", "apk" -> "apk"
+                                "downloads", "download" -> "download"
+                                "archives", "archive" -> "archive"
+                                "duplicates" -> "duplicates"
+                                "other files", "large" -> "large"
+                                else -> categoryName.lowercase()
+                            }
+                            if (onNavigateToCategory != null) {
+                                onNavigateToCategory(filterKey)
+                            } else {
+                                onAction(AppAction.SetCleanerCategory(categoryName))
+                            }
+                        },
+                        onManageClick = {
+                            val intent = Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                val fallback = Intent(Settings.ACTION_SETTINGS)
+                                try { context.startActivity(fallback) } catch (e2: Exception) {}
                             }
                         }
-                    }
-                },
-                containerColor = androidx.compose.ui.graphics.Color.Transparent
-            ) { paddingValues ->
-                Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                    if (state.currentCleanerCategory == null) {
-                        CleanerOverview(data = data, cornerRoundness = state.cornerRoundness, gridColumns = state.gridColumns, onCategoryClick = { 
-                            haptics.cleaner()
-                            onAction(AppAction.SetCleanerCategory(it)) 
-                        })
-                    } else {
-                        val categoryData = when (state.currentCleanerCategory) {
-                            "Documents" -> data.documents
-                            "Images" -> data.images
-                            "Videos" -> data.videos
-                            "Audio" -> data.audio
-                            "Apps" -> data.apps
-                            "Empty folders" -> data.emptyFolders
-                            "Duplicates" -> data.duplicates
-                            else -> null
-                        }
-                        if (categoryData != null) {
-                            CategoryDetailView(
-                                categoryData = categoryData,
-                                selectedFiles = state.cleanerSelectedFiles,
-                                cornerRoundness = state.cornerRoundness,
-                                gridColumns = state.gridColumns,
-                                iconShape = state.activeIconShape,
-                                onFileToggle = { onAction(AppAction.ToggleCleanerSelection(it)) }
-                            )
-                        }
-                    }
+                    )
+                }
+            } else {
+                val categoryData = when (state.currentCleanerCategory) {
+                    "Documents" -> data.documents
+                    "Images" -> data.images
+                    "Videos" -> data.videos
+                    "Audio" -> data.audio
+                    "Apps" -> data.apps
+                    "Empty folders" -> data.emptyFolders
+                    "Duplicates" -> data.duplicates
+                    else -> null
+                }
+                if (categoryData != null) {
+                    ExpressiveCategoryDetailScreen(
+                        categoryKey = state.currentCleanerCategory!!,
+                        files = categoryData.files,
+                        state = state,
+                        onAction = onAction,
+                        onBack = { onAction(AppAction.SetCleanerCategory(null)) },
+                        onTrashClick = { onAction(AppAction.SetTrashScreenVisible(true)) },
+                        onFileClick = { file ->
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", java.io.File(file.path))
+                                setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            try { context.startActivity(intent) } catch (e: Exception) {}
+                        },
+                        onFileMenuClick = {},
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
-        
+
         if (state.cleanerLoading) {
             Box(
                 modifier = Modifier
-                    .matchParentSize()
-                    .background(Color.Black.copy(alpha = 0.5f)),
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f)),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = colors.accent)
             }
         }
     }
 }
+}
 
 @Composable
-fun CleanerOverview(data: CleanerData, cornerRoundness: Float, gridColumns: Int, onCategoryClick: (String) -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val usedBytes = data.totalStorageBytes - data.freeStorageBytes
-    
-    val colors = listOf(
-        Color(0xFF8A6A44), // Documents
-        Color(0xFFE0AC70), // Images
-        Color(0xFFC1654A), // Videos
-        Color(0xFFB08A52), // Audio
-        Color(0xFF7C93A0), // Apps
-        Color(0xFF5A4A36), // Empty folders
-        Color(0xFF6F7A4A), // Other files
-        Color(0xFFD98A7A)  // Duplicates
-    )
-    
-    val categories = listOf(
-        Triple("Documents", data.documents.totalSizeBytes, Icons.Outlined.Description),
-        Triple("Images", data.images.totalSizeBytes, Icons.Outlined.Image),
-        Triple("Videos", data.videos.totalSizeBytes, Icons.Outlined.VideoFile),
-        Triple("Audio", data.audio.totalSizeBytes, Icons.Outlined.AudioFile),
-        Triple("Apps", data.apps.totalSizeBytes, Icons.Outlined.Apps),
-        Triple("Empty folders", data.emptyFolders.totalSizeBytes, Icons.Outlined.FolderOpen),
-        Triple("Other files", data.otherBytes, Icons.Outlined.InsertDriveFile),
-        Triple("Duplicates", data.duplicates.totalSizeBytes, Icons.Outlined.FolderOpen)
-    )
+private fun ExpressiveStorageOverview(
+    data: CleanerData,
+    onCategoryClick: (String) -> Unit,
+    onManageClick: () -> Unit
+) {
+    val colors = ExpressiveTheme.colors
+    val usedBytes = (data.totalStorageBytes - data.freeStorageBytes).coerceAtLeast(0L)
+    val totalGb = data.totalStorageBytes.toFloat() / (1024f * 1024f * 1024f)
+    val usedGb = usedBytes.toFloat() / (1024f * 1024f * 1024f)
+    val freeGb = data.freeStorageBytes.toFloat() / (1024f * 1024f * 1024f)
+    val freePercent = if (data.totalStorageBytes > 0) (data.freeStorageBytes * 100 / data.totalStorageBytes).toInt() else 0
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(gridColumns),
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    val categoryList = remember(data) {
+        listOf(
+            StorageBreakdownItem("Documents", data.documents.totalSizeBytes, ExpressiveTokens.PastelSky, Icons.Outlined.Description, "docs"),
+            StorageBreakdownItem("Images", data.images.totalSizeBytes, ExpressiveTokens.PastelCoral, Icons.Outlined.Image, "images"),
+            StorageBreakdownItem("Videos", data.videos.totalSizeBytes, ExpressiveTokens.PastelRose, Icons.Outlined.VideoFile, "videos"),
+            StorageBreakdownItem("Audio", data.audio.totalSizeBytes, ExpressiveTokens.PastelViolet, Icons.Outlined.AudioFile, "audio"),
+            StorageBreakdownItem("Apps", data.apps.totalSizeBytes, ExpressiveTokens.PastelSage, Icons.Outlined.Apps, "apps"),
+            StorageBreakdownItem("Other files", data.otherBytes, ExpressiveTokens.PastelTeal, Icons.AutoMirrored.Outlined.InsertDriveFile, "large"),
+            StorageBreakdownItem("Duplicates", data.duplicates.totalSizeBytes, ExpressiveTokens.PastelSand, Icons.Outlined.FolderOpen, "archives")
+        )
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(bottom = 16.dp)
+        contentPadding = PaddingValues(bottom = 130.dp)
     ) {
-        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-            Column {
-                com.ripple.filemanager.ui.BlueprintCard(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                    heroEmphasis = true,
-                    cornerRoundness = cornerRoundness
-                ) {
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        // 1. Header
+        // Container -> Inner Card: Storage Bar & Legend
+        item {
+            SectionContainer {
+                InnerCard {
+                    Column {
                         Text(
-                            text = stringResource(R.string.internal_storage).uppercase(),
-                            fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
+                            text = "Internal storage".uppercase(),
                             fontSize = 11.sp,
-                            letterSpacing = 2.sp,
-                            color = com.ripple.filemanager.ui.theme.SkylineColors.AmberDim,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            color = colors.muted
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.Bottom) {
                             Text(
-                                text = formatSize(usedBytes),
-                                fontFamily = MaterialTheme.typography.headlineMedium.fontFamily,
-                                fontSize = 30.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary
+                                text = "%.1f GB".format(usedGb),
+                                fontSize = 34.sp,
+                                fontWeight = FontWeight.Light,
+                                color = colors.text
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = stringResource(R.string.used_of_total, formatSize(data.totalStorageBytes)),
-                                fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
-                                fontSize = 16.sp,
-                                color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim,
+                                text = "used of %.1f GB".format(totalGb),
+                                fontSize = 14.sp,
+                                color = colors.muted,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
 
-                        // 2. Segmented bar
-                        var hoveredSegment by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
-                        val totalUsed = usedBytes.toFloat()
-                        
+                        // 22dp Segmented Bar (2dp gaps, 6dp min width)
                         Row(
-                            modifier = Modifier.fillMaxWidth().height(24.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(22.dp)
+                                .clip(RoundedCornerShape(11.dp))
+                                .background(colors.insetCard)
                         ) {
-                            if (totalUsed > 0) {
-                                categories.forEachIndexed { index, cat ->
-                                    val pct = (cat.second.toFloat() / totalUsed) * 100f
-                                    if (pct > 0 || cat.second > 0) {
-                                        val weight = maxOf(pct, 1.2f)
-                                        val alpha = if (hoveredSegment == null || hoveredSegment == index) 1f else 0.35f
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(weight)
-                                                .fillMaxHeight()
-                                                .background(colors[index].copy(alpha = alpha))
-                                                .clickable { 
-                                                    if (cat.first != "Other files") {
-                                                        onCategoryClick(cat.first)
-                                                    }
-                                                }
-                                        )
-                                        if (index < categories.size - 1) {
-                                            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surface))
-                                        }
+                            val totalUsed = usedBytes.toFloat().coerceAtLeast(1f)
+                            categoryList.forEachIndexed { index, cat ->
+                                val fraction = (cat.sizeBytes.toFloat() / totalUsed).coerceIn(0f, 1f)
+                                if (fraction > 0f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(fraction.coerceAtLeast(0.04f))
+                                            .fillMaxHeight()
+                                            .background(cat.color)
+                                    )
+                                    if (index < categoryList.size - 1) {
+                                        Spacer(modifier = Modifier.width(2.dp))
                                     }
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                        // 3. Legend List
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            categories.forEachIndexed { index, cat ->
-                                val pct = if (totalUsed > 0) (cat.second.toFloat() / totalUsed) * 100f else 0f
-                                if (pct > 0 || cat.second > 0) {
-                                    val alpha = if (hoveredSegment == null || hoveredSegment == index) 1f else 0.35f
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(9.dp)
-                                                .background(colors[index].copy(alpha = alpha))
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = cat.first,
-                                            fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
-                                            fontSize = 12.sp,
-                                            color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary2,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        Text(
-                                            text = formatSize(cat.second),
-                                            fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
-                                            fontSize = 12.sp,
-                                            color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim,
-                                            maxLines = 2
-                                        )
-                                    }
+                        // Legend rows
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            categoryList.forEach { cat ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onCategoryClick(cat.name) }
+                                        .padding(vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(cat.color)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = cat.name,
+                                        fontSize = 13.sp,
+                                        color = colors.text,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = formatFileSize(cat.sizeBytes),
+                                        fontSize = 12.sp,
+                                        color = colors.muted
+                                    )
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
 
-                // 4. Free space + Manage storage row
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+        // Free Space Card with SD Cookie Icon and MANAGE Pill Button
+        item {
+            SectionContainer {
+                InnerCard {
                     Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .border(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border)
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.SdStorage,
-                            contentDescription = null,
-                            tint = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = stringResource(R.string.free_storage, formatSize(data.freeStorageBytes)),
-                                fontFamily = MaterialTheme.typography.headlineMedium.fontFamily,
-                                fontSize = 16.sp,
-                                color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            CookieIcon(
+                                icon = Icons.Outlined.SdCard,
+                                bgColor = ExpressiveTokens.PastelSand,
+                                size = 48.dp,
+                                lobes = 8
                             )
-                            val freePercent = if (data.totalStorageBytes > 0) (data.freeStorageBytes * 100 / data.totalStorageBytes).toInt() else 0
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = "%.1f GB free".format(freeGb),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.text
+                                )
+                                Text(
+                                    text = "$freePercent% free of total storage",
+                                    fontSize = 12.sp,
+                                    color = colors.muted
+                                )
+                            }
+                        }
+
+                        // MANAGE pill button
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(colors.accent)
+                                .clickable(onClick = onManageClick)
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
                             Text(
-                                text = stringResource(R.string.free_of_total_storage, freePercent),
-                                fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
-                                fontSize = 10.sp,
-                                color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim
+                                text = "MANAGE",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.ink
                             )
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
+                }
+            }
+        }
 
-                    com.ripple.filemanager.ui.OffsetFab(
-                        onClick = { 
-                            val intent = android.content.Intent(android.provider.Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
-                            try { context.startActivity(intent) } catch (e: Exception) {
-                                val fallback = android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
-                                try { context.startActivity(fallback) } catch (e2: Exception) {}
-                            }
-                        },
-                        cornerRoundness = cornerRoundness,
-                        width = null,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.manage_action).uppercase(),
-                            fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
-                            fontWeight = FontWeight.Bold,
-                            color = com.ripple.filemanager.ui.theme.SkylineColors.Background,
-                            modifier = Modifier.padding(horizontal = 16.dp)
+        // Storage Breakdown Section Title
+        item {
+            SectionTitle(title = "Storage breakdown")
+        }
+
+        // 2-column cards (cookie icon, name, size, %) – last odd card spans 2 columns
+        item {
+            val totalUsed = usedBytes.toFloat().coerceAtLeast(1f)
+            val rows = categoryList.chunked(2)
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                rows.forEach { pair ->
+                    if (pair.size == 2) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            StorageCategoryCard(
+                                item = pair[0],
+                                totalUsed = totalUsed,
+                                onClick = { onCategoryClick(pair[0].name) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            StorageCategoryCard(
+                                item = pair[1],
+                                totalUsed = totalUsed,
+                                onClick = { onCategoryClick(pair[1].name) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
+                        // Last odd card spans full 2 columns
+                        StorageCategoryCard(
+                            item = pair[0],
+                            totalUsed = totalUsed,
+                            onClick = { onCategoryClick(pair[0].name) },
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
             }
         }
-        
-        // 5. "Storage breakdown" section label
-        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-            Text(
-                text = stringResource(R.string.storage_breakdown).uppercase(),
-                fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
-                fontSize = 11.sp,
-                letterSpacing = 2.sp,
-                fontWeight = FontWeight.Bold,
-                color = com.ripple.filemanager.ui.theme.SkylineColors.AmberDim,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-        }
-        
-        items(categories.size) { index ->
-            val cat = categories[index]
-            StorageBreakdownCard(
-                title = cat.first,
-                sizeBytes = cat.second,
-                totalUsedBytes = usedBytes,
-                icon = cat.third,
-                color = colors[index],
-                cornerRoundness = cornerRoundness,
-                onClick = {
-                    if (cat.first != "Other files") {
-                        onCategoryClick(cat.first)
-                    }
-                }
-            )
-        }
     }
 }
+
+private data class StorageBreakdownItem(
+    val name: String,
+    val sizeBytes: Long,
+    val color: Color,
+    val icon: ImageVector,
+    val categoryKey: String
+)
 
 @Composable
-fun StorageBreakdownCard(title: String, sizeBytes: Long, totalUsedBytes: Long, icon: ImageVector, color: Color, cornerRoundness: Float, onClick: () -> Unit) {
-    Surface(
-        shape = com.ripple.filemanager.ui.getDynamicCornerShape(16f, cornerRoundness),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, com.ripple.filemanager.ui.theme.SkylineColors.Border),
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+private fun StorageCategoryCard(
+    item: StorageBreakdownItem,
+    totalUsed: Float,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExpressiveTheme.colors
+    val pct = ((item.sizeBytes.toFloat() / totalUsed) * 100).toInt()
+
+    Card(
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.card),
+        modifier = modifier.clickable(onClick = onClick)
     ) {
-        Column {
-            Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(color))
-            
-            Column(
-                modifier = Modifier.fillMaxSize().padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .border(1.dp, color)
-                        .padding(8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = color)
-                }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Text(
-                    text = title,
-                    fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                CookieIcon(
+                    icon = item.icon,
+                    bgColor = item.color,
+                    size = 42.dp,
+                    lobes = 8
                 )
-                Text(
-                    text = formatSize(sizeBytes),
-                    fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
-                    color = com.ripple.filemanager.ui.theme.SkylineColors.TextPrimary2,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                val pct = if (totalUsedBytes > 0) (sizeBytes * 100 / totalUsedBytes).toInt() else 0
                 Text(
                     text = "$pct%",
-                    fontFamily = MaterialTheme.typography.labelLarge.fontFamily,
-                    color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim,
-                    fontSize = 10.sp,
-                    modifier = Modifier.padding(top = 2.dp)
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.muted
                 )
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = item.name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = formatFileSize(item.sizeBytes),
+                fontSize = 12.sp,
+                color = colors.muted
+            )
         }
     }
 }
+
 
 @Composable
 fun CategoryDetailView(
     categoryData: CleanerCategoryData,
-    selectedFiles: ImmutableSet<Int>,
+    selectedFiles: kotlinx.collections.immutable.ImmutableSet<Int>,
     cornerRoundness: Float,
     gridColumns: Int,
     iconShape: com.ripple.filemanager.IconShapeType,
@@ -514,9 +464,9 @@ fun CategoryDetailView(
 
     val context = LocalContext.current
     val imageLoader = remember {
-        ImageLoader.Builder(context)
+        coil.ImageLoader.Builder(context)
             .components {
-                add(VideoFrameDecoder.Factory())
+                add(coil.decode.VideoFrameDecoder.Factory())
             }
             .build()
     }
@@ -530,12 +480,12 @@ fun CategoryDetailView(
     ) {
         items(categoryData.files) { file ->
             val isSelected = selectedFiles.contains(file.id)
-            val isMedia = file.type in setOf("image", "video") // FileRepository maps jpg/png etc to "image", mp4 etc to "video"
+            val isMedia = file.type in setOf("image", "video")
             
             Box(
                 modifier = Modifier
                     .aspectRatio(if (gridColumns > 2) 1f else 0.85f)
-                    .clip(getDynamicCornerShape(8f, cornerRoundness))
+                    .clip(com.ripple.filemanager.ui.getDynamicCornerShape(8f, cornerRoundness))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { haptics.tap(); onFileToggle(file.id) }
             ) {
@@ -543,15 +493,15 @@ fun CategoryDetailView(
                     val requestBuilder = remember(file.path) {
                         coil.request.ImageRequest.Builder(context)
                             .data(java.io.File(file.path))
-                            .apply { if (file.type == "video") videoFrameMillis(1000) }
+                            .apply { if (file.type == "video") videoFrameMillis(1000L) }
                             .build()
                     }
-                    AsyncImage(
+                    coil.compose.AsyncImage(
                         model = requestBuilder,
                         imageLoader = imageLoader,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
                     )
                 } else {
                     Column(
