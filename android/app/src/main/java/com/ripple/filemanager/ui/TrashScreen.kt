@@ -86,7 +86,7 @@ fun TrashScreen(
         "$countText (disabled)"
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(colors.bg)) {
+    RippleBackground(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
