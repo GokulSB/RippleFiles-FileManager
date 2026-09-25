@@ -73,7 +73,9 @@ fun TrashScreen(
     }
 
     LaunchedEffect(Unit) {
-        onAction(AppAction.RefreshTrash)
+        if (state.trashFiles.isEmpty()) {
+            onAction(AppAction.RefreshTrash)
+        }
     }
 
     val count = state.trashFiles.size
@@ -84,7 +86,7 @@ fun TrashScreen(
         "$countText (disabled)"
     }
 
-    RippleBackground(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(colors.bg)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

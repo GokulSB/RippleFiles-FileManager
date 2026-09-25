@@ -2489,9 +2489,6 @@ fun MainContent(
                                     when (tab) {
                                         ExpressiveTab.HOME -> onAction(AppAction.SelectNavTab(com.ripple.filemanager.NavTab.HOME))
                                         ExpressiveTab.BROWSE -> {
-                                            if (state.filter != "all") {
-                                                onAction(AppAction.SetFilter("all"))
-                                            }
                                             onAction(AppAction.SetLocation(android.os.Environment.getExternalStorageDirectory().absolutePath))
                                         }
                                         ExpressiveTab.CLOUD -> onAction(AppAction.SelectNavTab(com.ripple.filemanager.NavTab.CLOUD))

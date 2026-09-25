@@ -77,7 +77,10 @@ fun ExpressiveNavShell(
     } else {
         val colors = ExpressiveTheme.colors
         val reduced = ExpressiveMotion.isReducedMotion()
-        var selectedTab by remember(activeTab) { mutableStateOf(activeTab) }
+        var selectedTab by remember { mutableStateOf(activeTab) }
+        LaunchedEffect(activeTab) {
+            selectedTab = activeTab
+        }
 
         Row(
             modifier = modifier
@@ -193,9 +196,6 @@ private fun ExpressiveNavTabItem(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
-            )
-            .animateContentSize(
-                animationSpec = if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)
             )
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center

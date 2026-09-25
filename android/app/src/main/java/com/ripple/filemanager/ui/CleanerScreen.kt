@@ -58,7 +58,7 @@ fun CleanerScreen(
         }
     }
 
-    RippleBackground(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(ExpressiveTheme.colors.bg)) {
         Box(
             modifier = Modifier
                 .fillMaxSize()

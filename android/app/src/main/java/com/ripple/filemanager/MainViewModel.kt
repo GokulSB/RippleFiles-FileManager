@@ -667,30 +667,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         loadJob?.cancel()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isLoading = true, location = location, errorMessage = null) }
-        loadJob = viewModelScope.launch {
+        loadJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val fetched = fetchFilesForLocation(location)
                 rawFiles = fetched
                 
                 val st = _state.value
-                val filtered = applyFiltersAndSort(fetched, st)
+                val filtered = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    applyFiltersAndSort(fetched, st)
+                }
                 
                 _state.update { 
                     val newFiles = filtered.toImmutableList()
                     val newCache = if (it.query.isEmpty()) it.folderCache.put(it.location, newFiles) else it.folderCache
-                    it.copy(hasShizuku = repository.hasShizuku(), isLoading = false, files = newFiles, folderCache = newCache)
+                    it.copy(isLoading = false, files = newFiles, folderCache = newCache)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException) {
                 e.printStackTrace()
                 rawFiles = emptyList()
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), files = persistentListOf(), isLoading = false, recoverableAuthIntent = e.intent, errorMessage = "Authentication required. Please grant permission.") }
+                _state.update { it.copy(files = persistentListOf(), isLoading = false, recoverableAuthIntent = e.intent, errorMessage = "Authentication required. Please grant permission.") }
             } catch (e: Exception) {
                 e.printStackTrace()
                 rawFiles = emptyList()
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), files = persistentListOf(), isLoading = false, errorMessage = e.message ?: e.toString()) }
+                _state.update { it.copy(files = persistentListOf(), isLoading = false, errorMessage = e.message ?: e.toString()) }
             }
         }
     }
@@ -986,17 +987,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val cachedFiles = current.folderCache[location] ?: kotlinx.collections.immutable.persistentListOf()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), location = location, currentFolderName = folderName, driveFolderStack = newStack, isLoading = true, files = cachedFiles) }
+        val resetFilter = if (location.startsWith("/")) "all" else current.filter
+        _state.update { 
+            it.copy(
+                location = location, 
+                currentFolderName = folderName, 
+                driveFolderStack = newStack, 
+                isLoading = cachedFiles.isEmpty(), 
+                files = cachedFiles,
+                filter = resetFilter
+            ) 
+        }
         if (location == "send") {
             if (!_state.value.isNearbyReceiving) {
                 com.ripple.filemanager.localsend.NearbyShareRepository.startService(getApplication())
             }
         }
         if (location.startsWith("/")) {
-            repository.logRecentAction(location, "Visited")
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                repository.logRecentAction(location, "Visited")
+            }
         }
         loadFiles(location)
-        loadRecentFiles()
+        if (location == "home") {
+            loadRecentFiles()
+        }
     }
 
     fun navigateBackInDrive() {
@@ -1136,7 +1151,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Trash methods
     fun setTrashScreenVisible(visible: Boolean) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), showTrashScreen = visible) }
+        _state.update { it.copy(showTrashScreen = visible) }
+        if (visible) {
+            loadTrashFiles()
+        }
     }
 
     // Cleaner methods
@@ -1503,8 +1521,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadTrashFiles() {
-        viewModelScope.launch {
-            _state.update { it.copy(hasShizuku = repository.hasShizuku(), trashIsLoading = true) }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _state.update { it.copy(trashIsLoading = true) }
             val value = _state.value.recycleBinRetentionValue
             val unit = _state.value.recycleBinRetentionUnit
             val multiplier = when (unit.lowercase()) {
@@ -1519,7 +1537,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             val expiryMs = value * multiplier
             val files = repository.getTrashFiles(expiryMs).distinctBy { it.encodedTrashName ?: "${it.path}_${it.id}" }
-            _state.update { it.copy(hasShizuku = repository.hasShizuku(), trashFiles = files.toImmutableList(), trashIsLoading = false) }
+            _state.update { it.copy(trashFiles = files.toImmutableList(), trashIsLoading = false) }
         }
     }
 
