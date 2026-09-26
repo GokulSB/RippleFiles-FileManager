@@ -87,7 +87,7 @@ fun ExpressiveAboutScreen(
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "Version 1.0.12",
+                                text = "Version ${com.ripple.filemanager.BuildConfig.VERSION_NAME}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = colors.muted

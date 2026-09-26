@@ -1296,7 +1296,7 @@ fun AboutScreen(
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
                 Text(
-                    "Version 1.0.12",
+                    "Version ${com.ripple.filemanager.BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
                     modifier = Modifier.padding(top = 4.dp)
