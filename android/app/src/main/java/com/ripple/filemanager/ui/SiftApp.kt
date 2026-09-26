@@ -48,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -1914,53 +1915,80 @@ fun MainContent(
                         loc.startsWith("/") -> "browse"
                         else -> ""
                     }
-                    val mainTabs = setOf("home", "browse", "cloud", "send")
+                    val tabOrder = mapOf("home" to 0, "browse" to 1, "cloud" to 2, "send" to 3)
 
                     AnimatedContent(
                         targetState = targetLocation,
                         transitionSpec = {
                             if (isReducedMotion) {
-                                fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
+                                (fadeIn(animationSpec = androidx.compose.animation.core.snap()))
+                                    .togetherWith(
+                                        fadeOut(animationSpec = androidx.compose.animation.core.snap())
+                                    )
                             } else {
                                 val initialGroup = getNavTabGroup(initialState)
                                 val targetGroup = getNavTabGroup(targetState)
-                                val isTabSwitch = (initialGroup in mainTabs && targetGroup in mainTabs && initialGroup != targetGroup) ||
-                                                  (initialGroup == "category" && targetGroup in setOf("browse", "cloud", "send"))
+                                val initialTab = tabOrder[initialGroup]
+                                val targetTab = tabOrder[targetGroup]
 
-                                if (isTabSwitch) {
-                                    fadeIn(animationSpec = androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-                                        .togetherWith(
-                                            fadeOut(animationSpec = androidx.compose.animation.core.tween(120, easing = androidx.compose.animation.core.LinearEasing))
-                                        )
-                                } else {
-                                    val isForward = when {
-                                        initialGroup == "home" && targetGroup == "category" -> true
-                                        initialGroup == "category" && targetGroup == "home" -> false
-                                        initialState == "home" && targetState.startsWith("/") -> true
-                                        initialState.startsWith("/") && targetState == "home" -> false
-                                        targetState.length > initialState.length -> true
-                                        else -> false
+                                val isForward = when {
+                                    // 1. Between distinct main tabs: follow horizontal tab order (Home < Browse < Cloud < Send)
+                                    initialTab != null && targetTab != null && initialTab != targetTab -> {
+                                        targetTab > initialTab
                                     }
-                                    if (isForward) {
-                                        (slideInHorizontally(animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { (it * 0.15f).toInt() } +
-                                         fadeIn(animationSpec = androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.FastOutSlowInEasing)))
-                                            .togetherWith(
-                                                slideOutHorizontally(animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -(it * 0.10f).toInt() } +
-                                                fadeOut(animationSpec = androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.LinearEasing))
-                                            )
-                                    } else {
-                                        (slideInHorizontally(animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -(it * 0.10f).toInt() } +
-                                         fadeIn(animationSpec = androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.FastOutSlowInEasing)))
-                                            .togetherWith(
-                                                slideOutHorizontally(animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { (it * 0.15f).toInt() } +
-                                                fadeOut(animationSpec = androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.LinearEasing))
-                                            )
+                                    // 2. From category to another main tab (browse, cloud, send): forward
+                                    initialGroup == "category" && targetTab != null && targetTab > 0 -> true
+                                    // 3. Home/Main <-> Category
+                                    initialGroup != "category" && targetGroup == "category" -> true
+                                    initialGroup == "category" && targetGroup != "category" -> false
+                                    // 4. Within file paths (folder open vs back navigation)
+                                    initialState.startsWith("/") && targetState.startsWith("/") -> {
+                                        if (targetState.startsWith(initialState) && targetState != initialState) true
+                                        else if (initialState.startsWith(targetState) && initialState != targetState) false
+                                        else targetState.length > initialState.length
+                                    }
+                                    // 5. Default: forward if target path is longer than initial
+                                    targetState.length > initialState.length -> true
+                                    else -> false
+                                }
+
+                                if (isForward) {
+                                    (slideInHorizontally(
+                                        animationSpec = androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                    ) { fullWidth -> fullWidth } +
+                                     fadeIn(
+                                        animationSpec = androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.LinearEasing)
+                                    )).togetherWith(
+                                        slideOutHorizontally(
+                                            animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                        ) { fullWidth -> -fullWidth } +
+                                        fadeOut(
+                                            animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.LinearEasing)
+                                        )
+                                    ).apply {
+                                        targetContentZIndex = 1f
+                                    }
+                                } else {
+                                    (slideInHorizontally(
+                                        animationSpec = androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                    ) { fullWidth -> -fullWidth } +
+                                     fadeIn(
+                                        animationSpec = androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.LinearEasing)
+                                    )).togetherWith(
+                                        slideOutHorizontally(
+                                            animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                        ) { fullWidth -> fullWidth } +
+                                        fadeOut(
+                                            animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.LinearEasing)
+                                        )
+                                    ).apply {
+                                        targetContentZIndex = 0f
                                     }
                                 }
                             }
                         },
                         label = "screen_content",
-                        modifier = Modifier.weight(1f).fillMaxWidth()
+                        modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()
                     ) { currentTargetLocation ->
                         if (currentTargetLocation == "home") {
                             ExpressiveHomeScreen(
