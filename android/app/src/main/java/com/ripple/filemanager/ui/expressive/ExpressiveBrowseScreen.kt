@@ -65,6 +65,9 @@ fun ExpressiveBrowseScreen(
     onOrganiseClick: () -> Unit = { onAction(AppAction.OrganiseDownloads) },
     modifier: Modifier = Modifier
 ) {
+    SideEffect {
+        com.ripple.filemanager.ui.TabSwitchLatencyTracker.onBrowseCompose(state.location, state.files.size, state.isLoading)
+    }
     val colors = ExpressiveTheme.colors
     var showSortSheet by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }

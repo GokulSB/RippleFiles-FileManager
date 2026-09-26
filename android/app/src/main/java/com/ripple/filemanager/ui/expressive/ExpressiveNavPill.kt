@@ -113,6 +113,7 @@ fun ExpressiveNavShell(
                         tab = tab,
                         isActive = isActive,
                         onClick = {
+                            com.ripple.filemanager.ui.TabSwitchLatencyTracker.onTabTap(tab.name)
                             if (selectedTab != tab) {
                                 selectedTab = tab
                             }
@@ -212,7 +213,7 @@ private fun ExpressiveNavTabItem(
             )
             androidx.compose.animation.AnimatedVisibility(
                 visible = isActive,
-                enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(140, delayMillis = 20)) +
+                enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(140)) +
                         androidx.compose.animation.expandHorizontally(animationSpec = androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)),
                 exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(80)) +
                        androidx.compose.animation.shrinkHorizontally(animationSpec = androidx.compose.animation.core.tween(120, easing = androidx.compose.animation.core.FastOutSlowInEasing))

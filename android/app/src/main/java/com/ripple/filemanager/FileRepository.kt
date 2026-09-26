@@ -69,6 +69,8 @@ data class FileDetails(
 )
 
 class FileRepository(private val context: Context) {
+    private val videoDurationCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     private suspend fun listRestrictedFiles(location: String, dateFormat: java.text.SimpleDateFormat): List<FileItem>? {
         if (!location.contains("Android/data") && !location.contains("Android/obb")) return null
         
@@ -584,46 +586,19 @@ class FileRepository(private val context: Context) {
             else -> "file"
         }
 
-        var actualSizeBytes = file.length()
-        if (isFolder) {
-            try {
-                var sum = 0L
-                file.walkTopDown().onEnter { !it.isHidden && it.name != "Android" }.filter { it.isFile }.take(5000).forEach { sum += it.length() }
-                if (sum > 0) actualSizeBytes = sum
-            } catch(e: Exception) {}
-        }
-
         val count = if (isFolder) {
-            file.listFiles()?.count { !it.name.startsWith(".") } ?: 0
+            file.list()?.count { !it.startsWith(".") } ?: 0
         } else 0
         
         val sizeStr = if (isFolder) {
-            val fileWord = if (count == 1) "1 file" else "$count files"
-            "$fileWord · ${formatSize(actualSizeBytes)}"
+            if (count == 1) "1 item" else "$count items"
         } else {
             formatSize(file.length())
         }
 
         val changedStr = dateFormat.format(Date(file.lastModified()))
         
-        var durationStr: String? = null
-        if (type == "video" && file.exists()) {
-            try {
-                val retriever = android.media.MediaMetadataRetriever()
-                val fis = java.io.FileInputStream(file)
-                retriever.setDataSource(fis.fd)
-                val timeMillis = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-                fis.close()
-                if (timeMillis != null) {
-                    val secs = (timeMillis / 1000) % 60
-                    val mins = (timeMillis / (1000 * 60)) % 60
-                    val hours = timeMillis / (1000 * 60 * 60)
-                    durationStr = if (hours > 0) String.format("%02d:%02d:%02d", hours, mins, secs)
-                                  else String.format("%02d:%02d", mins, secs)
-                }
-                retriever.release()
-            } catch(e: Exception) {}
-        }
+        val durationStr: String? = if (type == "video") videoDurationCache[file.absolutePath] else null
 
         return FileItem(
             id = id,
@@ -637,7 +612,7 @@ class FileRepository(private val context: Context) {
             isPinned = pinned.contains(file.absolutePath),
             isLocked = locked.contains(file.absolutePath),
             isEmptyFolder = isFolder && count == 0,
-            sizeBytes = actualSizeBytes,
+            sizeBytes = if (isFolder) 0L else file.length(),
             lastModified = file.lastModified(),
             duration = durationStr,
             folderItemCount = if (isFolder) count else null

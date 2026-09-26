@@ -1905,10 +1905,13 @@ fun MainContent(
                                 val initialTab = tabOrder[initialGroup]
                                 val targetTab = tabOrder[targetGroup]
 
+                                val isTabSwitch = initialTab != null && targetTab != null && initialTab != targetTab
+                                com.ripple.filemanager.ui.TabSwitchLatencyTracker.onTransitionStart(initialState, targetState)
+
                                 val isForward = when {
                                     // 1. Between distinct main tabs: follow horizontal tab order (Home < Browse < Cloud < Send)
-                                    initialTab != null && targetTab != null && initialTab != targetTab -> {
-                                        targetTab > initialTab
+                                    isTabSwitch -> {
+                                        targetTab!! > initialTab!!
                                     }
                                     // 2. From modal to modal (e.g. Cleaner -> Trash)
                                     initialGroup == "modal" && targetGroup == "modal" -> {
@@ -1938,7 +1941,42 @@ fun MainContent(
                                     else -> false
                                 }
 
-                                if (isForward) {
+                                if (isTabSwitch) {
+                                    // Snappy 160ms tab switch with subtle parallax
+                                    if (isForward) {
+                                        (slideInHorizontally(
+                                            animationSpec = androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                        ) { fullWidth -> fullWidth / 6 } +
+                                         fadeIn(
+                                            animationSpec = androidx.compose.animation.core.tween(140, easing = androidx.compose.animation.core.LinearEasing)
+                                        )).togetherWith(
+                                            slideOutHorizontally(
+                                                animationSpec = androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                            ) { fullWidth -> -fullWidth / 6 } +
+                                            fadeOut(
+                                                animationSpec = androidx.compose.animation.core.tween(120, easing = androidx.compose.animation.core.LinearEasing)
+                                            )
+                                        ).apply {
+                                            targetContentZIndex = 1f
+                                        }
+                                    } else {
+                                        (slideInHorizontally(
+                                            animationSpec = androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                        ) { fullWidth -> -fullWidth / 6 } +
+                                         fadeIn(
+                                            animationSpec = androidx.compose.animation.core.tween(140, easing = androidx.compose.animation.core.LinearEasing)
+                                        )).togetherWith(
+                                            slideOutHorizontally(
+                                                animationSpec = androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                            ) { fullWidth -> fullWidth / 6 } +
+                                            fadeOut(
+                                                animationSpec = androidx.compose.animation.core.tween(120, easing = androidx.compose.animation.core.LinearEasing)
+                                            )
+                                        ).apply {
+                                            targetContentZIndex = 0f
+                                        }
+                                    }
+                                } else if (isForward) {
                                     (slideInHorizontally(
                                         animationSpec = androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)
                                     ) { fullWidth -> fullWidth } +
@@ -1978,6 +2016,7 @@ fun MainContent(
                     ) { currentTargetLocation ->
                         DisposableEffect(currentTargetLocation) {
                             ScreenCompositionTracker.onScreenEnter(currentTargetLocation)
+                            TabSwitchLatencyTracker.onTransitionSettled(currentTargetLocation)
                             onDispose {
                                 ScreenCompositionTracker.onScreenExit(currentTargetLocation)
                             }
@@ -2550,12 +2589,21 @@ fun MainContent(
                                 onTabSelected = { tab ->
                                     haptics.tap()
                                     when (tab) {
-                                        ExpressiveTab.HOME -> onAction(AppAction.SelectNavTab(com.ripple.filemanager.NavTab.HOME))
-                                        ExpressiveTab.BROWSE -> {
-                                            onAction(AppAction.SetLocation(android.os.Environment.getExternalStorageDirectory().absolutePath))
+                                        ExpressiveTab.HOME -> {
+                                            com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched("home")
+                                            onAction(AppAction.SelectNavTab(com.ripple.filemanager.NavTab.HOME))
                                         }
-                                        ExpressiveTab.CLOUD -> onAction(AppAction.SelectNavTab(com.ripple.filemanager.NavTab.CLOUD))
+                                        ExpressiveTab.BROWSE -> {
+                                            val browseTarget = state.lastBrowseLocation.ifEmpty { android.os.Environment.getExternalStorageDirectory().absolutePath }
+                                            com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched(browseTarget)
+                                            onAction(AppAction.SetLocation(browseTarget))
+                                        }
+                                        ExpressiveTab.CLOUD -> {
+                                            com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched("cloud")
+                                            onAction(AppAction.SelectNavTab(com.ripple.filemanager.NavTab.CLOUD))
+                                        }
                                         ExpressiveTab.SEND -> {
+                                            com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched("send")
                                             if (state.isSelectionMode && state.selectedFiles.isNotEmpty()) {
                                                 val selectedItems = state.selectedFiles.mapNotNull { id -> state.files.find { it.id == id } }
                                                 onAction(AppAction.NearbyShareAction.StageFiles(selectedItems))

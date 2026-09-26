@@ -186,7 +186,7 @@ fun UnifiedBottomPill(
             }
         },
         modifier = modifier.animateContentSize(
-            animationSpec = if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            animationSpec = if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)
         ),
         label = "unified_pill"
     ) { target ->

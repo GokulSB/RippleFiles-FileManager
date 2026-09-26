@@ -78,6 +78,9 @@ fun ExpressiveHomeScreen(
     onFileMenuClick: (FileItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    SideEffect {
+        com.ripple.filemanager.ui.TabSwitchLatencyTracker.onHomeCompose(state.recentFiles.size)
+    }
     val colors = ExpressiveTheme.colors
     var showStorageSheet by remember { mutableStateOf(false) }
 

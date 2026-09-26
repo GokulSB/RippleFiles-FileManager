@@ -184,6 +184,7 @@ data class AppState(
     val dropboxAccountEmail: String? = null,
     val files: ImmutableList<FileItem> = persistentListOf(),
     val recentFiles: ImmutableList<FileItem> = persistentListOf(),
+    val lastBrowseLocation: String = android.os.Environment.getExternalStorageDirectory().absolutePath,
     val folderCache: kotlinx.collections.immutable.PersistentMap<String, ImmutableList<FileItem>> = kotlinx.collections.immutable.persistentMapOf(),
     val isLoading: Boolean = false,
     val viewingFile: FileItem? = null,
@@ -668,6 +669,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         loadJob?.cancel()
         loadJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val startMs = android.os.SystemClock.elapsedRealtime()
+            com.ripple.filemanager.ui.TabSwitchLatencyTracker.onDataFetchStart(location)
             try {
                 val fetched = fetchFilesForLocation(location)
                 rawFiles = fetched
@@ -676,10 +679,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val filtered = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                     applyFiltersAndSort(fetched, st)
                 }
+                val durationMs = android.os.SystemClock.elapsedRealtime() - startMs
+                com.ripple.filemanager.ui.TabSwitchLatencyTracker.onDataFetchEnd(location, fetched.size, durationMs)
                 
                 _state.update { 
                     val newFiles = filtered.toImmutableList()
-                    val newCache = if (it.query.isEmpty()) it.folderCache.put(it.location, newFiles) else it.folderCache
+                    val rootPath = Environment.getExternalStorageDirectory().absolutePath
+                    val newCache = if (it.query.isEmpty()) {
+                        var c = it.folderCache.put(location, newFiles)
+                        if (location == "home") {
+                            c = c.put(rootPath, newFiles)
+                        }
+                        c
+                    } else it.folderCache
                     it.copy(isLoading = false, files = newFiles, folderCache = newCache)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -988,13 +1000,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val cachedFiles = current.folderCache[location] ?: kotlinx.collections.immutable.persistentListOf()
         val resetFilter = if (location.startsWith("/")) "all" else current.filter
+        val newBrowseLoc = if (location.startsWith("/") && location != "home") location else current.lastBrowseLocation
+
+        com.ripple.filemanager.ui.TabSwitchLatencyTracker.onViewModelSetLocation(
+            location = location,
+            hasCache = cachedFiles.isNotEmpty(),
+            cachedCount = cachedFiles.size
+        )
+
         _state.update { 
             it.copy(
                 location = location, 
                 currentFolderName = folderName, 
                 driveFolderStack = newStack, 
                 isLoading = cachedFiles.isEmpty(), 
-                files = cachedFiles,
+                files = if (cachedFiles.isNotEmpty()) cachedFiles else it.files,
+                lastBrowseLocation = newBrowseLoc,
                 filter = resetFilter
             ) 
         }
