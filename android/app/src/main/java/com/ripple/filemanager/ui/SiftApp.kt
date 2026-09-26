@@ -21,6 +21,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.DisposableEffect
 
 
 import androidx.compose.foundation.rememberScrollState
@@ -277,6 +278,15 @@ fun SiftApp(
             // Hoisted stable background layer drawn once behind navigation (never recomposed or animated during screen transitions)
             com.ripple.filemanager.ui.expressive.RippleBackground(modifier = Modifier.fillMaxSize())
 
+            val currentScreen = when {
+                showAboutScreen -> "about"
+                state.showSettingsScreen -> "settings"
+                state.showTrashScreen -> "trash"
+                state.showCleanerScreen -> "cleaner"
+                else -> state.location
+            }
+            val isModalScreen = currentScreen in setOf("cleaner", "trash", "settings", "about")
+
             if (isWideScreen) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     Sidebar(
@@ -297,6 +307,9 @@ fun SiftApp(
                         onDrawerOpen = { drawerScope.launch { drawerState.open() } },
                         returnToCleanerOnCategoryBack = returnToCleanerOnCategoryBack,
                         onResetReturnToCleaner = { returnToCleanerOnCategoryBack = false },
+                        showAboutScreen = showAboutScreen,
+                        onCloseAbout = { showAboutScreen = false },
+                        onSetReturnToCleaner = { returnToCleanerOnCategoryBack = it },
                         modifier = Modifier.weight(1f)
                     )
                     if (state.selectedFiles.isNotEmpty()) {
@@ -318,6 +331,9 @@ fun SiftApp(
                         onDrawerOpen = { drawerScope.launch { drawerState.open() } },
                         returnToCleanerOnCategoryBack = returnToCleanerOnCategoryBack,
                         onResetReturnToCleaner = { returnToCleanerOnCategoryBack = false },
+                        showAboutScreen = showAboutScreen,
+                        onCloseAbout = { showAboutScreen = false },
+                        onSetReturnToCleaner = { returnToCleanerOnCategoryBack = it },
                         modifier = Modifier.fillMaxSize()
                     )
                     var fabMenuExpanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
@@ -332,7 +348,7 @@ fun SiftApp(
                     val animEnabled = android.animation.ValueAnimator.getDurationScale() > 0f
 
                     val scrimAlpha by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = if (fabMenuExpanded) 0.35f else 0f,
+                        targetValue = if (fabMenuExpanded && !isModalScreen) 0.35f else 0f,
                         animationSpec = if (animEnabled) androidx.compose.animation.core.tween(if (fabMenuExpanded) 180 else 150) else androidx.compose.animation.core.snap(),
                         label = "scrim_alpha"
                     )
@@ -342,7 +358,7 @@ fun SiftApp(
                             .graphicsLayer { alpha = scrimAlpha }
                             .background(androidx.compose.ui.graphics.Color.Black)
                             .then(
-                                if (fabMenuExpanded) {
+                                if (fabMenuExpanded && !isModalScreen) {
                                     Modifier.clickable(
                                         indication = null,
                                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -353,7 +369,7 @@ fun SiftApp(
                             )
                     )
 
-                    if (!state.isSelectionMode) {
+                    if (!state.isSelectionMode && !isModalScreen) {
                           val navBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                           val hasClipboardItems = state.clipboardPaths.isNotEmpty()
                           
@@ -505,47 +521,6 @@ fun SiftApp(
             }
 
 
-            AnimatedVisibility(
-                visible = state.showCleanerScreen,
-                enter = modalEnter,
-                exit = modalExit
-            ) {
-                CleanerScreen(
-                    state = state,
-                    onAction = onAction,
-                    snackbarHostState = snackbarHostState,
-                    onNavigateToCategory = { filterKey ->
-                        returnToCleanerOnCategoryBack = true
-                        onAction(AppAction.SetCleanerScreenVisible(false))
-                        onAction(AppAction.SetLocation("category/$filterKey"))
-                    }
-                )
-            }
-
-            AnimatedVisibility(
-                visible = state.showTrashScreen,
-                enter = modalEnter,
-                exit = modalExit
-            ) {
-                TrashScreen(
-                    state = state,
-                    onAction = onAction,
-                    onClose = { onAction(AppAction.SetTrashScreenVisible(false)) }
-                )
-            }
-
-            AnimatedVisibility(
-                visible = state.showSettingsScreen,
-                enter = modalEnter,
-                exit = modalExit,
-                modifier = Modifier
-            ) {
-                BackHandler(enabled = state.showSettingsScreen) {
-                    onAction(AppAction.SetShowSettingsScreen(false))
-                }
-                SettingsScreen(state = state, onAction = onAction)
-            }
-
 
 
             if (state.showBatchRenameDialog) {
@@ -618,20 +593,6 @@ fun SiftApp(
 
         }
     }
-
-            // About Screen Overlay
-            AnimatedVisibility(
-                visible = showAboutScreen,
-                enter = modalEnter,
-                exit = modalExit
-            ) {
-                BackHandler(enabled = showAboutScreen) {
-                    showAboutScreen = false
-                }
-                ExpressiveAboutScreen(
-                    onClose = { showAboutScreen = false }
-                )
-            }
 
     } // end ModalNavigationDrawer
 }
@@ -1608,6 +1569,9 @@ fun MainContent(
     onDrawerOpen: () -> Unit = {},
     returnToCleanerOnCategoryBack: Boolean = false,
     onResetReturnToCleaner: () -> Unit = {},
+    showAboutScreen: Boolean = false,
+    onCloseAbout: () -> Unit = {},
+    onSetReturnToCleaner: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
@@ -1734,8 +1698,17 @@ fun MainContent(
         }
     } else false
 
+    val targetLocation = when {
+        showAboutScreen -> "about"
+        state.showSettingsScreen -> "settings"
+        state.showTrashScreen -> "trash"
+        state.showCleanerScreen -> "cleaner"
+        else -> state.location
+    }
+    val isModalScreen = targetLocation in setOf("cleaner", "trash", "settings", "about")
+
     androidx.activity.compose.PredictiveBackHandler(
-        enabled = if (state.dualPaneMode != com.ripple.filemanager.DualPaneMode.OFF) canDualPaneGoBack else (state.selectedFiles.isEmpty() && state.query.isEmpty() && state.location != "home")
+        enabled = !isModalScreen && (if (state.dualPaneMode != com.ripple.filemanager.DualPaneMode.OFF) canDualPaneGoBack else (state.selectedFiles.isEmpty() && state.query.isEmpty() && state.location != "home"))
     ) { progress ->
         try {
             progress.collect { backEvent ->
@@ -1885,7 +1858,6 @@ fun MainContent(
                 }
             } else {
 
-                    val targetLocation = state.location
                     val onFileClickCommon: (com.ripple.filemanager.FileItem) -> Unit = { file ->
                         if (file.path.startsWith("/")) {
                             onAction(com.ripple.filemanager.AppAction.LogRecentAction(file.path, if (file.type == "folder") "Visited" else "Opened"))
@@ -1913,9 +1885,11 @@ fun MainContent(
                         loc.startsWith("sftp_") || loc.startsWith("webdav_") || loc.startsWith("nextcloud_") -> "cloud"
                         loc.startsWith("category/") -> "category"
                         loc.startsWith("/") -> "browse"
+                        loc == "cleaner" || loc == "trash" || loc == "settings" || loc == "about" -> "modal"
                         else -> ""
                     }
                     val tabOrder = mapOf("home" to 0, "browse" to 1, "cloud" to 2, "send" to 3)
+                    val modalOrder = mapOf("cleaner" to 0, "trash" to 1, "settings" to 2, "about" to 3)
 
                     AnimatedContent(
                         targetState = targetLocation,
@@ -1936,18 +1910,30 @@ fun MainContent(
                                     initialTab != null && targetTab != null && initialTab != targetTab -> {
                                         targetTab > initialTab
                                     }
-                                    // 2. From category to another main tab (browse, cloud, send): forward
+                                    // 2. From modal to modal (e.g. Cleaner -> Trash)
+                                    initialGroup == "modal" && targetGroup == "modal" -> {
+                                        val initM = modalOrder[initialState] ?: 0
+                                        val targetM = modalOrder[targetState] ?: 0
+                                        targetM >= initM
+                                    }
+                                    // 3. Modal screens: modal is forward relative to main tabs, backward when leaving modal to main tab
+                                    targetGroup == "modal" && initialGroup != "modal" && initialGroup != "category" -> true
+                                    initialGroup == "modal" && targetGroup != "modal" && targetGroup != "category" -> false
+                                    // 4. Modal (Cleaner) <-> Category
+                                    initialGroup == "modal" && targetGroup == "category" -> true
+                                    initialGroup == "category" && targetGroup == "modal" -> false
+                                    // 5. From category to another main tab (browse, cloud, send): forward
                                     initialGroup == "category" && targetTab != null && targetTab > 0 -> true
-                                    // 3. Home/Main <-> Category
+                                    // 6. Home/Main <-> Category
                                     initialGroup != "category" && targetGroup == "category" -> true
                                     initialGroup == "category" && targetGroup != "category" -> false
-                                    // 4. Within file paths (folder open vs back navigation)
+                                    // 7. Within file paths (folder open vs back navigation)
                                     initialState.startsWith("/") && targetState.startsWith("/") -> {
                                         if (targetState.startsWith(initialState) && targetState != initialState) true
                                         else if (initialState.startsWith(targetState) && initialState != targetState) false
                                         else targetState.length > initialState.length
                                     }
-                                    // 5. Default: forward if target path is longer than initial
+                                    // 8. Default: forward if target path is longer than initial
                                     targetState.length > initialState.length -> true
                                     else -> false
                                 }
@@ -1990,7 +1976,53 @@ fun MainContent(
                         label = "screen_content",
                         modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()
                     ) { currentTargetLocation ->
-                        if (currentTargetLocation == "home") {
+                        DisposableEffect(currentTargetLocation) {
+                            ScreenCompositionTracker.onScreenEnter(currentTargetLocation)
+                            onDispose {
+                                ScreenCompositionTracker.onScreenExit(currentTargetLocation)
+                            }
+                        }
+
+                        if (currentTargetLocation == "cleaner") {
+                            BackHandler(enabled = true) {
+                                if (state.currentCleanerCategory != null) {
+                                    onAction(AppAction.SetCleanerCategory(null))
+                                } else {
+                                    onAction(AppAction.SetCleanerScreenVisible(false))
+                                }
+                            }
+                            CleanerScreen(
+                                state = state,
+                                onAction = onAction,
+                                snackbarHostState = snackbarHostState,
+                                onNavigateToCategory = { filterKey ->
+                                    onSetReturnToCleaner(true)
+                                    onAction(AppAction.SetCleanerScreenVisible(false))
+                                    onAction(AppAction.SetLocation("category/$filterKey"))
+                                }
+                            )
+                        } else if (currentTargetLocation == "trash") {
+                            BackHandler(enabled = true) {
+                                onAction(AppAction.SetTrashScreenVisible(false))
+                            }
+                            TrashScreen(
+                                state = state,
+                                onAction = onAction,
+                                onClose = { onAction(AppAction.SetTrashScreenVisible(false)) }
+                            )
+                        } else if (currentTargetLocation == "settings") {
+                            BackHandler(enabled = true) {
+                                onAction(AppAction.SetShowSettingsScreen(false))
+                            }
+                            SettingsScreen(state = state, onAction = onAction)
+                        } else if (currentTargetLocation == "about") {
+                            BackHandler(enabled = true) {
+                                onCloseAbout()
+                            }
+                            ExpressiveAboutScreen(
+                                onClose = onCloseAbout
+                            )
+                        } else if (currentTargetLocation == "home") {
                             ExpressiveHomeScreen(
                                 state = state,
                                 onAction = onAction,
@@ -2427,7 +2459,7 @@ fun MainContent(
                     )
                 }
 
-                if (!state.location.startsWith("category/") || state.isSelectionMode || state.clipboardPaths.isNotEmpty()) {
+                if ((!isModalScreen && !targetLocation.startsWith("category/")) || state.isSelectionMode || state.clipboardPaths.isNotEmpty()) {
                     UnifiedBottomPill(
                         state = state,
                         archiveProgress = archiveProgress,

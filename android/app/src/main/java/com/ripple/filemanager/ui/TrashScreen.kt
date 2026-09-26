@@ -86,12 +86,11 @@ fun TrashScreen(
         "$countText (disabled)"
     }
 
-    RippleBackground(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-        ) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+    ) {
         // PageHeader "Bin" + subtitle + right actions
         PageHeader(
             title = "Bin",
@@ -262,7 +261,6 @@ fun TrashScreen(
                 }
             }
         }
-    }
 }
 
     // Delete Forever Sheet

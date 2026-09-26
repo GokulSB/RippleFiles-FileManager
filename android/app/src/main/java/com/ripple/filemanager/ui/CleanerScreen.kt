@@ -50,7 +50,7 @@ fun CleanerScreen(
     val context = LocalContext.current
     val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
 
-    BackHandler(enabled = state.currentCleanerCategory != null) {
+    BackHandler(enabled = true) {
         if (state.currentCleanerCategory != null) {
             onAction(AppAction.SetCleanerCategory(null))
         } else {
@@ -58,12 +58,11 @@ fun CleanerScreen(
         }
     }
 
-    RippleBackground(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-        ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+    ) {
         val data = state.cleanerData
 
         if (data != null) {
@@ -152,7 +151,6 @@ fun CleanerScreen(
             }
         }
     }
-}
 }
 
 @Composable

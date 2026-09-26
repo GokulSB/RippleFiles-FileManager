@@ -32,12 +32,11 @@ fun ExpressiveAboutScreen(
     val colors = ExpressiveTheme.colors
     val context = LocalContext.current
 
-    RippleBackground(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-        ) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+    ) {
         PageHeader(
             title = "About",
             onBack = onClose
@@ -180,7 +179,6 @@ fun ExpressiveAboutScreen(
             Spacer(modifier = Modifier.height(130.dp))
         }
     }
-}
 }
 
 @Composable

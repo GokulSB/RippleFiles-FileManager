@@ -107,12 +107,11 @@ fun SettingsScreen(
         }
     }
 
-    RippleBackground(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-        ) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+    ) {
         // PageHeader "Settings"
         PageHeader(
             title = "Settings",
@@ -243,7 +242,6 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(130.dp))
         }
     }
-}
 }
 
 @Composable
