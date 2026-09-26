@@ -24,6 +24,9 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.collections.immutable.ImmutableMap
 import com.ripple.filemanager.data.smb.SmbConnection
+import com.ripple.filemanager.data.share.IncomingSharePrompt
+import com.ripple.filemanager.data.share.SharedIncomingFile
+import android.media.MediaScannerConnection
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
@@ -281,7 +284,8 @@ data class AppState(
     val nearbyDeviceName: String = "",
     val nearbyReceivePath: String = "",
     val nearbyAskBeforeReceiving: Boolean = true,
-    val receivedFilesPrompt: ReceivedFilesPrompt? = null
+    val receivedFilesPrompt: ReceivedFilesPrompt? = null,
+    val incomingSharePrompt: com.ripple.filemanager.data.share.IncomingSharePrompt? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -1865,6 +1869,241 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissReceivedFilesPrompt() {
         _state.update { it.copy(receivedFilesPrompt = null) }
+    }
+
+    fun handleIncomingShare(uris: List<android.net.Uri>, mimeType: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val files = uris.mapNotNull { uri ->
+                try {
+                    SharedIncomingFile.fromUri(context, uri, mimeType)
+                } catch (e: Exception) {
+                    android.util.Log.e("MainViewModel", "Failed to parse incoming share URI $uri", e)
+                    null
+                }
+            }.filter { it.name.isNotBlank() }
+
+            if (files.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    showToast("No readable files in shared content")
+                }
+                return@launch
+            }
+
+            val defaultDest = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).let { dl ->
+                if (dl.exists() || dl.mkdirs()) dl.absolutePath else Environment.getExternalStorageDirectory().absolutePath
+            }
+
+            withContext(Dispatchers.Main) {
+                _state.update {
+                    it.copy(
+                        viewingFile = null,
+                        incomingSharePrompt = IncomingSharePrompt(
+                            files = files,
+                            selectedDestination = defaultDest
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun updateIncomingShareDestination(destinationPath: String) {
+        _state.update {
+            it.copy(
+                incomingSharePrompt = it.incomingSharePrompt?.copy(selectedDestination = destinationPath)
+            )
+        }
+    }
+
+    fun dismissIncomingShare() {
+        _state.update { it.copy(incomingSharePrompt = null) }
+    }
+
+    fun saveIncomingShare(destinationPath: String) {
+        val prompt = _state.value.incomingSharePrompt ?: return
+        if (prompt.isSaving) return
+
+        _state.update {
+            it.copy(incomingSharePrompt = prompt.copy(isSaving = true))
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val destDir = java.io.File(destinationPath)
+            if (!destDir.exists()) {
+                destDir.mkdirs()
+            }
+
+            val savedFiles = mutableListOf<java.io.File>()
+            var errorCount = 0
+
+            for (file in prompt.files) {
+                try {
+                    var targetFile = java.io.File(destDir, file.name)
+                    if (targetFile.exists()) {
+                        val nameWithoutExt = file.name.substringBeforeLast('.', file.name)
+                        val ext = if (file.name.contains('.')) "." + file.name.substringAfterLast('.') else ""
+                        var counter = 1
+                        while (java.io.File(destDir, "$nameWithoutExt ($counter)$ext").exists()) {
+                            counter++
+                        }
+                        targetFile = java.io.File(destDir, "$nameWithoutExt ($counter)$ext")
+                    }
+
+                    val inputStream = context.contentResolver.openInputStream(file.uri)
+                        ?: throw java.lang.IllegalStateException("Could not open input stream for ${file.name}")
+
+                    inputStream.use { input ->
+                        targetFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+
+                    MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(targetFile.absolutePath),
+                        arrayOf(file.mimeType ?: "*/*"),
+                        null
+                    )
+                    savedFiles.add(targetFile)
+                } catch (e: SecurityException) {
+                    android.util.Log.e("MainViewModel", "SecurityException saving file ${file.name}", e)
+                    errorCount++
+                } catch (e: Exception) {
+                    android.util.Log.e("MainViewModel", "Error saving file ${file.name}", e)
+                    errorCount++
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                _state.update { it.copy(incomingSharePrompt = null) }
+
+                if (savedFiles.isNotEmpty()) {
+                    val folderName = destDir.name.ifEmpty { "Storage" }
+                    val msg = if (savedFiles.size == 1) {
+                        "Saved ${savedFiles.first().name} to $folderName"
+                    } else if (errorCount > 0) {
+                        "Saved ${savedFiles.size} of ${prompt.files.size} files to $folderName"
+                    } else {
+                        "Saved ${savedFiles.size} files to $folderName"
+                    }
+                    showToast(msg)
+
+                    navTabTapped("browse")
+                    setLocation(destDir.absolutePath, folderName)
+                    reload()
+                } else {
+                    showToast("Failed to save incoming files. Permission or IO error.")
+                }
+            }
+        }
+    }
+
+    fun handleOpenFileFromIntent(uri: android.net.Uri, intentMimeType: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            try {
+                val resolvedMime = try {
+                    context.contentResolver.getType(uri) ?: intentMimeType ?: "*/*"
+                } catch (e: Exception) {
+                    intentMimeType ?: "*/*"
+                }
+
+                if (uri.scheme == "file") {
+                    val path = uri.path
+                    if (!path.isNullOrBlank()) {
+                        val f = java.io.File(path)
+                        if (f.exists()) {
+                            val item = fileToFileItem(f)
+                            openFileItemDirectly(item, resolvedMime)
+                            return@launch
+                        }
+                    }
+                }
+
+                var displayName: String? = null
+                var sizeBytes: Long = 0L
+
+                if (uri.scheme == "content") {
+                    try {
+                        context.contentResolver.query(
+                            uri,
+                            arrayOf(android.provider.OpenableColumns.DISPLAY_NAME, android.provider.OpenableColumns.SIZE),
+                            null,
+                            null,
+                            null
+                        )?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val nIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                if (nIdx != -1 && !cursor.isNull(nIdx)) {
+                                    displayName = cursor.getString(nIdx)
+                                }
+                                val sIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                                if (sIdx != -1 && !cursor.isNull(sIdx)) {
+                                    sizeBytes = cursor.getLong(sIdx)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("MainViewModel", "Could not query OpenableColumns for $uri", e)
+                    }
+                }
+
+                if (displayName.isNullOrBlank()) {
+                    val lastSeg = uri.lastPathSegment?.substringAfterLast('/') ?: "external_file"
+                    val extFromMime = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(resolvedMime)
+                    displayName = if (!lastSeg.contains('.') && !extFromMime.isNullOrBlank()) {
+                        "$lastSeg.$extFromMime"
+                    } else {
+                        lastSeg
+                    }
+                }
+
+                val cacheDir = java.io.File(context.cacheDir, "external_view").apply { mkdirs() }
+                try {
+                    val existing = cacheDir.listFiles()
+                    if (existing != null && existing.size > 20) {
+                        existing.sortedBy { it.lastModified() }.take(10).forEach { it.delete() }
+                    }
+                } catch (e: Exception) {}
+
+                val localFileName = displayName?.takeIf { it.isNotBlank() } ?: "external_file"
+                val localFile = java.io.File(cacheDir, localFileName)
+                val inputStream = context.contentResolver.openInputStream(uri)
+                    ?: throw java.lang.IllegalStateException("Could not open stream for $localFileName")
+
+                inputStream.use { input ->
+                    localFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                val item = fileToFileItem(localFile)
+                openFileItemDirectly(item, resolvedMime)
+            } catch (e: SecurityException) {
+                android.util.Log.e("MainViewModel", "SecurityException opening file from intent: $uri", e)
+                withContext(Dispatchers.Main) {
+                    showToast("Permission denied opening shared file")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Error opening file from intent: $uri", e)
+                withContext(Dispatchers.Main) {
+                    showToast("Unable to open file: ${e.localizedMessage ?: "Unknown error"}")
+                }
+            }
+        }
+    }
+
+    private suspend fun openFileItemDirectly(file: FileItem, mimeType: String) {
+        withContext(Dispatchers.Main) {
+            if (file.type == "audio" || mimeType.startsWith("audio/")) {
+                playAudio(file)
+                setShowFullScreenPlayer(true)
+            } else {
+                viewFile(file)
+            }
+        }
     }
 
     fun fileToFileItem(file: java.io.File): FileItem {

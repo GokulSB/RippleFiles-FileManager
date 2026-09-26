@@ -277,6 +277,9 @@ class MainActivity : FragmentActivity() {
                                 viewModel.showToast(message)
                             }
                         }
+                        is AppAction.SaveIncomingShare -> viewModel.saveIncomingShare(action.destinationPath)
+                        is AppAction.DismissIncomingShare -> viewModel.dismissIncomingShare()
+                        is AppAction.UpdateIncomingShareDestination -> viewModel.updateIncomingShareDestination(action.destinationPath)
                     }
                 }
             }
@@ -287,6 +290,53 @@ class MainActivity : FragmentActivity() {
                 snackbarHostState = snackbarHostState,
                 windowWidthSizeClass = windowSizeClass.widthSizeClass
             )
+        }
+
+        if (savedInstanceState == null) {
+            handleIncomingIntent(intent)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent == null) return
+        val action = intent.action ?: return
+        when (action) {
+            Intent.ACTION_SEND -> {
+                val streamUri = androidx.core.content.IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                    ?: (if (intent.clipData != null && intent.clipData!!.itemCount > 0) intent.clipData!!.getItemAt(0).uri else null)
+                    ?: intent.data
+                if (streamUri != null) {
+                    viewModel.handleIncomingShare(listOf(streamUri), intent.type)
+                }
+            }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                val uris = androidx.core.content.IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                    ?: run {
+                        val clip = intent.clipData
+                        if (clip != null && clip.itemCount > 0) {
+                            val list = ArrayList<Uri>()
+                            for (i in 0 until clip.itemCount) {
+                                clip.getItemAt(i).uri?.let { list.add(it) }
+                            }
+                            list
+                        } else null
+                    }
+                if (!uris.isNullOrEmpty()) {
+                    viewModel.handleIncomingShare(uris, intent.type)
+                }
+            }
+            Intent.ACTION_VIEW -> {
+                val uri = intent.data
+                if (uri != null) {
+                    viewModel.handleOpenFileFromIntent(uri, intent.type)
+                }
+            }
         }
     }
 

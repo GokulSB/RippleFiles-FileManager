@@ -205,6 +205,11 @@ sealed class AppAction {
         data class SetReceivePath(val path: String) : NearbyShareAction()
         data class SetAskBeforeReceiving(val ask: Boolean) : NearbyShareAction()
     }
+
+    // Incoming System Shares
+    data class SaveIncomingShare(val destinationPath: String) : AppAction()
+    object DismissIncomingShare : AppAction()
+    data class UpdateIncomingShareDestination(val destinationPath: String) : AppAction()
 }
 
 enum class SmbError { AUTH_FAILED, HOST_UNREACHABLE, TIMEOUT, SHARE_NOT_FOUND, UNKNOWN }

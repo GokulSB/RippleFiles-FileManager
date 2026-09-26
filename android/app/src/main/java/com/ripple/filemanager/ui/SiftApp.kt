@@ -3201,6 +3201,19 @@ fun MainContent(
                 }
             )
         }
+
+        if (state.incomingSharePrompt != null) {
+            val prompt = state.incomingSharePrompt
+            com.ripple.filemanager.ui.expressive.SaveToRippleSheet(
+                prompt = prompt,
+                onSave = { destinationPath ->
+                    onAction(com.ripple.filemanager.AppAction.SaveIncomingShare(destinationPath))
+                },
+                onDismiss = {
+                    onAction(com.ripple.filemanager.AppAction.DismissIncomingShare)
+                }
+            )
+        }
     }
 }
 
