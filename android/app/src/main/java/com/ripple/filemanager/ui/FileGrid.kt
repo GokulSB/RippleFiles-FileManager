@@ -274,7 +274,7 @@ fun FileGrid(
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = !deletingIds.contains(file.id),
                                 exit = itemExitTransition,
-                                modifier = Modifier.animateItem()
+                                modifier = Modifier.animateItem(fadeInSpec = null)
                             ) {
                                 if (file.type == "video" || file.type == "audio" || file.type == "image" || file.type == "doc") {
                                     ProvideSkylineLedgerColors {
@@ -354,7 +354,7 @@ fun FileGrid(
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = !deletingIds.contains(file.id),
                                 exit = itemExitTransition,
-                                modifier = Modifier.animateItem()
+                                modifier = Modifier.animateItem(fadeInSpec = null)
                             ) {
                                 if (file.type == "video" || file.type == "audio" || file.type == "image" || file.type == "doc") {
                                     ProvideSkylineLedgerColors {

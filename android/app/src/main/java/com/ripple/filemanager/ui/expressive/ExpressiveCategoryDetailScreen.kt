@@ -88,7 +88,7 @@ fun ExpressiveCategoryDetailScreen(
         map
     }
 
-    RippleBackground(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize()
         ) {

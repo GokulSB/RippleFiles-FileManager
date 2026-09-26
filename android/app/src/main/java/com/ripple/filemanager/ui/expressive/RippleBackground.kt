@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun RippleBackground(
     modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit
+    content: (@Composable BoxScope.() -> Unit)? = null
 ) {
     val colors = ExpressiveTheme.colors
     val glowColor = colors.glow
@@ -57,16 +57,20 @@ fun RippleBackground(
                 val strokeWidthPx = 1.4f.dp.toPx()
                 val stroke = Stroke(width = strokeWidthPx)
 
+                val ringsPath = androidx.compose.ui.graphics.Path().apply {
+                    for (i in 1..ringCount) {
+                        val r = maxRadius * (i.toFloat() / ringCount)
+                        addOval(androidx.compose.ui.geometry.Rect(center = brCenter, radius = r))
+                    }
+                }
+
                 onDrawBehind {
                     drawCircle(brush = trBrush, radius = trRadius, center = trCenter)
                     drawCircle(brush = tlBrush, radius = tlRadius, center = tlCenter)
-                    for (i in 1..ringCount) {
-                        val r = maxRadius * (i.toFloat() / ringCount)
-                        drawCircle(color = lineColor, radius = r, center = brCenter, style = stroke)
-                    }
+                    drawPath(path = ringsPath, color = lineColor, style = stroke)
                 }
             }
     ) {
-        content()
+        content?.invoke(this)
     }
 }

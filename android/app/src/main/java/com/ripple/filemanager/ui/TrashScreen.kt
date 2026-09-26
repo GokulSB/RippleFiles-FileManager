@@ -217,7 +217,7 @@ fun TrashScreen(
                                 ) { _, file ->
                                     TrashListRow(
                                         file = file,
-                                        modifier = Modifier.animateItem(),
+                                        modifier = Modifier.animateItem(fadeInSpec = null),
                                         onRestore = {
                                             file.encodedTrashName?.let {
                                                 onAction(AppAction.RestoreTrashFiles(listOf(it)))
@@ -245,7 +245,7 @@ fun TrashScreen(
                                 ) { _, file ->
                                     TrashGridCard(
                                         file = file,
-                                        modifier = Modifier.animateItem(),
+                                        modifier = Modifier.animateItem(fadeInSpec = null),
                                         onRestore = {
                                             file.encodedTrashName?.let {
                                                 onAction(AppAction.RestoreTrashFiles(listOf(it)))

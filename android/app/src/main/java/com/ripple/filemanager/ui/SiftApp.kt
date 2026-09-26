@@ -273,6 +273,9 @@ fun SiftApp(
             contentColor = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.fillMaxSize()
         ) {
+            // Hoisted stable background layer drawn once behind navigation (never recomposed or animated during screen transitions)
+            com.ripple.filemanager.ui.expressive.RippleBackground(modifier = Modifier.fillMaxSize())
+
             if (isWideScreen) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     Sidebar(
@@ -1796,7 +1799,7 @@ fun MainContent(
         },
         topBar = {}
     ) { paddingValues ->
-        RippleBackground(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
