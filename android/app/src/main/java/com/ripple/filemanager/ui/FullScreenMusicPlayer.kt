@@ -141,7 +141,7 @@ fun FullScreenMusicPlayer(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { /* No-op */ }, modifier = Modifier.size(64.dp)) {
+                IconButton(onClick = { onAction(AppAction.PlayPreviousAudio) }, modifier = Modifier.size(64.dp)) {
                     Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous_track), modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onBackground)
                 }
 
@@ -161,7 +161,7 @@ fun FullScreenMusicPlayer(
                     }
                 }
 
-                IconButton(onClick = { /* No-op */ }, modifier = Modifier.size(64.dp)) {
+                IconButton(onClick = { onAction(AppAction.PlayNextAudio) }, modifier = Modifier.size(64.dp)) {
                     Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next_track), modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onBackground)
                 }
             }
