@@ -292,6 +292,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
 
+    // Playback position ticks twice a second while music plays. It lives in its own
+    // flow so it only redraws the music player, not the whole app.
+    private val _audioPosition = MutableStateFlow(0L)
+    val audioPosition: StateFlow<Long> = _audioPosition.asStateFlow()
+
     private val _snackbarMessage = MutableSharedFlow<String>()
     val snackbarMessage: SharedFlow<String> = _snackbarMessage.asSharedFlow()
 
@@ -595,6 +600,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun reload() {
+        repository.invalidateShizukuCache()
         loadFiles(_state.value.location)
         loadRecentFiles()
     }
@@ -2324,7 +2330,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         if (playbackState == androidx.media3.common.Player.STATE_READY) {
                             _state.update { it.copy(audioDuration = duration.coerceAtLeast(0L), hasShizuku = repository.hasShizuku()) }
                         } else if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
-                            _state.update { it.copy(isAudioPlaying = false, audioPlaybackPosition = 0L, hasShizuku = repository.hasShizuku()) }
+                            _audioPosition.value = 0L
+                            _state.update { it.copy(isAudioPlaying = false, hasShizuku = repository.hasShizuku()) }
                             seekTo(0)
                         }
                     }
@@ -2344,7 +2351,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 while(true) {
                     val p = exoPlayer
                     if (p != null && p.isPlaying) {
-                        _state.update { it.copy(audioPlaybackPosition = p.currentPosition, hasShizuku = repository.hasShizuku()) }
+                        _audioPosition.value = p.currentPosition
                     }
                     kotlinx.coroutines.delay(500)
                 }
@@ -2410,12 +2417,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     fun seekAudio(position: Long) {
         exoPlayer?.seekTo(position)
-        _state.update { it.copy(audioPlaybackPosition = position, hasShizuku = repository.hasShizuku()) }
+        _audioPosition.value = position
     }
     
     fun stopAudio() {
         exoPlayer?.stop()
         exoPlayer?.clearMediaItems()
+        _audioPosition.value = 0L
         _state.update { 
             it.copy(
                 currentAudioFile = null,

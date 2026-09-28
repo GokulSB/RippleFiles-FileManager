@@ -59,6 +59,11 @@ import java.util.Locale
  * - Tactile playback controls: Previous, Play/Pause with accent pill, Next, Expand chevron, Close/Stop
  * - Expandable action sheet panel with interactive scrubber, -10s / +10s scrub chips, and Full Player shortcut
  */
+/** Playback position, provided from MainActivity so only the players redraw on each tick. */
+val LocalAudioPosition = staticCompositionLocalOf<kotlinx.coroutines.flow.StateFlow<Long>> {
+    kotlinx.coroutines.flow.MutableStateFlow(0L)
+}
+
 @Composable
 fun MiniMusicPlayer(
     state: AppState,
@@ -66,6 +71,7 @@ fun MiniMusicPlayer(
     modifier: Modifier = Modifier
 ) {
     if (state.currentAudioFile == null) return
+    val audioPosition by LocalAudioPosition.current.collectAsState()
 
     val colors = ExpressiveTheme.colors
     val haptics = LocalHaptics.current
@@ -78,7 +84,7 @@ fun MiniMusicPlayer(
     )
 
     val progressFraction = if (state.audioDuration > 0) {
-        (state.audioPlaybackPosition.toFloat() / state.audioDuration.toFloat()).coerceIn(0f, 1f)
+        (audioPosition.toFloat() / state.audioDuration.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
     val animatedProgress by animateFloatAsState(
@@ -197,7 +203,7 @@ fun MiniMusicPlayer(
                 Spacer(modifier = Modifier.height(2.dp))
                 val artistText = state.audioArtist.ifEmpty { "Unknown Artist" }
                 val timeText = if (state.audioDuration > 0) {
-                    " · ${formatTime(state.audioPlaybackPosition)} / ${formatTime(state.audioDuration)}"
+                    " · ${formatTime(audioPosition)} / ${formatTime(state.audioDuration)}"
                 } else ""
                 Text(
                     text = "$artistText$timeText",
@@ -341,7 +347,7 @@ fun MiniMusicPlayer(
                 var seekPos by remember { mutableStateOf(0f) }
 
                 Slider(
-                    value = if (isSeeking) seekPos else state.audioPlaybackPosition.toFloat(),
+                    value = if (isSeeking) seekPos else audioPosition.toFloat(),
                     onValueChange = {
                         isSeeking = true
                         seekPos = it
@@ -369,7 +375,7 @@ fun MiniMusicPlayer(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = formatTime(if (isSeeking) seekPos.toLong() else state.audioPlaybackPosition),
+                        text = formatTime(if (isSeeking) seekPos.toLong() else audioPosition),
                         fontFamily = LocalAppFont.current,
                         fontSize = 11.5.sp,
                         color = colors.muted
@@ -398,7 +404,7 @@ fun MiniMusicPlayer(
                             .border(1.dp, colors.line.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                             .clickable {
                                 haptics.tap()
-                                val target = (state.audioPlaybackPosition - 10000L).coerceAtLeast(0L)
+                                val target = (audioPosition - 10000L).coerceAtLeast(0L)
                                 onAction(AppAction.SeekAudio(target))
                             }
                             .padding(horizontal = 10.dp, vertical = 7.dp),
@@ -428,7 +434,7 @@ fun MiniMusicPlayer(
                             .border(1.dp, colors.line.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                             .clickable {
                                 haptics.tap()
-                                val target = (state.audioPlaybackPosition + 10000L).coerceAtMost(state.audioDuration)
+                                val target = (audioPosition + 10000L).coerceAtMost(state.audioDuration)
                                 onAction(AppAction.SeekAudio(target))
                             }
                             .padding(horizontal = 10.dp, vertical = 7.dp),

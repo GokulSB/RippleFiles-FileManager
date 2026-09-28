@@ -920,7 +920,7 @@ fun ExpressiveRecentFileRow(
             )
             Spacer(modifier = Modifier.height(2.dp))
             val metaStr = if (isFolder) {
-                formatFolderMeta(file)
+                rememberFolderMeta(file)
             } else {
                 formatFileMeta(file)
             }

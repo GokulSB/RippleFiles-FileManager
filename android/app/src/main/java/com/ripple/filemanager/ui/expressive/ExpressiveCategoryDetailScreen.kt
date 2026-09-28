@@ -322,7 +322,7 @@ private fun CategoryFileRow(
                 overflow = TextOverflow.Ellipsis
             )
             val meta = if (file.type == "folder") {
-                formatFolderMeta(file)
+                rememberFolderMeta(file)
             } else {
                 formatFileMeta(file)
             }
@@ -515,7 +515,7 @@ private fun CategoryGridCard(
             Spacer(modifier = Modifier.height(2.dp))
 
             val meta = if (file.type == "folder") {
-                formatFolderMeta(file)
+                rememberFolderMeta(file)
             } else {
                 formatFileMeta(file)
             }

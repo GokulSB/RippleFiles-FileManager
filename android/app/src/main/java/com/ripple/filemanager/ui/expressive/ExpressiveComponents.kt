@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.sync.withPermit
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -509,6 +510,44 @@ fun formatFileSize(bytes: Long): String {
     val units = arrayOf("B", "KB", "MB", "GB", "TB")
     val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt().coerceIn(0, units.size - 1)
     return String.format(java.util.Locale.US, "%.1f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+}
+
+// ---- Folder meta (item count + size) --------------------------------------
+// The size of a folder requires walking its files on disk. That used to run
+// directly inside composition (main thread) for every visible folder on every
+// recomposition, which made Browse/Home stall. It now runs once per folder on
+// a background thread, is cached, and is limited to a few concurrent walks.
+private val folderMetaCache = android.util.LruCache<String, String>(1024)
+private val folderMetaPermits = kotlinx.coroutines.sync.Semaphore(3)
+
+private fun quickFolderMeta(file: FileItem): String {
+    if (file.size.contains("file") && file.size.contains("·")) return file.size
+    val count = file.folderItemCount
+    return if (count != null) {
+        if (count == 1) "1 file" else "$count files"
+    } else if (file.size.isNotEmpty() && !file.size.equals("folder", true)) {
+        file.size
+    } else "0 files"
+}
+
+@androidx.compose.runtime.Composable
+fun rememberFolderMeta(file: FileItem): String {
+    val key = "${file.path}|${file.lastModified}|${file.sizeBytes}|${file.folderItemCount}|${file.size}"
+    val state = androidx.compose.runtime.produceState(
+        initialValue = folderMetaCache.get(key) ?: quickFolderMeta(file),
+        key
+    ) {
+        if (folderMetaCache.get(key) == null) {
+            val computed = folderMetaPermits.withPermit {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    formatFolderMeta(file)
+                }
+            }
+            folderMetaCache.put(key, computed)
+            value = computed
+        }
+    }
+    return state.value
 }
 
 fun formatFolderMeta(file: FileItem): String {

@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
@@ -131,7 +132,7 @@ fun SiftApp(
 
     val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
     androidx.compose.runtime.CompositionLocalProvider(com.ripple.filemanager.haptics.LocalHaptics provides haptics) {
-        val onAction: (AppAction) -> Unit = { action ->
+        val onAction: (AppAction) -> Unit = androidx.compose.runtime.remember(haptics, onActionOrig) { { action ->
             when (action) {
                 is AppAction.DeleteSelectedFiles,
                 is AppAction.PermanentlyDeleteTrashFiles,
@@ -160,7 +161,7 @@ fun SiftApp(
                 else -> haptics.tap()
             }
             onActionOrig(action)
-        }
+        } }
 
     BackHandler(enabled = state.isSelectionMode) {
         onAction(AppAction.ClearSelection)
@@ -1431,6 +1432,81 @@ fun AboutScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Privacy Policy card
+                Surface(
+                    shape = getDynamicCornerShape(16f, cornerRoundness),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            "Privacy & Legal",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Surface(
+                            shape = getDynamicCornerShape(12f, cornerRoundness),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://ripplefiles.in/privacy")).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    // No browser available
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(14.dp)
+                            ) {
+                                Surface(
+                                    shape = getDynamicCornerShape(10f, cornerRoundness),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Outlined.Security,
+                                            contentDescription = "Privacy Policy",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Privacy Policy",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "https://ripplefiles.in/privacy",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.OpenInNew,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Made with love footer
                 Surface(
                     shape = getDynamicCornerShape(16f, cornerRoundness),
@@ -2220,8 +2296,12 @@ fun MainContent(
                     )
                 }
 
-                val selectedFiles = state.files.filter { it.id in state.selectedFiles }
-                val selectedApks = selectedFiles.filter { it.name.endsWith(".apk", ignoreCase = true) || it.name.endsWith(".apks", ignoreCase = true) }
+                val selectedFiles = androidx.compose.runtime.remember(state.files, state.selectedFiles) {
+                    state.files.filter { it.id in state.selectedFiles }
+                }
+                val selectedApks = androidx.compose.runtime.remember(selectedFiles) {
+                    selectedFiles.filter { it.name.endsWith(".apk", ignoreCase = true) || it.name.endsWith(".apks", ignoreCase = true) }
+                }
                 val showInstallFab = state.isSelectionMode && selectedApks.isNotEmpty() && selectedApks.size == selectedFiles.size
 
                 var showSingleApkInstallPopup by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }

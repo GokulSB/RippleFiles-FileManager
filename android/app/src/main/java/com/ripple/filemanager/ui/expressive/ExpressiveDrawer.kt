@@ -4,12 +4,14 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
@@ -21,12 +23,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
+import com.ripple.filemanager.ui.appGradientBackground
 
 /**
  * Expressive Drawer:
@@ -54,20 +58,30 @@ fun ExpressiveDrawerContent(
 ) {
     val colors = ExpressiveTheme.colors
     var connectionsExpanded by remember { mutableStateOf(false) }
+    val drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)
 
     ModalDrawerSheet(
-        drawerContainerColor = colors.bg,
+        drawerContainerColor = Color.Transparent,
         drawerContentColor = colors.text,
+        drawerShape = drawerShape,
         modifier = modifier
             .fillMaxHeight()
             .widthIn(max = 340.dp)
             .fillMaxWidth(0.86f)
+            .clip(drawerShape)
+            .appGradientBackground()
+            .border(
+                1.dp,
+                colors.line.copy(alpha = colors.lineAlpha),
+                drawerShape
+            )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp, vertical = 12.dp)
-                .windowInsetsPadding(WindowInsets.statusBars),
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Top-right ✕ cookie button

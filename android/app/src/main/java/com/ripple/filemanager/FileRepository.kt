@@ -246,12 +246,26 @@ class FileRepository(private val context: Context) {
         return runShizukuCommandWithOutput(cmd)
     }
 
+    // Shizuku calls cross a process boundary (binder). This used to run on every
+    // single state update, so the answer is cached briefly instead.
+    @Volatile private var shizukuCachedValue: Boolean = false
+    @Volatile private var shizukuCachedAt: Long = 0L
+
+    fun invalidateShizukuCache() {
+        shizukuCachedAt = 0L
+    }
+
     fun hasShizuku(): Boolean {
-        return try {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (shizukuCachedAt != 0L && now - shizukuCachedAt < 2000L) return shizukuCachedValue
+        val result = try {
             Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
         } catch (e: Exception) {
             false
         }
+        shizukuCachedValue = result
+        shizukuCachedAt = now
+        return result
     }
 
     private val prefs = context.getSharedPreferences("sift_prefs", Context.MODE_PRIVATE)

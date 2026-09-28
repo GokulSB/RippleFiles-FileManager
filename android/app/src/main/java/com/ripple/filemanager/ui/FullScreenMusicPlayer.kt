@@ -10,6 +10,8 @@ import androidx.compose.material3.*
 import androidx.compose.ui.res.stringResource
 import com.ripple.filemanager.R
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +31,7 @@ fun FullScreenMusicPlayer(
     onAction: (AppAction) -> Unit
 ) {
     if (state.currentAudioFile == null) return
+    val audioPosition by LocalAudioPosition.current.collectAsState()
 
     Scaffold(
         modifier = Modifier.fillMaxSize().appGradientBackground(),
@@ -113,7 +116,7 @@ fun FullScreenMusicPlayer(
 
             // Progress Bar
             Slider(
-                value = state.audioPlaybackPosition.toFloat(),
+                value = audioPosition.toFloat(),
                 onValueChange = { onAction(AppAction.SeekAudio(it.toLong())) },
                 valueRange = 0f..(state.audioDuration.takeIf { it > 0 }?.toFloat() ?: 100f),
                 modifier = Modifier.fillMaxWidth(),
@@ -129,7 +132,7 @@ fun FullScreenMusicPlayer(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(formatTime(state.audioPlaybackPosition), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(formatTime(audioPosition), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(formatTime(state.audioDuration), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 

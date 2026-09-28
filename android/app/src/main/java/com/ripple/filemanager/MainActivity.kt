@@ -284,12 +284,16 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            SiftApp(
-                state = state,
-                onActionOrig = onAction,
-                snackbarHostState = snackbarHostState,
-                windowWidthSizeClass = windowSizeClass.widthSizeClass
-            )
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.ripple.filemanager.ui.LocalAudioPosition provides viewModel.audioPosition
+            ) {
+                SiftApp(
+                    state = state,
+                    onActionOrig = onAction,
+                    snackbarHostState = snackbarHostState,
+                    windowWidthSizeClass = windowSizeClass.widthSizeClass
+                )
+            }
         }
 
         if (savedInstanceState == null) {

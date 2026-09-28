@@ -368,6 +368,32 @@ private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit)
             )
         }
 
+        if (state.useDynamicSystemTheme) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.card)
+                    .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(colors.accent)
+                )
+                Text(
+                    text = "Active wallpaper accent applied",
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.text
+                )
+            }
+        }
+
         // Accent color (6 cookie swatches, dimmed at 40% and non-interactive while dynamic theme is on)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(

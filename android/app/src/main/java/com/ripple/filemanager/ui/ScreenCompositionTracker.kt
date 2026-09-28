@@ -13,6 +13,7 @@ object ScreenCompositionTracker {
     private val activeScreens = ConcurrentHashMap.newKeySet<String>()
 
     fun onScreenEnter(screen: String) {
+        if (!BuildConfig.DEBUG) return
         activeScreens.add(screen)
         val count = activeScreens.size
         Log.d(TAG, "Screen ENTER: $screen (Active composed screens: $count -> $activeScreens)")
@@ -26,6 +27,7 @@ object ScreenCompositionTracker {
     }
 
     fun onScreenExit(screen: String) {
+        if (!BuildConfig.DEBUG) return
         activeScreens.remove(screen)
         val count = activeScreens.size
         Log.d(TAG, "Screen EXIT: $screen (Active composed screens: $count -> $activeScreens)")

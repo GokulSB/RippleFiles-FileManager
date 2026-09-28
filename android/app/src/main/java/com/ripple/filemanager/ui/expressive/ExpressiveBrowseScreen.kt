@@ -416,7 +416,7 @@ internal fun BrowseListRow(
                 overflow = TextOverflow.Ellipsis
             )
             val meta = if (file.type == "folder") {
-                formatFolderMeta(file)
+                rememberFolderMeta(file)
             } else {
                 formatFileMeta(file)
             }
@@ -536,7 +536,7 @@ internal fun BrowseGridCard(
                 )
 
                 val metaText = if (file.type == "folder") {
-                    formatFolderMeta(file)
+                    rememberFolderMeta(file)
                 } else {
                     formatFileMeta(file)
                 }
