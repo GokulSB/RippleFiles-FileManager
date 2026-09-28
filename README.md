@@ -23,12 +23,7 @@ This project requires Android SDK 35 (or 36, depending on your setup) and JDK 17
 [![Get it on Google Play](https://img.shields.io/badge/Get%20it%20on-Google%20Play-green?logo=google-play)](https://play.google.com/store/apps/details?id=com.ripple.filemanager)
 
 ## Screenshots
-<img width="1080" height="2424" alt="Image" src="https://github.com/user-attachments/assets/0a9faf83-2bd5-4002-938f-84ca2482fca6" />
-<img width="1080" height="2424" alt="Image" src="https://github.com/user-attachments/assets/ea0a4b2b-8466-40a5-8405-7ddfeadf75d9" />
-<img width="1080" height="2424" alt="Image" src="https://github.com/user-attachments/assets/cf740c3c-444b-4248-a94a-a2ff7bdb4de6" />
-<img width="1080" height="2424" alt="Image" src="https://github.com/user-attachments/assets/9974b81c-b7de-4739-bba6-39db80a8cedc" />
-<img width="1080" height="2424" alt="Image" src="https://github.com/user-attachments/assets/236eebcd-5a1d-4e34-b287-cd27d46a013e" />
-<img width="1080" height="2424" alt="Image" src="https://github.com/user-attachments/assets/96779b73-60cf-46c6-9b17-5807bfac0cfa" />
+<img width="1800" height="1619" alt="Image" src="https://github.com/user-attachments/assets/2d08549d-ed37-42c6-923e-0954af458416" />
 
 ```bash
 cd android
