@@ -33,11 +33,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
 import com.ripple.filemanager.FileItem
+import com.ripple.filemanager.R
 import com.ripple.filemanager.localsend.NearbyPeer
 import com.ripple.filemanager.localsend.TransferStatus
 import com.ripple.filemanager.ui.theme.LocalAppFont
@@ -135,8 +137,8 @@ fun ExpressiveSendScreen(
     ) {
         item {
             ExpressiveScreenHeader(
-                title = "Send & Receive",
-                subtitle = "Nearby share",
+                title = stringResource(R.string.send_and_receive),
+                subtitle = stringResource(R.string.settings_nearby_share),
                 leftIcon = Icons.Default.Menu,
                 onLeftClick = onMenuClick,
                 leftDescription = "Open menu",
@@ -206,13 +208,13 @@ fun ExpressiveSendScreen(
                                     TextButton(
                                         onClick = { onAction(AppAction.NearbyShareAction.CancelTransfer) }
                                     ) {
-                                        Text("Cancel", color = colors.muted, fontSize = 13.sp)
+                                        Text(stringResource(R.string.cancel), color = colors.muted, fontSize = 13.sp)
                                     }
                                 } else {
                                     TextButton(
                                         onClick = { onAction(AppAction.NearbyShareAction.DismissTransfer) }
                                     ) {
-                                        Text("Done", color = colors.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.done_action), color = colors.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -300,7 +302,7 @@ fun ExpressiveSendScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "Staged files (${state.stagedNearbyFiles.size})",
+                                    text = stringResource(R.string.staged_files, state.stagedNearbyFiles.size),
                                     fontFamily = LocalAppFont.current,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -308,10 +310,10 @@ fun ExpressiveSendScreen(
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     TextButton(onClick = { filePicker.launch("*/*") }) {
-                                        Text("+ Add", color = colors.accent, fontSize = 12.sp)
+                                        Text(stringResource(R.string.add_action), color = colors.accent, fontSize = 12.sp)
                                     }
                                     TextButton(onClick = { onAction(AppAction.NearbyShareAction.ClearStagedFiles) }) {
-                                        Text("Clear", color = colors.muted, fontSize = 12.sp)
+                                        Text(stringResource(R.string.clear_action), color = colors.muted, fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -465,7 +467,7 @@ fun ExpressiveSendScreen(
 
         // Nearby Devices Section
         item {
-            SectionTitle(title = "Nearby devices (${state.nearbyPeers.size})")
+            SectionTitle(title = stringResource(R.string.nearby_devices, state.nearbyPeers.size))
         }
 
         item {

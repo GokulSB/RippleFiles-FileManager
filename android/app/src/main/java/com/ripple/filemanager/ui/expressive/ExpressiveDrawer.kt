@@ -26,10 +26,12 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
+import com.ripple.filemanager.R
 import com.ripple.filemanager.ui.appGradientBackground
 
 /**
@@ -167,7 +169,7 @@ fun ExpressiveDrawerContent(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "Connections",
+                                text = stringResource(R.string.connections_content_desc),
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = colors.text
@@ -205,7 +207,7 @@ fun ExpressiveDrawerContent(
 
             // Cards: Storage cleaner, Settings, About
             DrawerActionCard(
-                title = "Storage cleaner",
+                title = stringResource(R.string.storage_cleaner_nav),
                 subtitle = "Free up device space",
                 icon = Icons.Outlined.CleaningServices,
                 category = "docs",
@@ -216,8 +218,8 @@ fun ExpressiveDrawerContent(
             )
 
             DrawerActionCard(
-                title = "Settings",
-                subtitle = "Theme, security & layout",
+                title = stringResource(R.string.settings_nav),
+                subtitle = stringResource(R.string.settings_appearance_desc),
                 icon = Icons.Outlined.Settings,
                 category = "archives",
                 onClick = {
@@ -227,8 +229,8 @@ fun ExpressiveDrawerContent(
             )
 
             DrawerActionCard(
-                title = "About",
-                subtitle = "App info, license & links",
+                title = stringResource(R.string.about_nav),
+                subtitle = stringResource(R.string.settings_about_desc),
                 icon = Icons.Outlined.Info,
                 category = "large",
                 onClick = {

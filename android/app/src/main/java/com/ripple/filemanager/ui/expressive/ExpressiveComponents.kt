@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Delete
@@ -19,6 +20,7 @@ import androidx.compose.runtime.*
 import kotlinx.coroutines.sync.withPermit
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -123,6 +125,8 @@ fun ExpressiveScreenHeader(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String = "",
+    onSubtitleClick: (() -> Unit)? = null,
+    subtitleChevron: Boolean = false,
     leftIcon: ImageVector = Icons.Default.Menu,
     onLeftClick: () -> Unit = {},
     leftDescription: String = "Open menu",
@@ -192,16 +196,46 @@ fun ExpressiveScreenHeader(
                 )
                 if (subtitle.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = subtitle,
-                        fontSize = if (rightAction != null) 12.sp else 14.sp,
-                        fontWeight = FontWeight.Normal,
-                        fontFamily = LocalAppFont.current,
-                        color = colors.muted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
-                    )
+                    if (onSubtitleClick != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable(onClick = onSubtitleClick)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = subtitle,
+                                fontSize = if (rightAction != null) 12.sp else 14.sp,
+                                fontWeight = FontWeight.Normal,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.muted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                            if (subtitleChevron) {
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Switch storage",
+                                    tint = colors.muted,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = subtitle,
+                            fontSize = if (rightAction != null) 12.sp else 14.sp,
+                            fontWeight = FontWeight.Normal,
+                            fontFamily = LocalAppFont.current,
+                            color = colors.muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
 
@@ -364,6 +398,7 @@ fun ExpressiveSwitch(
         modifier = modifier
             .width(58.dp)
             .height(34.dp)
+            .alpha(if (enabled) 1f else 0.45f)
             .clip(RoundedCornerShape(17.dp))
             .background(trackColor)
             .clickable(
@@ -388,26 +423,43 @@ fun ExpressiveSwitch(
 // EXPRESSIVE SLIDER
 // ═══════════════════════════════════════════════════════════════════════
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpressiveSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
-    steps: Int = 0
+    steps: Int = 0,
+    onValueChangeFinished: (() -> Unit)? = null,
+    enabled: Boolean = true
 ) {
     val colors = ExpressiveTheme.colors
     Slider(
         value = value,
         onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished,
+        enabled = enabled,
         valueRange = valueRange,
         steps = steps,
         modifier = modifier.height(38.dp),
         colors = SliderDefaults.colors(
-            thumbColor = colors.text,
+            thumbColor = colors.accent,
             activeTrackColor = colors.accent,
             inactiveTrackColor = colors.insetCard
-        )
+        ),
+        track = { sliderState ->
+            SliderDefaults.Track(
+                sliderState = sliderState,
+                thumbTrackGapSize = 0.dp,
+                trackInsideCornerSize = 0.dp,
+                drawStopIndicator = null,
+                colors = SliderDefaults.colors(
+                    activeTrackColor = colors.accent,
+                    inactiveTrackColor = colors.insetCard
+                )
+            )
+        }
     )
 }
 

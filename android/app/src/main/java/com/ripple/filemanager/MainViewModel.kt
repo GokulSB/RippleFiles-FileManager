@@ -22,26 +22,17 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
+import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.collections.immutable.ImmutableMap
 import com.ripple.filemanager.data.smb.SmbConnection
 import com.ripple.filemanager.data.share.IncomingSharePrompt
 import com.ripple.filemanager.data.share.SharedIncomingFile
 import android.media.MediaScannerConnection
+import com.ripple.filemanager.data.core.ConflictResolution
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
-enum class IconShapeType {
-    SYSTEM, 
-    CIRCLE, 
-    SQUARE, 
-    SQUIRCLE, 
-    DIAMOND, 
-    HEXAGON, 
-    ARCH,
-    COOKIE,
-    STAR,
-    FLOWER
-}
+enum class DarkSurfaceStyle { STANDARD, AMOLED }
 
 enum class ConnectionStatus { Idle, Connecting, Connected, Error }
 
@@ -155,6 +146,40 @@ data class ReceivedFilesPrompt(
 )
 
 @androidx.compose.runtime.Immutable
+data class StorageNavState(
+    val lastLocation: String,
+    val sortMode: SortMode = SortMode.ALPHABETICAL,
+    val filter: String = "all"
+)
+
+fun getStorageIdForLocation(location: String, sdCardPath: String? = null): String {
+    return when {
+        location == "home" || location == "send" || location == "cleaner" || location == "trash" || location == "settings" || location == "about" -> "internal"
+        com.ripple.filemanager.data.StorageUtils.isSdCardLocation(location, sdCardPath) -> "sd"
+        location.startsWith("drive") -> "drive"
+        location.startsWith("mega") -> "mega"
+        location.startsWith("dropbox") -> "dropbox"
+        location.startsWith("smb_") -> location.substringBefore(":")
+        location.startsWith("ftp_") -> location.substringBefore(":")
+        location.startsWith("sftp_") -> location.substringBefore(":")
+        location.startsWith("webdav_") || location.startsWith("nextcloud_") -> location.substringBefore(":")
+        location.startsWith("/") -> "internal"
+        else -> "internal"
+    }
+}
+
+@androidx.compose.runtime.Immutable
+data class PendingHideConflict(
+    val file: FileItem,
+    val targetName: String,
+    val targetPath: String,
+    val suggestedName: String,
+    val remainingFiles: List<FileItem>,
+    val isUnhide: Boolean,
+    val successCount: Int
+)
+
+@androidx.compose.runtime.Immutable
 data class AppState(
     val navBarState: NavBarState = NavBarState(),
     val hasShizuku: Boolean = false,
@@ -172,11 +197,15 @@ data class AppState(
     val selectedFiles: ImmutableSet<Int> = persistentSetOf(),
     val sortMode: SortMode = SortMode.ALPHABETICAL,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val darkSurfaceStyle: DarkSurfaceStyle = DarkSurfaceStyle.STANDARD,
     val themeHue: Float = 14f,
     val themeLightnessOffset: Float = 0f,
     val showThemeSheet: Boolean = false,
     val showSettingsScreen: Boolean = false,
     val useDynamicSystemTheme: Boolean = false,
+    val showHiddenFiles: Boolean = false,
+    val hasSeenHideWarning: Boolean = false,
+    val pendingHideConflict: PendingHideConflict? = null,
     val isGoogleDriveAuthenticated: Boolean = false,
     val googleDriveAccountEmail: String? = null,
     val isMegaAuthenticated: Boolean = false,
@@ -195,6 +224,8 @@ data class AppState(
     val storageTotalGb: Float = 0f,
     val sdCardStorageFreeGb: Float = 0f,
     val sdCardStorageTotalGb: Float = 0f,
+    val sdCardPath: String? = null,
+    val storageStates: kotlinx.collections.immutable.PersistentMap<String, StorageNavState> = kotlinx.collections.immutable.persistentMapOf(),
     val driveStorageFreeBytes: Long = 0L,
     val driveStorageTotalBytes: Long = 0L,
     val clipboardPaths: ImmutableList<String> = persistentListOf(),
@@ -206,8 +237,9 @@ data class AppState(
     val recoverableAuthIntent: android.content.Intent? = null,
     val isDownloading: Boolean = false,
     val showBatchRenameDialog: Boolean = false,
-    val iconShapeSetting: IconShapeType = IconShapeType.SYSTEM,
-    val activeIconShape: IconShapeType = IconShapeType.SYSTEM,
+    val iconShapeSetting: IconShapeType = IconShapeType.COOKIE,
+    val activeIconShape: IconShapeType = IconShapeType.COOKIE,
+    val currentLanguage: String = "device_default",
     val fontStyle: String = "Outfit",
     val textDecorations: ImmutableSet<String> = persistentSetOf(),
     val mainTextScale: Float = 1.0f,
@@ -241,6 +273,7 @@ data class AppState(
     val audioTitle: String = "",
     val audioArtist: String = "",
     val audioArtworkData: ByteArray? = null,
+    val miniPlayerAutoCloseSeconds: Int = 0,
 
     val isRecycleBinEnabled: Boolean = true,
     val recycleBinRetentionValue: Int = 7,
@@ -331,11 +364,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         val savedTheme = if (prefs.contains("theme_mode")) prefs.getString("theme_mode", "SYSTEM") else (prefs.getString("themeMode", "SYSTEM") ?: "SYSTEM")
+        val savedLanguage = prefs.getString("app_language", "device_default") ?: "device_default"
+        val savedDarkSurfaceStyle = prefs.getString("dark_surface_style", "STANDARD") ?: "STANDARD"
         val rawHue = if (prefs.contains("theme_hue")) prefs.getFloat("theme_hue", 14f) else prefs.getFloat("themeHue", 14f)
         val savedHue = if (rawHue == 262f && !prefs.contains("theme_hue_explicit")) 14f else rawHue
         val savedThemeLightness = prefs.getFloat("theme_lightness", 0f)
         val savedDynamic = if (prefs.contains("theme_dynamic_explicit")) prefs.getBoolean("theme_dynamic", false) else false
-        val savedIconShape = prefs.getString("icon_shape", "SYSTEM") ?: "SYSTEM"
+        val savedIconShape = prefs.getString("icon_shape", "COOKIE") ?: "COOKIE"
+        val shapeSetting = IconShapeType.fromString(savedIconShape)
+        val resolvedActiveShape = if (shapeSetting == IconShapeType.AUTO) {
+            com.ripple.filemanager.ui.expressive.AutoIconShapeSession.refresh(getApplication())
+        } else {
+            shapeSetting
+        }
         val savedFontStyle = prefs.getString("font_style", "Outfit") ?: "Outfit"
         val savedDecorations = prefs.getStringSet("text_decorations", emptySet()) ?: emptySet()
         val savedMainScale = prefs.getFloat("main_text_scale", 1.0f)
@@ -371,16 +412,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val defaultReceivePath = "$downloadPath/RippleReceived"
         val savedReceivePath = prefs.getString("nearby_receive_path", defaultReceivePath) ?: defaultReceivePath
         val savedAskBeforeReceiving = prefs.getBoolean("nearby_ask_before_receiving", true)
+        val savedMiniPlayerAutoClose = prefs.getInt("mini_player_auto_close_seconds", 0)
 
         _state.update { it.copy(
-            hasShizuku = repository.hasShizuku(), 
+            hasShizuku = false, 
             isLoading = true,
             themeMode = try { ThemeMode.valueOf(savedTheme ?: "SYSTEM") } catch(e: Exception) { ThemeMode.SYSTEM },
+            darkSurfaceStyle = try { DarkSurfaceStyle.valueOf(savedDarkSurfaceStyle) } catch(e: Exception) { DarkSurfaceStyle.STANDARD },
+            currentLanguage = savedLanguage,
             themeHue = savedHue,
             themeLightnessOffset = savedThemeLightness,
             useDynamicSystemTheme = savedDynamic,
-            iconShapeSetting = try { IconShapeType.valueOf(savedIconShape) } catch(e: Exception) { IconShapeType.SYSTEM },
-            activeIconShape = try { IconShapeType.valueOf(savedIconShape) } catch(e: Exception) { IconShapeType.SYSTEM },
+            showHiddenFiles = prefs.getBoolean("show_hidden_files", false),
+            hasSeenHideWarning = prefs.getBoolean("has_seen_hide_warning", false),
+            iconShapeSetting = shapeSetting,
+            activeIconShape = resolvedActiveShape,
             fontStyle = savedFontStyle,
             textDecorations = savedDecorations.toImmutableSet(),
             mainTextScale = savedMainScale,
@@ -389,6 +435,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             isListMode = savedIsListMode,
             gridColumns = savedGridColumns,
             cornerRoundness = savedCornerRoundness,
+            miniPlayerAutoCloseSeconds = savedMiniPlayerAutoClose,
             isRecycleBinEnabled = prefs.getBoolean("recycle_bin_enabled", true),
             recycleBinRetentionValue = prefs.getInt("recycle_bin_retention_value", 7),
             recycleBinRetentionUnit = prefs.getString("recycle_bin_retention_unit", "Days") ?: "Days",
@@ -459,9 +506,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )) }
 
         viewModelScope.launch(Dispatchers.IO) {
+            val hasShizuku = repository.hasShizuku()
+            _state.update { it.copy(hasShizuku = hasShizuku) }
             val email = repository.currentGoogleAccountEmail
             if (email != null) {
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), isGoogleDriveAuthenticated = true, googleDriveAccountEmail = email) }
+                _state.update { it.copy(isGoogleDriveAuthenticated = true, googleDriveAccountEmail = email) }
                 fetchDriveStorageQuota()
             }
             
@@ -472,7 +521,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val success = megaClient.fastLogin(megaSession)
                     if (success) {
                         megaClient.fetchNodes()
-                        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isMegaAuthenticated = true, megaAccountEmail = megaEmail) }
+                        _state.update { it.copy(isMegaAuthenticated = true, megaAccountEmail = megaEmail) }
                     }
                 } catch (e: Exception) {
                     // silently fail session login
@@ -542,14 +591,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         loadFiles("home")
         loadRecentFiles()
-        scanDeviceForCleaner(showLoading = false)
+        viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(1000L)
+            scanDeviceForCleaner(showLoading = false)
+        }
     }
 
     fun loadRecentFiles() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val recent = repository.getFiles("recent")
-                _state.update { it.copy(recentFiles = recent.toImmutableList()) }
+                val filtered = recent.filter { _state.value.showHiddenFiles || !it.isHidden }
+                _state.update { it.copy(recentFiles = filtered.toImmutableList()) }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -561,7 +614,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 repository.logRecentAction(path, action)
                 val recent = repository.getFiles("recent")
-                _state.update { it.copy(recentFiles = recent.toImmutableList()) }
+                val filtered = recent.filter { _state.value.showHiddenFiles || !it.isHidden }
+                _state.update { it.copy(recentFiles = filtered.toImmutableList()) }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -576,23 +630,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val gbTotal = bytesTotal.toFloat() / (1024 * 1024 * 1024)
             val gbFree = bytesFree.toFloat() / (1024 * 1024 * 1024)
             
-            var sdGbTotal = 0f
-            var sdGbFree = 0f
-            val externalDirs = androidx.core.content.ContextCompat.getExternalFilesDirs(getApplication(), null)
-            if (externalDirs.size > 1 && externalDirs[1] != null) {
-                try {
-                    val sdStat = StatFs(externalDirs[1].path)
-                    sdGbTotal = sdStat.totalBytes.toFloat() / (1024 * 1024 * 1024)
-                    sdGbFree = sdStat.availableBytes.toFloat() / (1024 * 1024 * 1024)
-                } catch(e: Exception) {}
-            }
+            val detectedSdPath = com.ripple.filemanager.data.StorageUtils.getSdCardPath(getApplication())
+            val (sdGbTotal, sdGbFree) = com.ripple.filemanager.data.StorageUtils.getSdCardStats(getApplication(), detectedSdPath)
             
             _state.update { it.copy(
-                hasShizuku = repository.hasShizuku(), 
                 storageTotalGb = gbTotal, 
                 storageFreeGb = gbFree,
                 sdCardStorageTotalGb = sdGbTotal,
-                sdCardStorageFreeGb = sdGbFree
+                sdCardStorageFreeGb = sdGbFree,
+                sdCardPath = detectedSdPath ?: it.sdCardPath
             ) }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -600,9 +646,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun reload() {
-        repository.invalidateShizukuCache()
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.invalidateShizukuCache()
+            val hasShizuku = repository.hasShizuku()
+            _state.update { it.copy(hasShizuku = hasShizuku) }
+        }
         loadFiles(_state.value.location)
         loadRecentFiles()
+    }
+
+    fun refreshShizukuStatus() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.invalidateShizukuCache()
+            val hasShizuku = repository.hasShizuku()
+            _state.update { it.copy(hasShizuku = hasShizuku) }
+        }
     }
 
     fun togglePin(path: String) {
@@ -983,7 +1041,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else if (st.isDropboxAuthenticated) {
                 setLocation("dropbox")
             } else {
-                setLocation("cloud")
+                setLocation(android.os.Environment.getExternalStorageDirectory().absolutePath)
             }
         } else {
             val targetLocation = when (tab) {
@@ -998,49 +1056,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setLocation(location: String, folderName: String? = null) {
         val current = _state.value
-        val enteringCloudSubfolder = location.startsWith("drive_id:") || location.startsWith("mega_id:") || location.startsWith("dropbox_id:") || location.startsWith("smb_") || location.startsWith("ftp_") || location.startsWith("sftp_") || location.startsWith("webdav_") || location.startsWith("nextcloud_")
+        val realSd = current.sdCardPath ?: com.ripple.filemanager.data.StorageUtils.getSdCardPath(getApplication())
+        val effectiveLocation = if ((location == "sd" || location == "sd/" || location == "sd:") && realSd != null) realSd else location
+        val enteringCloudSubfolder = effectiveLocation.startsWith("drive_id:") || effectiveLocation.startsWith("mega_id:") || effectiveLocation.startsWith("dropbox_id:") || effectiveLocation.startsWith("smb_") || effectiveLocation.startsWith("ftp_") || effectiveLocation.startsWith("sftp_") || effectiveLocation.startsWith("webdav_") || effectiveLocation.startsWith("nextcloud_")
         val wasInCloud = current.location == "drive" || current.location == "mega" || current.location == "dropbox" || current.location.startsWith("drive_id:") || current.location.startsWith("mega_id:") || current.location.startsWith("dropbox_id:") || current.location.startsWith("smb_") || current.location.startsWith("ftp_") || current.location.startsWith("sftp_") || current.location.startsWith("webdav_") || current.location.startsWith("nextcloud_")
 
         val newStack = when {
             enteringCloudSubfolder && wasInCloud ->
                 current.driveFolderStack + (current.location to (current.currentFolderName ?: "Cloud"))
-            location == "drive" || location == "mega" || location == "dropbox" || (location.startsWith("smb_") && location.endsWith(":/")) || (location.startsWith("ftp_") && location.endsWith(":/")) || (location.startsWith("sftp_") && location.endsWith(":/")) || (location.startsWith("webdav_") && location.endsWith(":/")) || (location.startsWith("nextcloud_") && location.endsWith(":/")) -> emptyList()
+            effectiveLocation == "drive" || effectiveLocation == "mega" || effectiveLocation == "dropbox" || (effectiveLocation.startsWith("smb_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("ftp_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("sftp_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("webdav_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("nextcloud_") && effectiveLocation.endsWith(":/")) -> emptyList()
             else -> current.driveFolderStack
         }
 
-        val cachedFiles = current.folderCache[location] ?: kotlinx.collections.immutable.persistentListOf()
-        val resetFilter = if (location.startsWith("/")) "all" else current.filter
-        val newBrowseLoc = if (location.startsWith("/") && location != "home") location else current.lastBrowseLocation
+        val cachedFiles = current.folderCache[effectiveLocation] ?: kotlinx.collections.immutable.persistentListOf()
+        val resetFilter = if (effectiveLocation.startsWith("/")) "all" else current.filter
+        val newBrowseLoc = if (effectiveLocation.startsWith("/") && effectiveLocation != "home") effectiveLocation else current.lastBrowseLocation
+
+        val stId = getStorageIdForLocation(effectiveLocation, current.sdCardPath ?: realSd)
+        val isNavigableStorage = effectiveLocation.startsWith("/") || effectiveLocation.startsWith("drive") || effectiveLocation.startsWith("mega") || effectiveLocation.startsWith("dropbox") || effectiveLocation.startsWith("smb_") || effectiveLocation.startsWith("ftp_") || effectiveLocation.startsWith("sftp_") || effectiveLocation.startsWith("webdav_") || effectiveLocation.startsWith("nextcloud_") || effectiveLocation == "sd"
+        val updatedStorageStates = if (isNavigableStorage) {
+            val existing = current.storageStates[stId] ?: StorageNavState(lastLocation = effectiveLocation, sortMode = current.sortMode, filter = current.filter)
+            current.storageStates.put(stId, existing.copy(lastLocation = effectiveLocation))
+        } else {
+            current.storageStates
+        }
 
         com.ripple.filemanager.ui.TabSwitchLatencyTracker.onViewModelSetLocation(
-            location = location,
+            location = effectiveLocation,
             hasCache = cachedFiles.isNotEmpty(),
             cachedCount = cachedFiles.size
         )
 
         _state.update { 
             it.copy(
-                location = location, 
+                location = effectiveLocation, 
                 currentFolderName = folderName, 
                 driveFolderStack = newStack, 
                 isLoading = cachedFiles.isEmpty(), 
                 files = if (cachedFiles.isNotEmpty()) cachedFiles else it.files,
                 lastBrowseLocation = newBrowseLoc,
-                filter = resetFilter
+                filter = resetFilter,
+                errorMessage = null,
+                storageStates = updatedStorageStates,
+                sdCardPath = it.sdCardPath ?: realSd
             ) 
         }
-        if (location == "send") {
+        if (effectiveLocation == "send") {
             if (!_state.value.isNearbyReceiving) {
                 com.ripple.filemanager.localsend.NearbyShareRepository.startService(getApplication())
             }
         }
-        if (location.startsWith("/")) {
+        if (effectiveLocation.startsWith("/")) {
             viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                repository.logRecentAction(location, "Visited")
+                repository.logRecentAction(effectiveLocation, "Visited")
             }
         }
-        loadFiles(location)
-        if (location == "home") {
+        loadFiles(effectiveLocation)
+        if (effectiveLocation == "home") {
             loadRecentFiles()
         }
     }
@@ -1057,8 +1129,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun switchToStorage(storageId: String, defaultLocation: String) {
+        val navState = _state.value.storageStates[storageId]
+        var targetLocation = navState?.lastLocation ?: defaultLocation
+        if (storageId == "sd") {
+            val resolvedSd = _state.value.sdCardPath ?: com.ripple.filemanager.data.StorageUtils.getSdCardPath(getApplication())
+            if (resolvedSd != null && (targetLocation == "sd" || targetLocation == "sd/" || targetLocation == "sd:")) {
+                targetLocation = resolvedSd
+            }
+        }
+        val targetSort = navState?.sortMode ?: SortMode.ALPHABETICAL
+        val targetFilter = navState?.filter ?: "all"
+        _state.update { it.copy(sortMode = targetSort, filter = targetFilter) }
+        setLocation(targetLocation)
+    }
+
     fun setFilter(filter: String) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), filter = filter, selectedFiles = persistentSetOf()) }
+        val stId = getStorageIdForLocation(_state.value.location, _state.value.sdCardPath)
+        val existing = _state.value.storageStates[stId] ?: StorageNavState(lastLocation = _state.value.location, sortMode = _state.value.sortMode, filter = filter)
+        val updatedStates = _state.value.storageStates.put(stId, existing.copy(filter = filter))
+        _state.update { it.copy(filter = filter, selectedFiles = persistentSetOf(), storageStates = updatedStates) }
         updateFilteredFiles()
     }
 
@@ -1104,12 +1194,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setSortMode(mode: SortMode) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), sortMode = mode) }
+        val stId = getStorageIdForLocation(_state.value.location, _state.value.sdCardPath)
+        val existing = _state.value.storageStates[stId] ?: StorageNavState(lastLocation = _state.value.location, sortMode = mode, filter = _state.value.filter)
+        val updatedStates = _state.value.storageStates.put(stId, existing.copy(sortMode = mode))
+        _state.update { it.copy(sortMode = mode, storageStates = updatedStates) }
         updateFilteredFiles()
     }
 
     fun setQuery(query: String) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), query = query) }
+        _state.update { it.copy(query = query) }
         searchJob?.cancel()
         
         if (query.isEmpty()) {
@@ -1121,9 +1214,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val isLocal = !(st.location == "mega" || st.location.startsWith("mega_id:") || st.location.startsWith("smb_") || st.location.startsWith("ftp_") || st.location.startsWith("sftp_") || st.location.startsWith("webdav_") || st.location.startsWith("nextcloud_") || st.location == "drive" || st.location.startsWith("drive_id:") || st.location == "recent" || st.location == "pinned")
                 
                 val results = if (isLocal) {
-                    repository.searchLocalFiles(st.location, query)
+                    repository.searchLocalFiles(st.location, query, st.showHiddenFiles)
                 } else {
-                    rawFiles.filter { it.name.contains(query, ignoreCase = true) }
+                    rawFiles.filter { it.name.contains(query, ignoreCase = true) && (st.showHiddenFiles || !it.isHidden) }
                 }
                 
                 val filtered = applyFiltersAndSort(results, st)
@@ -1135,12 +1228,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleViewMode() {
         val nextMode = !_state.value.isListMode
         prefs.edit().putBoolean("is_list_mode", nextMode).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isListMode = nextMode) }
+        _state.update { it.copy(isListMode = nextMode) }
     }
 
     fun setListMode(isList: Boolean) {
         prefs.edit().putBoolean("is_list_mode", isList).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isListMode = isList) }
+        _state.update { it.copy(isListMode = isList) }
     }
 
 
@@ -1151,20 +1244,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { 
                 val newFiles = filtered.toImmutableList()
                 val newCache = if (it.query.isEmpty()) it.folderCache.put(it.location, newFiles) else it.folderCache
-                it.copy(hasShizuku = repository.hasShizuku(), files = newFiles, folderCache = newCache) 
+                it.copy(files = newFiles, folderCache = newCache) 
             }
         }
     }
 
     private fun applyFiltersAndSort(raw: List<FileItem>, st: AppState): List<FileItem> {
         return raw.filter {
+            val hiddenMatch = st.showHiddenFiles || !it.isHidden
             val filterMatch = st.location.startsWith("category/") || st.filter == "all" || 
                 (st.filter == "music" && it.type == "audio") ||
                 (st.filter == "apk" && it.type == "apk") ||
                 (st.filter == "media" && (it.type == "image" || it.type == "video" || it.type == "audio")) ||
                 (st.filter == "doc" && it.kind == "doc")
             val searchMatch = it.name.contains(st.query, ignoreCase = true)
-            filterMatch && searchMatch
+            hiddenMatch && filterMatch && searchMatch
         }.sortedWith(
             when (st.sortMode) {
                 SortMode.ALPHABETICAL -> compareBy<FileItem> { it.type != "folder" }.thenBy { it.name.lowercase() }
@@ -1177,7 +1271,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleSelection(fileId: Int) {
         val current = _state.value.selectedFiles
         val newSelection = if (current.contains(fileId)) current.minus(fileId).toImmutableSet() else current.plus(fileId).toImmutableSet()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), selectedFiles = newSelection, isSelectionMode = newSelection.isNotEmpty()) }
+        _state.update { it.copy(selectedFiles = newSelection, isSelectionMode = newSelection.isNotEmpty()) }
     }
 
     // Trash methods
@@ -1190,38 +1284,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Cleaner methods
     fun setCleanerScreenVisible(visible: Boolean) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), showCleanerScreen = visible) }
+        _state.update { it.copy(showCleanerScreen = visible) }
         if (visible && _state.value.cleanerData == null) {
             scanDeviceForCleaner()
         }
     }
 
     fun scanDeviceForCleaner(showLoading: Boolean = true) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             if (showLoading) {
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), cleanerLoading = true) }
+                _state.update { it.copy(cleanerLoading = true) }
             }
             val data = repository.scanDeviceForCleaner()
-            _state.update { it.copy(hasShizuku = repository.hasShizuku(), cleanerData = data, cleanerLoading = false) }
+            _state.update { it.copy(cleanerData = data, cleanerLoading = false) }
         }
     }
 
     fun setCleanerCategory(category: String?) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), currentCleanerCategory = category, cleanerSelectedFiles = persistentSetOf()) }
+        _state.update { it.copy(currentCleanerCategory = category, cleanerSelectedFiles = persistentSetOf()) }
     }
 
     fun selectAllCleanerFiles(fileIds: List<Int>) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), cleanerSelectedFiles = fileIds.toImmutableSet()) }
+        _state.update { it.copy(cleanerSelectedFiles = fileIds.toImmutableSet()) }
     }
 
     fun clearCleanerSelection() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), cleanerSelectedFiles = persistentSetOf()) }
+        _state.update { it.copy(cleanerSelectedFiles = persistentSetOf()) }
     }
 
     fun toggleCleanerSelection(fileId: Int) {
         val current = _state.value.cleanerSelectedFiles
         val newSelection = if (current.contains(fileId)) current.minus(fileId).toImmutableSet() else current.plus(fileId).toImmutableSet()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), cleanerSelectedFiles = newSelection) }
+        _state.update { it.copy(cleanerSelectedFiles = newSelection) }
     }
 
 
@@ -1279,51 +1373,86 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteSelectedCleanerFiles() {
         viewModelScope.launch {
             val selected = _state.value.cleanerSelectedFiles
-            val currentCategory = _state.value.currentCleanerCategory
+            val currentCategory = _state.value.currentCleanerCategory?.lowercase(java.util.Locale.getDefault())
             val data = _state.value.cleanerData ?: return@launch
             
-            val filesToDelete = when(currentCategory) {
-                "Documents" -> data.documents.files.filter { it.id in selected }
-                "Images" -> data.images.files.filter { it.id in selected }
-                "Videos" -> data.videos.files.filter { it.id in selected }
-                "Audio" -> data.audio.files.filter { it.id in selected }
-                "Apps" -> data.apps.files.filter { it.id in selected }
-                "Empty folders" -> data.emptyFolders.files.filter { it.id in selected }
-                "Duplicates" -> data.duplicates.files.filter { it.id in selected }
+            val filesFromCategory = when(currentCategory) {
+                "documents", "docs", "doc" -> data.documents.files
+                "images", "image" -> data.images.files
+                "videos", "video" -> data.videos.files
+                "audio", "music" -> data.audio.files
+                "apps", "app", "apk" -> data.apps.files
+                "empty folders", "empty_folders" -> data.emptyFolders.files
+                "duplicates", "duplicate" -> data.duplicates.files
+                "archives", "archive" -> data.archives.files
+                "downloads", "download" -> data.downloads.files
+                "large", "large files", "largefiles", "other files", "other" -> data.large.files
                 else -> emptyList()
             }
+            val allCleanerFiles = listOf(
+                data.documents, data.images, data.videos, data.audio,
+                data.apps, data.archives, data.downloads, data.large,
+                data.duplicates, data.emptyFolders
+            ).flatMap { it.files }
             
-            val pathsToTrash = filesToDelete.map { it.path }
-            if (pathsToTrash.isNotEmpty()) {
-                if (currentCategory == "Empty folders") {
-                    pathsToTrash.forEach { path ->
-                        try {
-                            val f = java.io.File(path)
-                            if (f.exists() && f.isDirectory) {
-                                repository.deleteRestrictedPath(path)
-                            }
-                        } catch (e: Exception) {}
-                    }
+            val candidateFiles = if (filesFromCategory.isNotEmpty()) filesFromCategory else allCleanerFiles
+            val filesToDelete = candidateFiles.filter { it.id in selected }
+            
+            val pathsToTrash = mutableListOf<String>()
+            val pathsToDeletePermanently = mutableListOf<String>()
+            val isTrashEnabled = _state.value.isRecycleBinEnabled
+            
+            filesToDelete.forEach { fileItem ->
+                val isDir = fileItem.type == "folder" || fileItem.kind == "folder" || java.io.File(fileItem.path).isDirectory
+                if (isDir || !isTrashEnabled || currentCategory in setOf("empty folders", "empty_folders")) {
+                    pathsToDeletePermanently.add(fileItem.path)
                 } else {
-                    repository.moveToTrash(pathsToTrash)
+                    pathsToTrash.add(fileItem.path)
                 }
             }
             
-            // Rescan
-            scanDeviceForCleaner()
-            _state.update { it.copy(hasShizuku = repository.hasShizuku(), cleanerSelectedFiles = persistentSetOf()) }
+            if (pathsToTrash.isNotEmpty()) {
+                repository.moveToTrash(pathsToTrash)
+            }
+            if (pathsToDeletePermanently.isNotEmpty()) {
+                pathsToDeletePermanently.forEach { path ->
+                    try {
+                        repository.deleteRestrictedPath(path)
+                    } catch (e: Exception) {}
+                }
+            }
+            
+            val deletedPaths = (pathsToTrash + pathsToDeletePermanently).toSet()
+            _state.update { current ->
+                val updatedCleaner = current.cleanerData?.removePaths(deletedPaths)
+                val updatedFiles = current.files.filterNot { it.path in deletedPaths }.toImmutableList()
+                val updatedCache = current.folderCache.mapValues { (_, fileList) ->
+                    fileList.filterNot { it.path in deletedPaths }.toImmutableList()
+                }.toPersistentMap()
+                current.copy(
+                    files = updatedFiles,
+                    cleanerData = updatedCleaner,
+                    folderCache = updatedCache,
+                    cleanerSelectedFiles = persistentSetOf()
+                )
+            }
+            
+            loadFiles(_state.value.location)
+            updateStorageStats()
+            if (deletedPaths.isNotEmpty()) {
+                scanDeviceForCleaner(showLoading = false)
+            }
         }
     }
 
     fun clearSelection() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), selectedFiles = persistentSetOf(), isSelectionMode = false) }
+        _state.update { it.copy(selectedFiles = persistentSetOf(), isSelectionMode = false) }
     }
 
     fun selectAll(ids: Collection<Int>? = null) {
         val targetIds = (ids ?: _state.value.files.map { it.id }).toImmutableSet()
         _state.update { 
             it.copy(
-                hasShizuku = repository.hasShizuku(), 
                 selectedFiles = targetIds,
                 isSelectionMode = targetIds.isNotEmpty()
             ) 
@@ -1333,7 +1462,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectNone() {
         _state.update { 
             it.copy(
-                hasShizuku = repository.hasShizuku(), 
                 selectedFiles = persistentSetOf(),
                 isSelectionMode = false
             ) 
@@ -1365,10 +1493,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             driveError = err
                         }
                     } else {
-                        if (isTrashEnabled) {
-                            pathsToTrash.add(fileItem.path)
-                        } else {
+                        val isDir = fileItem.type == "folder" || fileItem.kind == "folder" || java.io.File(fileItem.path).isDirectory
+                        if (isDir || !isTrashEnabled) {
                             pathsToDeletePermanently.add(fileItem.path)
+                        } else {
+                            pathsToTrash.add(fileItem.path)
                         }
                     }
                 }
@@ -1394,10 +1523,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { current ->
                 val updatedCleaner = current.cleanerData?.removePaths(deletedPaths)
                 val updatedFiles = current.files.filterNot { it.path in deletedPaths }.toImmutableList()
+                val updatedCache = current.folderCache.mapValues { (_, fileList) ->
+                    fileList.filterNot { it.path in deletedPaths }.toImmutableList()
+                }.toPersistentMap()
                 current.copy(
-                    hasShizuku = repository.hasShizuku(),
                     files = updatedFiles,
                     cleanerData = updatedCleaner,
+                    folderCache = updatedCache,
                     selectedFiles = persistentSetOf(),
                     isSelectionMode = false
                 )
@@ -1600,18 +1732,193 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setShowHiddenFiles(show: Boolean) {
+        prefs.edit().putBoolean("show_hidden_files", show).apply()
+        _state.update { it.copy(showHiddenFiles = show, folderCache = persistentMapOf()) }
+        updateFilteredFiles()
+        loadRecentFiles()
+        if (_state.value.location != "send") {
+            loadFiles(_state.value.location)
+        }
+    }
+
+    fun setHasSeenHideWarning(seen: Boolean) {
+        prefs.edit().putBoolean("has_seen_hide_warning", seen).apply()
+        _state.update { it.copy(hasSeenHideWarning = seen) }
+    }
+
+    fun toggleHideFiles(files: List<FileItem>) {
+        if (files.isEmpty()) return
+        val isUnhide = files.all { it.name.startsWith(".") }
+        viewModelScope.launch(Dispatchers.IO) {
+            processNextHide(files, isUnhide, 0)
+        }
+    }
+
+    private suspend fun processNextHide(
+        queue: List<FileItem>,
+        isUnhide: Boolean,
+        successCount: Int
+    ) {
+        if (queue.isEmpty()) {
+            withContext(Dispatchers.Main) {
+                if (successCount > 0) {
+                    val msg = if (isUnhide) {
+                        "$successCount item${if (successCount > 1) "s" else ""} unhidden"
+                    } else {
+                        "$successCount item${if (successCount > 1) "s" else ""} hidden"
+                    }
+                    showToast(msg)
+                    loadFiles(_state.value.location)
+                    loadRecentFiles()
+                    clearSelection()
+                }
+            }
+            return
+        }
+
+        val fileItem = queue.first()
+        val remaining = queue.drop(1)
+        val oldFile = java.io.File(fileItem.path)
+        val parent = oldFile.parentFile
+        if (parent == null || !oldFile.exists()) {
+            processNextHide(remaining, isUnhide, successCount)
+            return
+        }
+
+        val targetName = if (isUnhide) fileItem.name.removePrefix(".") else ".${fileItem.name}"
+        val targetFile = java.io.File(parent, targetName)
+
+        if (targetFile.exists()) {
+            val existingNames = parent.list()?.toSet() ?: emptySet()
+            val suggested = suggestNonConflictingName(targetName, existingNames)
+            _state.update {
+                it.copy(
+                    pendingHideConflict = PendingHideConflict(
+                        file = fileItem,
+                        targetName = targetName,
+                        targetPath = targetFile.absolutePath,
+                        suggestedName = suggested,
+                        remainingFiles = remaining,
+                        isUnhide = isUnhide,
+                        successCount = successCount
+                    )
+                )
+            }
+        } else {
+            val ok = oldFile.renameTo(targetFile)
+            if (ok) {
+                rescanMediaStore(oldFile.absolutePath, targetFile.absolutePath, targetFile.isDirectory)
+                processNextHide(remaining, isUnhide, successCount + 1)
+            } else {
+                processNextHide(remaining, isUnhide, successCount)
+            }
+        }
+    }
+
+    fun resolveHideConflict(resolution: ConflictResolution) {
+        val conflict = _state.value.pendingHideConflict ?: return
+        _state.update { it.copy(pendingHideConflict = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val oldFile = java.io.File(conflict.file.path)
+            val parent = oldFile.parentFile
+            if (parent != null && oldFile.exists()) {
+                when (resolution) {
+                    is ConflictResolution.Overwrite -> {
+                        val targetFile = java.io.File(conflict.targetPath)
+                        targetFile.deleteRecursively()
+                        val ok = oldFile.renameTo(targetFile)
+                        if (ok) {
+                            rescanMediaStore(oldFile.absolutePath, targetFile.absolutePath, targetFile.isDirectory)
+                            processNextHide(conflict.remainingFiles, conflict.isUnhide, conflict.successCount + 1)
+                        } else {
+                            processNextHide(conflict.remainingFiles, conflict.isUnhide, conflict.successCount)
+                        }
+                    }
+                    is ConflictResolution.Rename -> {
+                        val targetFile = java.io.File(parent, resolution.newName)
+                        val ok = oldFile.renameTo(targetFile)
+                        if (ok) {
+                            rescanMediaStore(oldFile.absolutePath, targetFile.absolutePath, targetFile.isDirectory)
+                            processNextHide(conflict.remainingFiles, conflict.isUnhide, conflict.successCount + 1)
+                        } else {
+                            processNextHide(conflict.remainingFiles, conflict.isUnhide, conflict.successCount)
+                        }
+                    }
+                }
+            } else {
+                processNextHide(conflict.remainingFiles, conflict.isUnhide, conflict.successCount)
+            }
+        }
+    }
+
+    fun dismissHideConflict(skipCurrent: Boolean = true) {
+        val conflict = _state.value.pendingHideConflict ?: return
+        _state.update { it.copy(pendingHideConflict = null) }
+        if (skipCurrent && conflict.remainingFiles.isNotEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                processNextHide(conflict.remainingFiles, conflict.isUnhide, conflict.successCount)
+            }
+        } else if (conflict.successCount > 0) {
+            viewModelScope.launch(Dispatchers.Main) {
+                val msg = if (conflict.isUnhide) {
+                    "${conflict.successCount} item${if (conflict.successCount > 1) "s" else ""} unhidden"
+                } else {
+                    "${conflict.successCount} item${if (conflict.successCount > 1) "s" else ""} hidden"
+                }
+                showToast(msg)
+                loadFiles(_state.value.location)
+                loadRecentFiles()
+                clearSelection()
+            }
+        }
+    }
+
+    private fun rescanMediaStore(oldPath: String, targetPath: String, isDirectory: Boolean) {
+        try {
+            val app = getApplication<Application>()
+            val pathsToScan = mutableListOf(oldPath, targetPath)
+            if (isDirectory) {
+                val targetDir = java.io.File(targetPath)
+                if (targetDir.exists()) {
+                    targetDir.walkTopDown().maxDepth(5).forEach { pathsToScan.add(it.absolutePath) }
+                }
+            }
+            MediaScannerConnection.scanFile(app, pathsToScan.toTypedArray(), null, null)
+
+            val uri = android.provider.MediaStore.Files.getContentUri("external")
+            val where = "${android.provider.MediaStore.MediaColumns.DATA} = ? OR ${android.provider.MediaStore.MediaColumns.DATA} LIKE ?"
+            val args = arrayOf(oldPath, "$oldPath/%")
+            app.contentResolver.delete(uri, where, args)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun setShowBatchRenameDialog(show: Boolean) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), showBatchRenameDialog = show) }
+        _state.update { it.copy(showBatchRenameDialog = show) }
     }
 
     fun setIconShape(shape: IconShapeType) {
         prefs.edit().putString("icon_shape", shape.name).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), iconShapeSetting = shape, activeIconShape = shape) }
+        val resolvedActiveShape = if (shape == IconShapeType.AUTO) {
+            com.ripple.filemanager.ui.expressive.AutoIconShapeSession.refresh(getApplication())
+        } else {
+            shape
+        }
+        _state.update { it.copy(iconShapeSetting = shape, activeIconShape = resolvedActiveShape) }
+    }
+
+    fun onAppLaunch() {
+        if (_state.value.iconShapeSetting == IconShapeType.AUTO) {
+            val newShape = com.ripple.filemanager.ui.expressive.AutoIconShapeSession.refresh(getApplication())
+            _state.update { it.copy(activeIconShape = newShape) }
+        }
     }
 
     fun setFontStyle(style: String) {
         prefs.edit().putString("font_style", style).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), fontStyle = style) }
+        _state.update { it.copy(fontStyle = style) }
     }
 
     fun toggleTextDecoration(decoration: String) {
@@ -1628,27 +1935,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setMainTextScale(scale: Float) {
         prefs.edit().putFloat("main_text_scale", scale).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), mainTextScale = scale) }
+        _state.update { it.copy(mainTextScale = scale) }
     }
 
     fun setSubTextScale(scale: Float) {
         prefs.edit().putFloat("sub_text_scale", scale).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), subTextScale = scale) }
+        _state.update { it.copy(subTextScale = scale) }
     }
 
     fun setInvertText(invert: Boolean) {
         prefs.edit().putBoolean("invert_text", invert).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), invertText = invert) }
+        _state.update { it.copy(invertText = invert) }
     }
 
     fun setGridColumns(columns: Int) {
         prefs.edit().putInt("grid_columns", columns).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), gridColumns = columns) }
+        _state.update { it.copy(gridColumns = columns) }
     }
 
     fun setCornerRoundness(value: Float) {
         prefs.edit().putFloat("corner_roundness", value).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), cornerRoundness = value) }
+        _state.update { it.copy(cornerRoundness = value) }
     }
 
     fun createFolder(name: String) {
@@ -1731,12 +2038,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setThemeMode(mode: ThemeMode) {
         prefs.edit().putString("theme_mode", mode.name).putString("themeMode", mode.name).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), themeMode = mode) }
+        _state.update { it.copy(themeMode = mode) }
+    }
+
+    fun setDarkSurfaceStyle(style: DarkSurfaceStyle) {
+        prefs.edit().putString("dark_surface_style", style.name).apply()
+        _state.update { it.copy(darkSurfaceStyle = style) }
+    }
+
+    fun setLanguage(tag: String) {
+        prefs.edit().putString("app_language", tag).apply()
+        _state.update { it.copy(currentLanguage = tag) }
+        try {
+            if (tag == "device_default" || tag.isBlank()) {
+                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(androidx.core.os.LocaleListCompat.getEmptyLocaleList())
+            } else {
+                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(androidx.core.os.LocaleListCompat.forLanguageTags(tag))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun setDynamicSystemTheme(useDynamic: Boolean) {
         prefs.edit().putBoolean("theme_dynamic", useDynamic).putBoolean("useDynamicSystemTheme", useDynamic).putBoolean("theme_dynamic_explicit", true).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), useDynamicSystemTheme = useDynamic) }
+        _state.update { it.copy(useDynamicSystemTheme = useDynamic) }
     }
 
     fun setThemeHue(hue: Float) {
@@ -1747,16 +2073,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .putBoolean("theme_dynamic", false)
             .putBoolean("useDynamicSystemTheme", false)
             .apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), themeHue = hue, useDynamicSystemTheme = false) }
+        _state.update { it.copy(themeHue = hue, useDynamicSystemTheme = false) }
     }
 
     fun setThemeLightnessOffset(offset: Float) {
         prefs.edit().putFloat("theme_lightness", offset).apply()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), themeLightnessOffset = offset) }
+        _state.update { it.copy(themeLightnessOffset = offset) }
     }
 
     fun setGoogleDriveAuthStatus(isAuthenticated: Boolean, email: String?) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isGoogleDriveAuthenticated = isAuthenticated, googleDriveAccountEmail = email, errorMessage = null) }
+        _state.update { it.copy(isGoogleDriveAuthenticated = isAuthenticated, googleDriveAccountEmail = email, errorMessage = null) }
     }
 
     fun setMegaAuthStatus(isAuthenticated: Boolean, email: String?, password: String? = null) {
@@ -1771,7 +2097,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             prefs.edit().putString("mega_session", session).putString("mega_email", email).apply()
                         }
                         megaClient.fetchNodes()
-                        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isMegaAuthenticated = true, megaAccountEmail = email, megaLoginError = null, showMegaPopup = false) }
+                        _state.update { it.copy(isMegaAuthenticated = true, megaAccountEmail = email, megaLoginError = null, showMegaPopup = false) }
                         if (_state.value.location == "mega") {
                             loadFiles("mega")
                         }
@@ -1784,7 +2110,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         } else {
             prefs.edit().remove("mega_session").remove("mega_email").apply()
-            _state.update { it.copy(hasShizuku = repository.hasShizuku(), isMegaAuthenticated = false, megaAccountEmail = null, megaLoginError = null, showMegaPopup = false) }
+            _state.update { it.copy(isMegaAuthenticated = false, megaAccountEmail = null, megaLoginError = null, showMegaPopup = false) }
         }
     }
 
@@ -1793,7 +2119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setDropboxAuthStatus(isAuthenticated: Boolean, email: String?) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isDropboxAuthenticated = isAuthenticated, dropboxAccountEmail = email, errorMessage = null) }
+        _state.update { it.copy(isDropboxAuthenticated = isAuthenticated, dropboxAccountEmail = email, errorMessage = null) }
     }
 
     fun setDrivePickedIds(ids: List<String>) {
@@ -1818,21 +2144,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val quota = repository.getDriveStorageQuota()
             if (quota != null) {
                 val freeBytes = quota.second - quota.first
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), driveStorageTotalBytes = quota.second, driveStorageFreeBytes = freeBytes) }
+                _state.update { it.copy(driveStorageTotalBytes = quota.second, driveStorageFreeBytes = freeBytes) }
             }
         }
     }
     
     fun setErrorMessage(msg: String?) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), errorMessage = msg) }
+        _state.update { it.copy(errorMessage = msg) }
     }
 
 
       fun setShowSettingsScreen(show: Boolean) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), showSettingsScreen = show) }
+        _state.update { it.copy(showSettingsScreen = show) }
     }
     fun setShowThemeSheet(show: Boolean) {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), showThemeSheet = show) }
+        _state.update { it.copy(showThemeSheet = show) }
     }
 
     fun openFileViewer(id: Int) {
@@ -1842,7 +2168,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             loadRecentFiles()
             if (file.path.startsWith("drive_id:")) {
                 // Download and then view
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), isDownloading = true) }
+                _state.update { it.copy(isDownloading = true) }
                 viewModelScope.launch {
                     val driveId = file.path.removePrefix("drive_id:")
                     val localFile = repository.downloadDriveFile(driveId, file.name)
@@ -1854,23 +2180,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             )
                         }
                     } else {
-                        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isDownloading = false, errorMessage = "Failed to download file from Google Drive.") }
+                        _state.update { it.copy(isDownloading = false, errorMessage = "Failed to download file from Google Drive.") }
                     }
                 }
             } else {
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), viewingFile = file) }
+                _state.update { it.copy(viewingFile = file) }
             }
         }
     }
 
     fun closeFileViewer() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), viewingFile = null) }
+        _state.update { it.copy(viewingFile = null) }
     }
 
     fun viewFile(file: FileItem) {
         repository.logRecentAction(file.path, "Opened")
         loadRecentFiles()
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), viewingFile = file) }
+        _state.update { it.copy(viewingFile = file) }
     }
 
     fun dismissReceivedFilesPrompt() {
@@ -2147,8 +2473,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setClipboard(action: String) {
         val selectedIds = _state.value.selectedFiles
         val paths = _state.value.files.filter { it.id in selectedIds }.map { it.path }
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), 
-            clipboardPaths = paths.toImmutableList(), 
+        _state.update { it.copy(clipboardPaths = paths.toImmutableList(), 
             clipboardAction = action, 
             selectedFiles = persistentSetOf(),
             isSelectionMode = false
@@ -2156,7 +2481,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearClipboard() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), clipboardPaths = persistentListOf(), clipboardAction = null) }
+        _state.update { it.copy(clipboardPaths = persistentListOf(), clipboardAction = null) }
     }
 
     private var pasteJob: kotlinx.coroutines.Job? = null
@@ -2171,10 +2496,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             pasteCancelled = false
             
             pasteJob = viewModelScope.launch {
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), isLoading = true, pasteProgress = 0f, isPasteComplete = false, isPastePaused = false) }
+                _state.update { it.copy(isLoading = true, pasteProgress = 0f, isPasteComplete = false, isPastePaused = false) }
                 
                 val onProgress = { progress: Float ->
-                    _state.update { it.copy(hasShizuku = repository.hasShizuku(), pasteProgress = progress) }
+                    _state.update { it.copy(pasteProgress = progress) }
                 }
                 
                 val checkPause = suspend {
@@ -2194,19 +2519,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     
                     // Force the progress to 100% and hold it briefly so the UI animation has time to play
-                    _state.update { it.copy(hasShizuku = repository.hasShizuku(), pasteProgress = 1f) }
+                    _state.update { it.copy(pasteProgress = 1f) }
                     kotlinx.coroutines.delay(600)
                     
-                    _state.update { it.copy(hasShizuku = repository.hasShizuku(), isLoading = false, isPasteComplete = true, pasteProgress = null, pasteLoadingCount = paths.size) }
+                    _state.update { it.copy(isLoading = false, isPasteComplete = true, pasteProgress = null, pasteLoadingCount = paths.size) }
                     
                     kotlinx.coroutines.delay(2000)
                     
                     clearClipboard()
-                    _state.update { it.copy(hasShizuku = repository.hasShizuku(), isPasteComplete = false, pasteLoadingCount = null) }
+                    _state.update { it.copy(isPasteComplete = false, pasteLoadingCount = null) }
                 } catch (e: kotlinx.coroutines.CancellationException) {
-                    _state.update { it.copy(hasShizuku = repository.hasShizuku(), isLoading = false, isPasteComplete = false, pasteProgress = null, isPastePaused = false) }
+                    _state.update { it.copy(isLoading = false, isPasteComplete = false, pasteProgress = null, isPastePaused = false) }
                 } catch (e: Exception) {
-                    _state.update { it.copy(hasShizuku = repository.hasShizuku(), isLoading = false, isPasteComplete = false, pasteProgress = null, isPastePaused = false, errorMessage = "Paste failed: ${e.message}") }
+                    _state.update { it.copy(isLoading = false, isPasteComplete = false, pasteProgress = null, isPastePaused = false, errorMessage = "Paste failed: ${e.message}") }
                 } finally {
                     reload()
                 }
@@ -2215,7 +2540,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun togglePastePause() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isPastePaused = !it.isPastePaused) }
+        _state.update { it.copy(isPastePaused = !it.isPastePaused) }
     }
 
     fun cancelPaste() {
@@ -2229,7 +2554,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun extractZip(sourcePath: String, destDirPath: String) {
         extractJob?.cancel()
         extractCancelled = false
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), extractProgress = 0f, isExtractPaused = false) }
+        _state.update { it.copy(extractProgress = 0f, isExtractPaused = false) }
 
         extractJob = viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -2268,7 +2593,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                     output.write(buffer, 0, read)
                                     extractedBytes += read
                                     if (totalBytes > 0) {
-                                        _state.update { it.copy(hasShizuku = repository.hasShizuku(), extractProgress = extractedBytes.toFloat() / totalBytes) }
+                                        _state.update { it.copy(extractProgress = extractedBytes.toFloat() / totalBytes) }
                                     }
                                 }
                             }
@@ -2280,12 +2605,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (extractCancelled) {
                     targetDir.deleteRecursively()
                 } else {
-                    _state.update { it.copy(hasShizuku = repository.hasShizuku(), extractResultPath = targetDir.absolutePath) }
+                    _state.update { it.copy(extractResultPath = targetDir.absolutePath) }
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), errorMessage = "Extraction failed: ${e.message}") }
+                _state.update { it.copy(errorMessage = "Extraction failed: ${e.message}") }
             } finally {
-                _state.update { it.copy(hasShizuku = repository.hasShizuku(), extractProgress = null, isExtractPaused = false) }
+                _state.update { it.copy(extractProgress = null, isExtractPaused = false) }
                 if (!extractCancelled) {
                     reload()
                 }
@@ -2295,11 +2620,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearExtractResult() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), extractResultPath = null) }
+        _state.update { it.copy(extractResultPath = null) }
     }
 
     fun toggleExtractPause() {
-        _state.update { it.copy(hasShizuku = repository.hasShizuku(), isExtractPaused = !it.isExtractPaused) }
+        _state.update { it.copy(isExtractPaused = !it.isExtractPaused) }
     }
 
     fun cancelExtract() {
@@ -2315,23 +2640,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             exoPlayer = androidx.media3.exoplayer.ExoPlayer.Builder(getApplication()).build().apply {
                 addListener(object : androidx.media3.common.Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
-                        _state.update { it.copy(isAudioPlaying = isPlaying, hasShizuku = repository.hasShizuku()) }
+                        _state.update { it.copy(isAudioPlaying = isPlaying) }
                         if (isPlaying) {
                             closePlayerJob?.cancel()
                         } else {
                             closePlayerJob?.cancel()
-                            closePlayerJob = viewModelScope.launch {
-                                kotlinx.coroutines.delay(5000)
-                                stopAudio()
+                            val timeoutSec = _state.value.miniPlayerAutoCloseSeconds
+                            if (timeoutSec > 0) {
+                                closePlayerJob = viewModelScope.launch {
+                                    kotlinx.coroutines.delay(timeoutSec * 1000L)
+                                    stopAudio()
+                                }
                             }
                         }
                     }
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == androidx.media3.common.Player.STATE_READY) {
-                            _state.update { it.copy(audioDuration = duration.coerceAtLeast(0L), hasShizuku = repository.hasShizuku()) }
+                            _state.update { it.copy(audioDuration = duration.coerceAtLeast(0L)) }
                         } else if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
                             _audioPosition.value = 0L
-                            _state.update { it.copy(isAudioPlaying = false, hasShizuku = repository.hasShizuku()) }
+                            _state.update { it.copy(isAudioPlaying = false) }
                             seekTo(0)
                         }
                     }
@@ -2340,8 +2668,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             it.copy(
                                 audioTitle = mediaMetadata.title?.toString() ?: it.audioTitle,
                                 audioArtist = mediaMetadata.artist?.toString() ?: it.audioArtist,
-                                audioArtworkData = mediaMetadata.artworkData ?: it.audioArtworkData,
-                                hasShizuku = repository.hasShizuku()
+                                audioArtworkData = mediaMetadata.artworkData ?: it.audioArtworkData
                             )
                         }
                     }
@@ -2376,8 +2703,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 currentAudioFile = file,
                 audioTitle = file.name,
                 audioArtist = "Unknown Artist",
-                audioArtworkData = null,
-                hasShizuku = repository.hasShizuku()
+                audioArtworkData = null
             ) 
         }
         
@@ -2431,9 +2757,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 audioPlaybackPosition = 0L,
                 audioDuration = 0L,
                 showFullScreenPlayer = false,
-                audioArtworkData = null,
-                hasShizuku = repository.hasShizuku()
+                audioArtworkData = null
             )
+        }
+    }
+    
+    fun setMiniPlayerAutoCloseSeconds(seconds: Int) {
+        prefs.edit().putInt("mini_player_auto_close_seconds", seconds).apply()
+        _state.update { it.copy(miniPlayerAutoCloseSeconds = seconds) }
+        closePlayerJob?.cancel()
+        if (!_state.value.isAudioPlaying && _state.value.currentAudioFile != null) {
+            if (seconds > 0) {
+                closePlayerJob = viewModelScope.launch {
+                    kotlinx.coroutines.delay(seconds * 1000L)
+                    stopAudio()
+                }
+            }
         }
     }
     
@@ -2466,7 +2805,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     fun setShowFullScreenPlayer(show: Boolean) {
-        _state.update { it.copy(showFullScreenPlayer = show, hasShizuku = repository.hasShizuku()) }
+        _state.update { it.copy(showFullScreenPlayer = show) }
     }
     
     fun requestAuth(reason: AuthReason, path: String, fileId: Int?, folderName: String?) {
@@ -2635,7 +2974,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else if (st.isDropboxAuthenticated) {
                         setLocation("dropbox")
                     } else {
-                        setLocation("cloud")
+                        setLocation(android.os.Environment.getExternalStorageDirectory().absolutePath)
                     }
                 }
             }
@@ -2713,7 +3052,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else if (st.isDropboxAuthenticated) {
                         setLocation("dropbox")
                     } else {
-                        setLocation("cloud")
+                        setLocation(android.os.Environment.getExternalStorageDirectory().absolutePath)
                     }
                 }
             }
@@ -2789,7 +3128,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else if (st.isDropboxAuthenticated) {
                         setLocation("dropbox")
                     } else {
-                        setLocation("cloud")
+                        setLocation(android.os.Environment.getExternalStorageDirectory().absolutePath)
                     }
                 }
             }
@@ -2872,7 +3211,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else if (st.isDropboxAuthenticated) {
                         setLocation("dropbox")
                     } else {
-                        setLocation("cloud")
+                        setLocation(android.os.Environment.getExternalStorageDirectory().absolutePath)
                     }
                 }
             }

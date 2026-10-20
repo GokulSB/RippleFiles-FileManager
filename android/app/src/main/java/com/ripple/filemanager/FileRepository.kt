@@ -53,7 +53,25 @@ data class FileItem(
     val duration: String? = null,
     val thumbnailLink: String? = null,
     val folderItemCount: Int? = null
-)
+) {
+    val isHidden: Boolean get() = name.startsWith(".")
+}
+
+fun suggestNonConflictingName(originalName: String, existingNames: Set<String>): String {
+    val isHidden = originalName.startsWith(".")
+    val rawName = if (isHidden) originalName.removePrefix(".") else originalName
+    val dotIndex = rawName.lastIndexOf('.')
+    val base = if (dotIndex > 0) rawName.substring(0, dotIndex) else rawName
+    val ext = if (dotIndex > 0) rawName.substring(dotIndex) else ""
+    val prefix = if (isHidden) "." else ""
+    var counter = 1
+    var candidate: String
+    do {
+        candidate = "$prefix$base ($counter)$ext"
+        counter++
+    } while (existingNames.contains(candidate))
+    return candidate
+}
 
 data class FileDetails(
     val name: String,
@@ -72,7 +90,7 @@ class FileRepository(private val context: Context) {
     private val videoDurationCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     private suspend fun listRestrictedFiles(location: String, dateFormat: java.text.SimpleDateFormat): List<FileItem>? {
-        if (!location.contains("Android/data") && !location.contains("Android/obb")) return null
+        if (!location.contains("Android/data") && !location.contains("Android/obb") && !hasShizuku()) return null
         
         val items = mutableListOf<FileItem>()
         var idCounter = 10000
@@ -91,7 +109,7 @@ class FileRepository(private val context: Context) {
                     if (p.isEmpty()) continue
                     val isDir = p.endsWith("/")
                     val name = if (isDir) p.dropLast(1) else p
-                    if (name == "." || name == ".." || name.startsWith(".")) continue
+                    if (name == "." || name == "..") continue
                     
                     val fileTypeStr = if (isDir) "directory" else "file"
                     val sizeBytes = 0L
@@ -106,7 +124,7 @@ class FileRepository(private val context: Context) {
                                 "mp4", "mkv", "avi", "mov", "webm" -> "video"
                                 "mp3", "wav", "ogg", "flac", "m4a" -> "audio"
                                 "zip", "rar", "7z", "tar", "gz" -> "archive"
-                                "pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx" -> "doc"
+                                "pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "xml", "html", "htm", "md", "csv", "log" -> "doc"
                                 "apk" -> "apk"
                                 else -> "file"
                             }
@@ -147,6 +165,101 @@ class FileRepository(private val context: Context) {
         }
 
         return emptyList()
+    }
+
+    private fun listMediaStoreFiles(
+        folderPath: String,
+        dateFormat: java.text.SimpleDateFormat
+    ): List<FileItem>? {
+        try {
+            val normalizedPath = if (folderPath.endsWith("/")) folderPath else "$folderPath/"
+            val uri = android.provider.MediaStore.Files.getContentUri("external")
+            val projection = arrayOf(
+                android.provider.MediaStore.MediaColumns.DATA,
+                android.provider.MediaStore.MediaColumns.DISPLAY_NAME,
+                android.provider.MediaStore.MediaColumns.SIZE,
+                android.provider.MediaStore.MediaColumns.DATE_MODIFIED
+            )
+            val selection = "${android.provider.MediaStore.MediaColumns.DATA} LIKE ?"
+            val selectionArgs = arrayOf("$normalizedPath%")
+            val cursor = context.contentResolver.query(uri, projection, selection, selectionArgs, null)
+            cursor?.use { c ->
+                val dataIdx = c.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
+                val nameIdx = c.getColumnIndex(android.provider.MediaStore.MediaColumns.DISPLAY_NAME)
+                val sizeIdx = c.getColumnIndex(android.provider.MediaStore.MediaColumns.SIZE)
+                val dateIdx = c.getColumnIndex(android.provider.MediaStore.MediaColumns.DATE_MODIFIED)
+
+                val directChildren = mutableMapOf<String, FileItem>()
+                var idCounter = 30000
+
+                while (c.moveToNext()) {
+                    val fullPath = if (dataIdx != -1) c.getString(dataIdx) else null ?: continue
+                    if (!fullPath.startsWith(normalizedPath)) continue
+                    val relPath = fullPath.substring(normalizedPath.length)
+                    if (relPath.isEmpty()) continue
+
+                    val isDir = relPath.contains("/")
+                    val childName = if (isDir) relPath.substringBefore("/") else (if (nameIdx != -1) c.getString(nameIdx) ?: relPath else relPath)
+                    val childPath = normalizedPath + childName
+
+                    if (directChildren.containsKey(childName)) {
+                        continue
+                    }
+
+                    val sizeBytes = if (isDir) 0L else (if (sizeIdx != -1) c.getLong(sizeIdx) else 0L)
+                    val lastModSec = if (dateIdx != -1) c.getLong(dateIdx) else 0L
+
+                    val type = when {
+                        isDir -> "folder"
+                        else -> {
+                            val ext = childName.substringAfterLast(".", "").lowercase(Locale.getDefault())
+                            when (ext) {
+                                "jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg" -> "image"
+                                "mp4", "mkv", "avi", "mov", "webm" -> "video"
+                                "mp3", "wav", "ogg", "flac", "m4a" -> "audio"
+                                "zip", "rar", "7z", "tar", "gz" -> "archive"
+                                "pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "xml", "html", "htm", "md", "csv", "log" -> "doc"
+                                "apk" -> "apk"
+                                else -> "file"
+                            }
+                        }
+                    }
+                    val kind = when (type) {
+                        "folder" -> "folder"
+                        "image", "video", "audio" -> "media"
+                        "archive" -> "archive"
+                        "doc" -> "doc"
+                        else -> "file"
+                    }
+                    val sizeStr = if (isDir) "" else formatSize(sizeBytes)
+                    val changedStr = if (lastModSec > 0) dateFormat.format(Date(lastModSec * 1000)) else ""
+
+                    directChildren[childName] = FileItem(
+                        id = idCounter++,
+                        path = childPath,
+                        name = childName,
+                        type = type,
+                        kind = kind,
+                        size = sizeStr,
+                        changed = changedStr,
+                        owner = "Me",
+                        isPinned = false,
+                        isEmptyFolder = false,
+                        sizeBytes = sizeBytes,
+                        lastModified = lastModSec * 1000
+                    )
+                }
+
+                if (directChildren.isNotEmpty()) {
+                    return directChildren.values.sortedWith(
+                        compareBy({ !it.type.equals("folder") }, { it.name.lowercase() })
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
     }
 
     private fun runShizukuCommand(cmd: String): Boolean {
@@ -379,7 +492,17 @@ class FileRepository(private val context: Context) {
                 false
             }
         }
-        val actualPath = if (parentPath == "home") Environment.getExternalStorageDirectory().absolutePath else parentPath
+        val actualPath = when {
+            parentPath == "home" -> Environment.getExternalStorageDirectory().absolutePath
+            parentPath == "sd" || parentPath == "sd/" -> com.ripple.filemanager.data.StorageUtils.getSdCardPath(context) ?: parentPath
+            else -> parentPath
+        }
+        if (actualPath.contains("Android/data") || actualPath.contains("Android/obb")) {
+            if (hasShizuku()) {
+                val fullPath = if (actualPath.endsWith("/")) actualPath + name else "$actualPath/$name"
+                return@withContext runShizukuCommand("mkdir -p \"$fullPath\"")
+            }
+        }
         val newFolder = File(actualPath, name)
         if (!newFolder.exists()) {
             return@withContext newFolder.mkdirs()
@@ -406,7 +529,11 @@ class FileRepository(private val context: Context) {
                 false
             }
         }
-        val actualPath = if (parentPath == "home") Environment.getExternalStorageDirectory().absolutePath else parentPath
+        val actualPath = when {
+            parentPath == "home" -> Environment.getExternalStorageDirectory().absolutePath
+            parentPath == "sd" || parentPath == "sd/" -> com.ripple.filemanager.data.StorageUtils.getSdCardPath(context) ?: parentPath
+            else -> parentPath
+        }
         val newFile = File(actualPath, name)
         if (!newFile.exists()) {
             return@withContext try {
@@ -440,16 +567,38 @@ class FileRepository(private val context: Context) {
         } else if (location == "recent") {
             emptyArray<File>() // handled differently below
         } else {
+            val resolvedLocation = if (location == "sd" || location == "sd/" || location == "sd:") {
+                com.ripple.filemanager.data.StorageUtils.getSdCardPath(context) ?: location
+            } else {
+                location
+            }
             val dateFormatForRestricted = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
-            if (location.contains("Android/data") || location.contains("Android/obb")) {
-                val restrictedItems = listRestrictedFiles(location, dateFormatForRestricted)
+            if (resolvedLocation.contains("Android/data") || resolvedLocation.contains("Android/obb")) {
+                val restrictedItems = listRestrictedFiles(resolvedLocation, dateFormatForRestricted)
                 if (restrictedItems != null) return@withContext restrictedItems
             }
-            val rootDir = when (location) {
+            val rootDir = when (resolvedLocation) {
                 "home" -> Environment.getExternalStorageDirectory()
-                else -> File(location)
+                else -> File(resolvedLocation)
             }
-            rootDir.listFiles() ?: return@withContext emptyList()
+            var rawFiles = rootDir.listFiles()
+            if (rawFiles == null && resolvedLocation.startsWith("/mnt/media_rw/")) {
+                val alt = File(resolvedLocation.replace("/mnt/media_rw/", "/storage/"))
+                rawFiles = alt.listFiles()
+            }
+            if (rawFiles == null && resolvedLocation.startsWith("/storage/")) {
+                val alt = File(resolvedLocation.replace("/storage/", "/mnt/media_rw/"))
+                rawFiles = alt.listFiles()
+            }
+            if (rawFiles == null && hasShizuku()) {
+                val shizukuItems = listRestrictedFiles(resolvedLocation, dateFormatForRestricted)
+                if (!shizukuItems.isNullOrEmpty()) return@withContext shizukuItems
+            }
+            if (rawFiles == null) {
+                val mediaStoreItems = listMediaStoreFiles(resolvedLocation, dateFormatForRestricted)
+                if (!mediaStoreItems.isNullOrEmpty()) return@withContext mediaStoreItems
+            }
+            rawFiles ?: return@withContext emptyList()
         }
 
         val items = mutableListOf<FileItem>()
@@ -569,8 +718,6 @@ class FileRepository(private val context: Context) {
         }
 
         for (file in files) {
-            if (file.name.startsWith(".")) continue
-
             items.add(fileToItem(file, idCounter++, pinned, locked, dateFormat))
         }
 
@@ -587,7 +734,7 @@ class FileRepository(private val context: Context) {
             ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
             ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
             ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
-            ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx") -> "doc"
+            ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "xml", "html", "htm", "md", "csv", "log") -> "doc"
             ext == "apk" -> "apk"
             else -> "file"
         }
@@ -633,7 +780,7 @@ class FileRepository(private val context: Context) {
         )
     }
 
-    suspend fun searchLocalFiles(baseLocation: String, query: String): List<FileItem> = withContext(Dispatchers.IO) {
+    suspend fun searchLocalFiles(baseLocation: String, query: String, showHidden: Boolean = false): List<FileItem> = withContext(Dispatchers.IO) {
         if (baseLocation == "mega" || baseLocation.startsWith("mega_id:") || baseLocation.startsWith("smb_") || baseLocation.startsWith("ftp_") || baseLocation.startsWith("sftp_") || baseLocation == "drive" || baseLocation.startsWith("drive_id:") || baseLocation == "recent" || baseLocation == "pinned") {
             return@withContext emptyList()
         }
@@ -658,7 +805,7 @@ class FileRepository(private val context: Context) {
             
             for (child in children) {
                 if (!isActive) break
-                if (child.name.startsWith(".")) continue
+                if (!showHidden && child.name.startsWith(".")) continue
                 
                 // Exclude Android folder at the root of internal storage
                 if (child.name == "Android" && child.parentFile?.absolutePath == extStorageRoot) {
@@ -669,7 +816,7 @@ class FileRepository(private val context: Context) {
                     results.add(fileToItem(child, idCounter++, pinned, locked, dateFormat))
                 }
                 
-                if (child.isDirectory) {
+                if (child.isDirectory && (showHidden || !child.name.startsWith("."))) {
                     stack.push(child)
                 }
             }
@@ -1082,6 +1229,14 @@ class FileRepository(private val context: Context) {
                 false
             }
         } else {
+            if (path.contains("Android/data") || path.contains("Android/obb")) {
+                if (hasShizuku()) {
+                    val file = File(path)
+                    val parent = file.parentFile?.absolutePath ?: path.substringBeforeLast("/")
+                    val targetPath = if (parent.endsWith("/")) parent + newName else "$parent/$newName"
+                    return@withContext runShizukuCommand("mv \"$path\" \"$targetPath\"")
+                }
+            }
             val file = File(path)
             if (file.exists()) {
                 val newFile = File(file.parentFile, newName)
@@ -1313,9 +1468,16 @@ class FileRepository(private val context: Context) {
         try {
             rootDir.walkTopDown().onEnter { dir ->
                 val path = dir.absolutePath
-                !dir.name.startsWith(".") && !path.contains("/Android/data") && !path.contains("/Android/obb")
+                val name = dir.name
+                !path.contains("/Android/data") &&
+                !path.contains("/Android/obb") &&
+                !name.startsWith(".ripple_trash") &&
+                !path.contains("/.ripple_trash") &&
+                (!name.startsWith(".") || dir == rootDir)
             }.forEach { file ->
-                if (file.name.startsWith(".")) return@forEach // skip hidden
+                if (file.name.startsWith(".")) return@forEach
+                if (file.absolutePath.contains("/.ripple_trash")) return@forEach
+
                 
                 if (file.isDirectory) {
                     val children = file.list()
@@ -1448,7 +1610,7 @@ class FileRepository(private val context: Context) {
         val usedStorageBytes = totalStorageBytes - freeStorageBytes
 
         // Calculate other bytes by subtracting known categories from the actual used space
-        val knownScannedBytes = docsSize + imgSize + vidSize + audioSize + appSize
+        val knownScannedBytes = docsSize + imgSize + vidSize + audioSize + appSize + archiveSize
         val otherBytes = java.lang.Math.max(0L, usedStorageBytes - knownScannedBytes)
         
         // Find duplicates
@@ -1563,11 +1725,18 @@ suspend fun moveToTrash(paths: List<String>) = withContext(Dispatchers.IO) {
                                 runShizukuCommand("rm -rf \"$path\"")
                             }
                             success = !sourceFile.exists()
+                            if (!success && destFile.exists()) {
+                                destFile.deleteRecursively()
+                            }
                         }
                     }
                 }
 
                 if (success) {
+                    try {
+                        val uri = android.provider.MediaStore.Files.getContentUri("external")
+                        context.contentResolver.delete(uri, "${android.provider.MediaStore.MediaColumns.DATA} = ?", arrayOf(path))
+                    } catch (e: Exception) {}
                     for (j in registry.length() - 1 downTo 0) {
                         val existing = registry.optJSONObject(j)
                         if (existing?.optString("encodedName") == encodedName) {
@@ -1737,12 +1906,12 @@ suspend fun moveToTrash(paths: List<String>) = withContext(Dispatchers.IO) {
         val cached = when (categoryKey.lowercase(Locale.getDefault())) {
             "image", "images" -> cleanerData?.images?.files
             "video", "videos" -> cleanerData?.videos?.files
-            "audio" -> cleanerData?.audio?.files
+            "audio", "music" -> cleanerData?.audio?.files
             "doc", "docs", "documents" -> cleanerData?.documents?.files
             "apk", "app", "apps" -> cleanerData?.apps?.files
             "archive", "archives" -> cleanerData?.archives?.files
             "download", "downloads" -> cleanerData?.downloads?.files
-            "large", "largefiles", "other files", "other" -> cleanerData?.large?.files
+            "large", "largefiles", "large files", "other files", "other" -> cleanerData?.large?.files
             "duplicates", "duplicate" -> cleanerData?.duplicates?.files
             "empty folders", "empty_folders" -> cleanerData?.emptyFolders?.files
             else -> null
@@ -1800,12 +1969,12 @@ suspend fun moveToTrash(paths: List<String>) = withContext(Dispatchers.IO) {
         val result = when (categoryKey.lowercase(Locale.getDefault())) {
             "image", "images" -> scanned.images.files
             "video", "videos" -> scanned.videos.files
-            "audio" -> scanned.audio.files
+            "audio", "music" -> scanned.audio.files
             "doc", "docs", "documents" -> scanned.documents.files
             "apk", "app", "apps" -> scanned.apps.files
             "archive", "archives" -> scanned.archives.files
             "download", "downloads" -> scanned.downloads.files
-            "large", "largefiles", "other files", "other" -> scanned.large.files
+            "large", "largefiles", "large files", "other files", "other" -> scanned.large.files
             "duplicates", "duplicate" -> scanned.duplicates.files
             "empty folders", "empty_folders" -> scanned.emptyFolders.files
             else -> emptyList()
@@ -1859,6 +2028,11 @@ fun CleanerData.removePaths(deletedPaths: Set<String>): CleanerData {
     val newDown = filterCategory(downloads)
     val newLarge = filterCategory(large)
 
+    val allOldFiles = (documents.files + images.files + videos.files + audio.files + apps.files + archives.files + downloads.files + large.files + duplicates.files).distinctBy { it.path }
+    val freedBytes = allOldFiles.filter { it.path in deletedPaths }.sumOf { it.sizeBytes }
+    val newFree = (freeStorageBytes + freedBytes).coerceAtMost(totalStorageBytes)
+    val newOther = (otherBytes - freedBytes).coerceAtLeast(0L)
+
     return copy(
         documents = newDocs,
         images = newImgs,
@@ -1872,7 +2046,9 @@ fun CleanerData.removePaths(deletedPaths: Set<String>): CleanerData {
         large = newLarge,
         downloadsCount = newDown.files.size,
         downloadsSizeBytes = newDown.totalSizeBytes,
-        largeFilesSizeBytes = newLarge.totalSizeBytes
+        largeFilesSizeBytes = newLarge.totalSizeBytes,
+        freeStorageBytes = newFree,
+        otherBytes = newOther
     )
 }
 

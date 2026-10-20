@@ -42,6 +42,31 @@ class MainActivity : FragmentActivity() {
         viewModel.reload()
     }
 
+    private var isFirstResume = true
+
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val prefs = newBase.getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE)
+        val langTag = prefs.getString("app_language", "device_default") ?: "device_default"
+        val context = if (langTag != "device_default" && langTag.isNotBlank()) {
+            try {
+                val locale = java.util.Locale.forLanguageTag(langTag)
+                java.util.Locale.setDefault(locale)
+                val config = android.content.res.Configuration(newBase.resources.configuration)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    config.setLocales(android.os.LocaleList(locale))
+                } else {
+                    config.setLocale(locale)
+                }
+                newBase.createConfigurationContext(config)
+            } catch (e: Exception) {
+                newBase
+            }
+        } else {
+            newBase
+        }
+        super.attachBaseContext(context)
+    }
+
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         val crashLogPath = intent.getStringExtra("CRASH_LOG")
@@ -112,20 +137,40 @@ class MainActivity : FragmentActivity() {
 
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) {
+            viewModel.onAppLaunch()
+        }
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
             window.isStatusBarContrastEnforced = false
         }
-        
+        val splashStart = android.os.SystemClock.elapsedRealtime()
         splashScreen.setKeepOnScreenCondition {
-            viewModel.state.value.isLoading
+            viewModel.state.value.isLoading && (android.os.SystemClock.elapsedRealtime() - splashStart < 1200L)
         }
         
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(applicationContext)
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "PDFBoxResourceLoader init failed", e)
+            }
+        }
+
         try {
-            com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(applicationContext)
+            coil.Coil.setImageLoader {
+                coil.ImageLoader.Builder(applicationContext)
+                    .components {
+                        add(coil.decode.VideoFrameDecoder.Factory())
+                        add(com.ripple.filemanager.ui.DocumentThumbnailFetcher.Factory())
+                        add(com.ripple.filemanager.ui.DocumentThumbnailFetcher.UriFactory())
+                    }
+                    .crossfade(true)
+                    .build()
+            }
         } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "PDFBoxResourceLoader init failed", e)
+            android.util.Log.e("MainActivity", "Coil image loader init failed", e)
         }
         
         try {
@@ -133,6 +178,12 @@ class MainActivity : FragmentActivity() {
                 if (grantResult == PackageManager.PERMISSION_GRANTED) {
                     viewModel.reload()
                 }
+            }
+            rikka.shizuku.Shizuku.addBinderReceivedListenerSticky {
+                viewModel.refreshShizukuStatus()
+            }
+            rikka.shizuku.Shizuku.addBinderDeadListener {
+                viewModel.refreshShizukuStatus()
             }
         } catch (e: Exception) {}
 
@@ -151,6 +202,7 @@ class MainActivity : FragmentActivity() {
                 { action ->
                     when (action) {
                         is AppAction.SetLocation -> viewModel.setLocation(action.path)
+                        is AppAction.SwitchToStorage -> viewModel.switchToStorage(action.storageId, action.defaultLocation)
                         is AppAction.NavTabTapped -> viewModel.navTabTapped(action.id)
                         is AppAction.NavigateBackInDrive -> viewModel.navigateBackInDrive()
                         is AppAction.SetQuery -> viewModel.setQuery(action.query)
@@ -195,14 +247,39 @@ class MainActivity : FragmentActivity() {
                         is AppAction.AutoRequestAccess -> viewModel.autoRequestAccess(action.path)
                         is AppAction.RequestShizukuAccess -> {
                             try {
-                                if (rikka.shizuku.Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                    rikka.shizuku.Shizuku.requestPermission(100)
+                                if (rikka.shizuku.Shizuku.pingBinder()) {
+                                    if (rikka.shizuku.Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                        rikka.shizuku.Shizuku.requestPermission(100)
+                                    } else {
+                                        viewModel.reload()
+                                    }
+                                } else {
+                                    val launchIntent = packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                                    if (launchIntent != null) {
+                                        startActivity(launchIntent)
+                                    } else {
+                                        val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api")).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        try {
+                                            startActivity(marketIntent)
+                                        } catch (e2: Exception) {
+                                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api")).apply {
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            })
+                                        }
+                                    }
                                 }
                             } catch (e: Exception) {
                                 viewModel.showToast("Shizuku not detected or not running")
                             }
                         }
                         is AppAction.ShowToast -> viewModel.showToast(action.message)
+                        is AppAction.SetShowHiddenFiles -> viewModel.setShowHiddenFiles(action.show)
+                        is AppAction.SetHasSeenHideWarning -> viewModel.setHasSeenHideWarning(action.seen)
+                        is AppAction.ToggleHideFiles -> viewModel.toggleHideFiles(action.files)
+                        is AppAction.ResolveHideConflict -> viewModel.resolveHideConflict(action.resolution)
+                        is AppAction.DismissHideConflict -> viewModel.dismissHideConflict()
                         is AppAction.NearbyShareAction -> viewModel.handleNearbyShareAction(action)
                         is AppAction.SmbAction -> viewModel.handleSmbAction(action)
                         is AppAction.FtpAction -> viewModel.handleFtpAction(action)
@@ -222,6 +299,11 @@ class MainActivity : FragmentActivity() {
                         is AppAction.PermanentlyDeleteTrashFiles -> viewModel.permanentlyDeleteTrashFiles(action.files)
                         is AppAction.SetRecycleBinSettings -> viewModel.setRecycleBinSettings(action.enabled, action.retentionValue, action.retentionUnit)
                         is AppAction.SetThemeMode -> viewModel.setThemeMode(action.mode)
+                        is AppAction.SetDarkSurfaceStyle -> viewModel.setDarkSurfaceStyle(action.style)
+                        is AppAction.SetLanguage -> {
+                            viewModel.setLanguage(action.tag)
+                            recreate()
+                        }
                         is AppAction.SetThemeHue -> viewModel.setThemeHue(action.hue)
                         is AppAction.SetThemeLightnessOffset -> viewModel.setThemeLightnessOffset(action.offset)
                         is AppAction.SetDynamicSystemTheme -> viewModel.setDynamicSystemTheme(action.dynamic)
@@ -246,6 +328,7 @@ class MainActivity : FragmentActivity() {
                         is AppAction.PlayNextAudio -> viewModel.playNextAudio()
                         is AppAction.PlayPreviousAudio -> viewModel.playPreviousAudio()
                         is AppAction.SetShowFullScreenPlayer -> viewModel.setShowFullScreenPlayer(action.show)
+                        is AppAction.SetMiniPlayerAutoCloseSeconds -> viewModel.setMiniPlayerAutoCloseSeconds(action.seconds)
                         is AppAction.SilentInstallApk -> viewModel.silentInstallApk(action.path, action.downgrade, action.forceUninstall)
             is AppAction.BatchInstallApks -> viewModel.batchInstallApks(action.paths, action.downgrade, action.silent, action.forceUninstall)
             is AppAction.SetOrganiserPath -> viewModel.setOrganiserPath(action.category, action.path)
@@ -347,7 +430,10 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         checkPermissions()
-        viewModel.reload()
+        if (!isFirstResume) {
+            viewModel.reload()
+        }
+        isFirstResume = false
     }
 
     private fun checkPermissions() {

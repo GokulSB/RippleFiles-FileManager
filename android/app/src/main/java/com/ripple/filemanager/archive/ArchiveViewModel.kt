@@ -20,41 +20,90 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
 
     private var currentSource: Uri? = null
     private var currentDest: Uri? = null
+    private var autoClearJob: kotlinx.coroutines.Job? = null
+    private val activeWorkIds = java.util.Collections.synchronizedSet(mutableSetOf<java.util.UUID>())
 
     init {
+        // Prune finished work from previous sessions on fresh launch
+        workManager.pruneWork()
+
         viewModelScope.launch {
-            workManager.getWorkInfosByTagLiveData("archive_extract").observeForever { workInfos ->
-                if (workInfos.isNullOrEmpty()) return@observeForever
+            workManager.getWorkInfosByTagFlow("archive_extract").collect { workInfos ->
+                if (workInfos.isEmpty()) return@collect
                 
-                val workInfo = workInfos.firstOrNull { !it.state.isFinished || it.state == WorkInfo.State.SUCCEEDED || it.state == WorkInfo.State.FAILED }
-                if (workInfo != null) {
-                    val status = workInfo.progress.getString("status") ?: 
-                                (if (workInfo.state == WorkInfo.State.SUCCEEDED) "complete" else if (workInfo.state == WorkInfo.State.FAILED) "failed" else null)
-                    
-                    when (status) {
-                        "needs_password" -> {
-                            val attemptFailed = workInfo.progress.getBoolean("attemptFailed", false)
-                            _archiveProgress.value = ArchiveProgress.NeedsPassword(attemptFailed)
-                        }
-                        "failed" -> {
-                            val error = workInfo.progress.getString("error") ?: workInfo.outputData.getString("error") ?: "Extraction failed"
-                            _archiveProgress.value = ArchiveProgress.Failed(error)
-                        }
-                        "complete" -> {
-                            val outputDir = workInfo.progress.getString("outputDir") ?: workInfo.outputData.getString("outputDir") ?: ""
-                            _archiveProgress.value = ArchiveProgress.Complete(outputDir)
-                        }
-                        else -> {
-                            if (workInfo.state == WorkInfo.State.RUNNING) {
-                                val filesDone = workInfo.progress.getInt("filesDone", 0)
-                                val filesTotal = workInfo.progress.getInt("filesTotal", 0)
-                                val currentEntryName = workInfo.progress.getString("currentEntryName") ?: ""
+                // Track any work that is currently active (running or enqueued)
+                workInfos.filter { !it.state.isFinished }.forEach { workInfo ->
+                    activeWorkIds.add(workInfo.id)
+                }
+
+                // Only consider work that is currently unfinished or was active in this session
+                val currentWork = workInfos.firstOrNull { !it.state.isFinished }
+                    ?: workInfos.firstOrNull { it.id in activeWorkIds && (it.state == WorkInfo.State.SUCCEEDED || it.state == WorkInfo.State.FAILED) }
+
+                if (currentWork == null) {
+                    // Stale completed work from previous session — do NOT show stale pill on cold start
+                    return@collect
+                }
+
+                when (currentWork.state) {
+                    WorkInfo.State.RUNNING -> {
+                        autoClearJob?.cancel()
+                        val status = currentWork.progress.getString("status")
+                        when (status) {
+                            "needs_password" -> {
+                                val attemptFailed = currentWork.progress.getBoolean("attemptFailed", false)
+                                _archiveProgress.value = ArchiveProgress.NeedsPassword(attemptFailed)
+                            }
+                            "failed" -> {
+                                val error = currentWork.progress.getString("error") ?: "Extraction failed"
+                                _archiveProgress.value = ArchiveProgress.Failed(error)
+                            }
+                            else -> {
+                                val filesDone = currentWork.progress.getInt("filesDone", 0)
+                                val filesTotal = currentWork.progress.getInt("filesTotal", 0)
+                                val currentEntryName = currentWork.progress.getString("currentEntryName") ?: ""
                                 _archiveProgress.value = ArchiveProgress.Running(filesDone, filesTotal, currentEntryName)
                             }
                         }
                     }
+                    WorkInfo.State.SUCCEEDED -> {
+                        val outputDir = currentWork.outputData.getString("outputDir")
+                            ?: currentWork.progress.getString("outputDir") ?: ""
+                        _archiveProgress.value = ArchiveProgress.Complete(outputDir)
+                        scheduleAutoClear(currentWork.id)
+                    }
+                    WorkInfo.State.FAILED -> {
+                        val error = currentWork.outputData.getString("error")
+                            ?: currentWork.progress.getString("error") ?: "Extraction failed"
+                        val isNeedsPassword = error == "needs_password"
+                        if (isNeedsPassword) {
+                            val attemptFailed = currentWork.outputData.getBoolean("attemptFailed", false)
+                            _archiveProgress.value = ArchiveProgress.NeedsPassword(attemptFailed)
+                        } else {
+                            _archiveProgress.value = ArchiveProgress.Failed(error)
+                        }
+                        activeWorkIds.remove(currentWork.id)
+                    }
+                    WorkInfo.State.CANCELLED -> {
+                        autoClearJob?.cancel()
+                        _archiveProgress.value = null
+                        activeWorkIds.remove(currentWork.id)
+                    }
+                    WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
+                        // In queue, keep waiting
+                    }
                 }
             }
+        }
+    }
+
+    private fun scheduleAutoClear(workId: java.util.UUID) {
+        autoClearJob?.cancel()
+        autoClearJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(2500)
+            _archiveProgress.value = null
+            activeWorkIds.remove(workId)
+            workManager.pruneWork()
         }
     }
 
@@ -103,15 +152,21 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
     val currentArchiveName: StateFlow<String?> = _currentArchiveName.asStateFlow()
 
     fun resetState() {
+        autoClearJob?.cancel()
+        activeWorkIds.clear()
         _archiveProgress.value = null
         _currentArchiveName.value = null
+        workManager.pruneWork()
     }
 
     fun cancelExtraction() {
+        autoClearJob?.cancel()
         currentSource?.let {
             workManager.cancelUniqueWork(it.toString())
         }
+        activeWorkIds.clear()
         _archiveProgress.value = null
+        workManager.pruneWork()
     }
 
     /**
@@ -139,10 +194,12 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
             .addTag("archive_extract")
             .build()
 
-        // ExistingWorkPolicy.KEEP prevents duplicate runs
+        activeWorkIds.add(workRequest.id)
+
+        // ExistingWorkPolicy.REPLACE ensures a new extraction can run even if previous finished
         workManager.enqueueUniqueWork(
             source.toString(),
-            ExistingWorkPolicy.KEEP,
+            ExistingWorkPolicy.REPLACE,
             workRequest
         )
     }

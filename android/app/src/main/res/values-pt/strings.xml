@@ -99,7 +99,13 @@
     <string name="access_restricted_title">Acesso restrito</string>
     <string name="access_restricted_desc">O Android 11+ restringe o acesso a esta pasta. Por favor, conceda acesso usando Shizuku ou uma alternativa compatível.</string>
     <string name="shizuku_not_detected">Serviço Shizuku não detectado. Certifique-se de que está em execução.</string>
-    <string name="grant_access_action">Conceder acesso</string>
+    <string name="grant_access_action">Permitir</string>
+    <string name="install_shizuku_action">Instalar Shizuku</string>
+    <string name="open_shizuku_action">Abrir Shizuku</string>
+    <string name="shizuku_not_installed_desc">Para ver as pastas Android/data e Android/obb, você precisa instalar o Shizuku.</string>
+    <string name="shizuku_not_running_desc">O Shizuku está instalado, mas o serviço não está em execução. Abra o Shizuku e inicie o serviço primeiro.</string>
+    <string name="shizuku_running_desc">O serviço Shizuku está em execução. Conceda permissão para navegar nesta pasta.</string>
+    <string name="check_again_action">Verificar novamente</string>
     <string name="empty_folder_content_desc">Vazio</string>
     <string name="no_files_found">Nenhum arquivo encontrado</string>
     <string name="batch_rename">Renomear em lote</string>
@@ -129,8 +135,6 @@
     <string name="fingerprint_failed_fallback">Falha na digital 3 vezes. Por favor, insira a senha.</string>
     <string name="enter_global_password">Inserir Senha Global</string>
     <string name="verify_action">VERIFICAR</string>
-    
-    <!-- SkylineComponents.kt -->
     <string name="grid_view">Grade</string>
     <string name="list_view">Lista</string>
     <string name="menu_content_desc">Menu</string>
@@ -138,15 +142,11 @@
     <string name="organise_files">Organizar arquivos</string>
     <string name="trash">Lixeira</string>
     <string name="app_info">Informações do app</string>
-    
-    <!-- SmbConnectionsScreen.kt -->
     <string name="smb_connections_title">Conexões SMB</string>
     <string name="add_content_desc">Adicionar</string>
     <string name="new_connection">Nova conexão</string>
     <string name="stop_connection">Parar</string>
     <string name="connect_action">Conectar</string>
-    
-    <!-- SmbFormScreen.kt -->
     <string name="add_smb_connection_title">Adicionar conexão SMB</string>
     <string name="display_name_hint">Nome de exibição (ex. Meu NAS)</string>
     <string name="host_ip_label">Host ou IP</string>
@@ -154,8 +154,6 @@
     <string name="share_name_label">Nome do compartilhamento</string>
     <string name="domain_optional_label">Domínio (Opcional)</string>
     <string name="username_label">Nome de usuário</string>
-    
-    <!-- ThemeBottomSheet.kt -->
     <string name="theme_mode_label">Modo do tema</string>
     <string name="dynamic_color_label">Cor dinâmica</string>
     <string name="use_system_theme_color">Usar cor do tema do sistema</string>
@@ -172,8 +170,6 @@
     <string name="enter_both_passwords_error">Por favor, insira as senhas antiga e nova.</string>
     <string name="biometrics_label">Biometria</string>
     <string name="enable_fingerprint_access">Ativar acesso por impressão digital</string>
-    
-    <!-- TrashScreen.kt -->
     <string name="bin_disabled">Lixeira (DESATIVADA)</string>
     <string name="files_deleted_permanently">Os arquivos são excluídos permanentemente</string>
     <string name="deselect_all">Desmarcar tudo</string>
@@ -184,8 +180,6 @@
     <string name="enable_bin">Ativar lixeira</string>
     <string name="time_label">Tempo</string>
     <string name="unit_label">Unidade</string>
-    
-    <!-- SearchOverlay.kt & FolderScreen.kt -->
     <string name="search_files_hint">Pesquisar arquivos...</string>
     <string name="filter_all">Todos</string>
     <string name="filter_folders">Pastas</string>
@@ -194,16 +188,8 @@
     <string name="filter_docs">Docs</string>
     <string name="filter_media">Mídia</string>
     <string name="filter_documents">Documentos</string>
-    
-    <!-- DriveAuthScreen.kt -->
     <string name="connect_action_cloud">Conectar</string>
     <string name="disconnect_action_cloud">Desconectar</string>
-    
-    <!-- Plurals -->
-    <plurals name="files_selected">
-        <item quantity="one">1 arquivo selecionado</item>
-        <item quantity="other">%1$d arquivos selecionados</item>
-    </plurals>
     <string name="file_size_and_date">%1$s - %2$s</string>
     <string name="page_number">Página %1$d</string>
     <string name="error_opening_pdf">Erro ao abrir o PDF: %1$s</string>
@@ -219,22 +205,16 @@
     <string name="grid_columns_value">%1$d</string>
     <string name="bin_retention_title">Lixeira (%1$d %2$s)</string>
     <string name="bin_retention_desc">Arquivos excluídos após %1$d %2$s</string>
-
-    <!-- New Strings -->
-    <plurals name="items_ready">
-        <item quantity="one">%1$d ITEM PRONTO</item>
-        <item quantity="other">%1$d ITENS PRONTOS</item>
-    </plurals>
-    <string name="app_name_brand" translatable="false">Ripple Files</string>
-    <string name="app_tagline" translatable="false">Every file, in flow.</string>
-    <string name="developer_name" translatable="false">GokuCruz</string>
-    <string name="developer_email" translatable="false">gokulsb009@gmail.com</string>
-    <string name="provider_gdrive" translatable="false">GDrive</string>
-    <string name="provider_mega" translatable="false">Mega</string>
-    <string name="provider_dropbox" translatable="false">Dropbox</string>
-    <string name="provider_lan_smb" translatable="false">LAN/SMB</string>
-    <string name="provider_ftp" translatable="false">FTP</string>
-    <string name="provider_sftp" translatable="false">SFTP</string>
+    <string name="app_name_brand">Ripple Files</string>
+    <string name="app_tagline">Every file, in flow.</string>
+    <string name="developer_name">GokuCruz</string>
+    <string name="developer_email">gokulsb009@gmail.com</string>
+    <string name="provider_gdrive">GDrive</string>
+    <string name="provider_mega">Mega</string>
+    <string name="provider_dropbox">Dropbox</string>
+    <string name="provider_lan_smb">LAN/SMB</string>
+    <string name="provider_ftp">FTP</string>
+    <string name="provider_sftp">SFTP</string>
     <string name="version_label">Versão %1$s</string>
     <string name="about_app_title">Sobre o Ripple Files</string>
     <string name="app_description">Ripple Files é um gerenciador de arquivos moderno, poderoso e com um belo design desenvolvido para Android.</string>
@@ -261,5 +241,98 @@
     <string name="and_more_files">E mais %1$d...</string>
     <string name="no_saved_connections">Nenhuma conexão salva</string>
     <string name="item_count_and_date">%1$s · %2$s</string>
-
+    <string name="nav_home">Início</string>
+    <string name="nav_browse">Navegar</string>
+    <string name="nav_send">Enviar</string>
+    <string name="cat_images">Imagens</string>
+    <string name="cat_videos">Vídeos</string>
+    <string name="cat_audio">Áudio</string>
+    <string name="cat_docs">Documentos</string>
+    <string name="cat_apps">Aplicativos</string>
+    <string name="cat_downloads">Downloads</string>
+    <string name="cat_archives">Arquivos</string>
+    <string name="cat_large">Grandes</string>
+    <string name="gb_free">%1$s GB livres</string>
+    <string name="storage_gb_free">GB livres</string>
+    <string name="used_of_storage">%1$s · %2$s de %3$s GB</string>
+    <string name="no_recent_files">Nenhum arquivo recente</string>
+    <string name="no_files_found_query">Nenhum arquivo encontrado para \"%1$s\"</string>
+    <string name="storage_locations">Locais de armazenamento</string>
+    <string name="add_connection">Adicionar conexão</string>
+    <string name="switch_storage">Mudar armazenamento</string>
+    <string name="disconnect_action">Desconectar</string>
+    <string name="disconnect_prompt">Desconectar %1$s?</string>
+    <string name="logout_prompt">Sair de %1$s?</string>
+    <string name="sort_by">Ordenar por</string>
+    <string name="filter_label">Filtrar</string>
+    <string name="this_folder_empty">Esta pasta está vazia</string>
+    <string name="failed_to_load_files">Falha ao carregar arquivos</string>
+    <string name="select_files_from_drive">Selecionar arquivos do Drive</string>
+    <string name="connect_cloud_storage">Conectar armazenamento em nuvem</string>
+    <string name="connect_cloud_desc">Acesse seus arquivos no Google Drive, Mega, Dropbox ou servidor de rede perfeitamente em Navegar.</string>
+    <string name="cloud_network_drives">Unidades em nuvem e rede</string>
+    <string name="sort_name">Nome</string>
+    <string name="sort_date_modified">Data de modificação</string>
+    <string name="sort_size_label">Tamanho</string>
+    <string name="all_files">Todos os arquivos</string>
+    <string name="settings_vibration">Feedback de vibração</string>
+    <string name="settings_vibration_desc">Feedback tátil para toques</string>
+    <string name="settings_appearance">Aparência</string>
+    <string name="settings_appearance_desc">Tema, cores, fonte e layout</string>
+    <string name="settings_language">Idioma</string>
+    <string name="settings_language_default">Padrão do dispositivo</string>
+    <string name="settings_security">Segurança</string>
+    <string name="settings_security_desc">Senha e acesso biométrico</string>
+    <string name="settings_viewers">Visualizadores</string>
+    <string name="settings_viewers_desc">Aplicativos de visualização padrão</string>
+    <string name="settings_organizer">Organizador</string>
+    <string name="settings_organizer_desc">Organização automática de arquivos</string>
+    <string name="settings_trash_bin">Lixeira</string>
+    <string name="settings_trash_desc">Retenção e exclusão automática</string>
+    <string name="settings_hidden_files">Mostrar arquivos ocultos</string>
+    <string name="settings_hidden_files_desc">Exibir itens do sistema e ocultos</string>
+    <string name="settings_nearby_share">Compartilhar por proximidade</string>
+    <string name="settings_nearby_desc">Nome do dispositivo e configurações de transferência</string>
+    <string name="settings_about">Sobre</string>
+    <string name="settings_about_desc">Versão, desenvolvedor e licença</string>
+    <string name="settings_privacy_policy">Política de privacidade</string>
+    <string name="theme_system">Seguir o sistema</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Escuro</string>
+    <string name="amoled_black">Preto AMOLED</string>
+    <string name="amoled_black_subtitle">Fundo preto puro para telas OLED – apenas tema escuro.</string>
+    <string name="amoled_black_disabled_subtitle">Aplica-se apenas ao tema escuro</string>
+    <string name="add_ftp_connection_title">Adicionar conexão FTP</string>
+    <string name="add_sftp_connection_title">Adicionar conexão SFTP</string>
+    <string name="ftp_connections_title">Conexões FTP</string>
+    <string name="sftp_connections_title">Conexões SFTP</string>
+    <string name="use_ftps_label">Usar FTPS (TLS)</string>
+    <string name="ftp_connection_details">%1$s:%2$d</string>
+    <string name="sftp_connection_details">%1$s:%2$d</string>
+    <string name="theme_lightness">Brilho do tema (Modo escuro)</string>
+    <string name="lock_file">Bloquear</string>
+    <string name="unlock_file">Desbloquear</string>
+    <string name="pause">Pausar</string>
+    <string name="done_action">Concluído</string>
+    <string name="new_folder">Nova pasta</string>
+    <string name="new_file">Novo arquivo</string>
+    <string name="add_cloud">Adicionar nuvem</string>
+    <string name="receive_action">Receber</string>
+    <string name="send_and_receive">Enviar e receber</string>
+    <string name="nearby_devices">Dispositivos próximos (%1$d)</string>
+    <string name="staged_files">Arquivos preparados (%1$d)</string>
+    <string name="add_action">+ Adicionar</string>
+    <string name="clear_action">Limpar</string>
+    <string name="create_title">Criar</string>
+    <string name="app_name">Ripple Files · Gerenciador de Arquivos</string>
+    <string name="launcher_name">Ripple Files\nGerenciador de Arquivos</string>
+    <string name="settings_music_player">Reprodutor de música</string>
+    <string name="settings_music_player_desc">Preferências de reprodução e mini reprodutor</string>
+    <string name="settings_mini_player_auto_close">Fechar automaticamente após pausa</string>
+    <string name="settings_mini_player_auto_close_desc">Fecha o mini reprodutor após pausar</string>
+    <string name="auto_close_never">Não fechar</string>
+    <string name="auto_close_5s">5s</string>
+    <string name="auto_close_10s">10s</string>
+    <string name="auto_close_30s">30s</string>
+    <string name="close_player">Fechar reprodutor</string>
 </resources>

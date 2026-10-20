@@ -31,20 +31,35 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
 import com.ripple.filemanager.FileItem
+import com.ripple.filemanager.R
 import com.ripple.filemanager.SortMode
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.filled.ArrowDropDown
+import com.ripple.filemanager.ui.theme.LocalAppFont
 import com.ripple.filemanager.ui.getFolderAccent
+import kotlinx.coroutines.launch
 import java.io.File
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * Expressive Browse Screen:
@@ -54,6 +69,11 @@ import java.io.File
  * - SectionContainer with list rows or grid cards
  * - Folder cards keep per-folder colour + item-count pill
  */
+sealed class BrowseStoragePage {
+    data class Storage(val item: ConnectedStorageItem) : BrowseStoragePage()
+    object ConnectPrompt : BrowseStoragePage()
+}
+
 @Composable
 fun ExpressiveBrowseScreen(
     state: AppState,
@@ -63,181 +83,417 @@ fun ExpressiveBrowseScreen(
     onMenuClick: () -> Unit = {},
     onTrashClick: () -> Unit = { onAction(AppAction.SetTrashScreenVisible(true)) },
     onOrganiseClick: () -> Unit = { onAction(AppAction.OrganiseDownloads) },
+    onOpenNewConnection: () -> Unit = {},
+    onConnectGoogleDrive: () -> Unit = {},
+    onConnectMega: () -> Unit = {},
+    onConnectDropbox: () -> Unit = {},
+    onConnectNextcloud: () -> Unit = {},
+    onConnectWebDav: () -> Unit = {},
+    onConnectSftp: () -> Unit = {},
+    onConnectFtp: () -> Unit = {},
+    onConnectSmb: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     SideEffect {
         com.ripple.filemanager.ui.TabSwitchLatencyTracker.onBrowseCompose(state.location, state.files.size, state.isLoading)
     }
     val colors = ExpressiveTheme.colors
+    val coroutineScope = rememberCoroutineScope()
     var showSortSheet by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var showStorageSheet by remember { mutableStateOf(false) }
+
     val rootPath = Environment.getExternalStorageDirectory().absolutePath
 
-    val folderTitle = remember(state.location) {
-        if (state.location == rootPath || state.location == "home") "Browse"
-        else if (state.location.contains("/")) state.location.substringAfterLast("/").ifEmpty { "Browse" }
-        else when {
-            state.location.startsWith("drive") -> "Google Drive"
-            state.location.startsWith("mega") -> "Mega"
-            state.location.startsWith("dropbox") -> "Dropbox"
-            state.location.startsWith("smb") -> "SMB"
-            state.location == "recent" -> "Recent"
-            state.location == "pinned" -> "Pinned"
-            else -> state.location.replaceFirstChar { it.uppercase() }
+    // 1. All connected storages
+    val connectedStorages = remember(state) { getConnectedStorages(state) }
+    val hasCloudStorages = remember(connectedStorages) {
+        connectedStorages.any { it.id != "internal" && it.id != "sd" }
+    }
+
+    // 2. Ordered list of pages: Internal -> SD -> Cloud/Network -> ConnectPrompt (when no cloud connected)
+    val pages = remember(connectedStorages, hasCloudStorages) {
+        val list = connectedStorages.map { BrowseStoragePage.Storage(it) }.toMutableList<BrowseStoragePage>()
+        if (!hasCloudStorages) {
+            list.add(BrowseStoragePage.ConnectPrompt)
+        }
+        list
+    }
+
+    // 3. Current active storage ID based on state.location
+    val currentStorageId = remember(state.location, state.sdCardPath) {
+        com.ripple.filemanager.getStorageIdForLocation(state.location, state.sdCardPath)
+    }
+
+    val initialPageIndex = remember(pages) {
+        val idx = pages.indexOfFirst { it is BrowseStoragePage.Storage && it.item.id == currentStorageId }
+        if (idx >= 0) idx else 0
+    }
+
+    val pagerState = rememberPagerState(
+        initialPage = initialPageIndex,
+        pageCount = { pages.size }
+    )
+
+    val activeStorageItem = remember(currentStorageId, connectedStorages) {
+        connectedStorages.find { it.id == currentStorageId } ?: connectedStorages.firstOrNull()
+    }
+
+    // 4. Sync pager with currentStorageId (from dropdown / external navigation)
+    LaunchedEffect(currentStorageId) {
+        val targetIndex = pages.indexOfFirst { it is BrowseStoragePage.Storage && it.item.id == currentStorageId }
+        if (targetIndex >= 0 && targetIndex != pagerState.currentPage && !pagerState.isScrollInProgress) {
+            pagerState.animateScrollToPage(targetIndex)
         }
     }
 
-    val isAtRoot = state.location == rootPath || state.location == "home" || !state.location.contains("/")
-    val browseSubtitle = if (isAtRoot) "Internal storage" else state.location.replace(rootPath, "Storage")
+    // 5. Sync currentStorageId with pager swipe
+    LaunchedEffect(pagerState.currentPage) {
+        val page = pages.getOrNull(pagerState.currentPage)
+        if (page is BrowseStoragePage.Storage) {
+            if (page.item.id != currentStorageId) {
+                onAction(AppAction.SwitchToStorage(page.item.id, page.item.location))
+            }
+        }
+    }
+
+    // 6. Root detection and Back navigation
+    val currentPageObj = pages.getOrNull(pagerState.currentPage)
+    val isAtRoot = remember(state.location, currentStorageId, state.sdCardPath, state.driveFolderStack, currentPageObj) {
+        when (currentPageObj) {
+            is BrowseStoragePage.ConnectPrompt -> true
+            is BrowseStoragePage.Storage -> {
+                when {
+                    currentStorageId == "internal" -> state.location == rootPath || state.location == "home" || !state.location.contains("/")
+                    currentStorageId == "sd" -> {
+                        val sdRoot = state.sdCardPath ?: "sd"
+                        state.location == sdRoot || state.location == "sd"
+                    }
+                    currentStorageId == "drive" -> state.location == "drive" || state.driveFolderStack.isEmpty()
+                    currentStorageId == "mega" -> state.location == "mega" || state.driveFolderStack.isEmpty()
+                    currentStorageId == "dropbox" -> state.location == "dropbox" || state.driveFolderStack.isEmpty()
+                    else -> state.location.endsWith(":/") || state.driveFolderStack.isEmpty()
+                }
+            }
+            null -> true
+        }
+    }
+
+    fun navigateUp() {
+        if (state.location.startsWith("/")) {
+            val parent = java.io.File(state.location).parent
+            val minRoot = if (currentStorageId == "sd" && state.sdCardPath != null) state.sdCardPath!! else rootPath
+            if (parent != null && parent.length >= minRoot.length) {
+                onAction(AppAction.SetLocation(parent))
+            } else {
+                onAction(AppAction.SetLocation(minRoot))
+            }
+        } else if (state.driveFolderStack.isNotEmpty()) {
+            onAction(AppAction.NavigateBackInDrive)
+        } else {
+            onAction(AppAction.SetLocation("home"))
+        }
+    }
+
+    BackHandler(enabled = true) {
+        if (!isAtRoot) {
+            navigateUp()
+        } else {
+            onAction(AppAction.SetLocation("home"))
+        }
+    }
+
+    // Header Subtitle: active storage name with chevron
+    val headerSubtitle = when (currentPageObj) {
+        is BrowseStoragePage.ConnectPrompt -> "Connect storage"
+        is BrowseStoragePage.Storage -> currentPageObj.item.name
+        null -> activeStorageItem?.name ?: "Internal storage"
+    }
+
+    val currentStorageRoot = when (currentStorageId) {
+        "internal" -> rootPath
+        "sd" -> state.sdCardPath ?: "sd"
+        else -> activeStorageItem?.location ?: rootPath
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        // Shared Expressive Header with search bar
+        // 1. Expressive Screen Header with storage switcher subtitle
         ExpressiveScreenHeader(
-            title = folderTitle,
-            subtitle = browseSubtitle,
+            title = stringResource(R.string.nav_browse),
+            subtitle = headerSubtitle,
+            onSubtitleClick = { showStorageSheet = true },
+            subtitleChevron = true,
             leftIcon = if (isAtRoot) Icons.Default.Menu else Icons.AutoMirrored.Filled.ArrowBack,
-            onLeftClick = if (isAtRoot) onMenuClick else {
-                {
-                    val parent = java.io.File(state.location).parent
-                    if (parent != null && parent.length >= rootPath.length) {
-                        onAction(AppAction.SetLocation(parent))
-                    } else {
-                        onAction(AppAction.SetLocation(rootPath))
-                    }
-                }
-            },
+            onLeftClick = if (isAtRoot) onMenuClick else { { navigateUp() } },
             leftDescription = if (isAtRoot) "Open menu" else "Back",
             rightIcon = Icons.Outlined.Delete,
             onRightClick = onTrashClick,
             rightDescription = "Open trash",
-            showSearch = true,
+            showSearch = currentPageObj !is BrowseStoragePage.ConnectPrompt,
             query = state.query,
             onQueryChange = { onAction(AppAction.SetQuery(it)) },
-            searchPlaceholder = "Search files & folders...",
+            searchPlaceholder = stringResource(R.string.search_files_hint),
             onAiSearchClick = onOrganiseClick
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
 
-        // Breadcrumb: Horizontal row with path segments, current segment as accent pill
-        BrowseBreadcrumbs(
-            currentLocation = state.location,
-            rootPath = rootPath,
-            onNavigate = { onAction(AppAction.SetLocation(it)) }
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Chips Row: Sort, Filter, List/Grid Toggle
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Sort Chip
-            ExpressiveChip(
-                label = when (state.sortMode) {
-                    SortMode.ALPHABETICAL -> "Name"
-                    SortMode.DATE -> "Date"
-                    SortMode.SIZE -> "Size"
-                },
-                selected = state.sortMode != SortMode.ALPHABETICAL,
-                icon = Icons.Outlined.Sort,
-                onClick = { showSortSheet = true }
+        // 3. Breadcrumbs (independent horizontal scroll, placed above pager to avoid conflict)
+        if (currentPageObj !is BrowseStoragePage.ConnectPrompt) {
+            BrowseBreadcrumbs(
+                currentLocation = state.location,
+                rootPath = currentStorageRoot,
+                driveFolderStack = state.driveFolderStack,
+                currentFolderName = state.currentFolderName,
+                storageName = activeStorageItem?.name ?: "Storage",
+                onNavigate = { onAction(AppAction.SetLocation(it)) }
             )
 
-            // Filter Chip
-            ExpressiveChip(
-                label = if (state.filter != "all") state.filter.replaceFirstChar { it.uppercase() } else "Filter",
-                selected = state.filter != "all",
-                icon = Icons.Outlined.FilterList,
-                onClick = { showFilterSheet = true }
-            )
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            // List / Grid Toggle
-            IconButton(
-                onClick = { onAction(AppAction.ToggleViewMode) },
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(colors.card)
+            // 4. Controls row: Sort, Filter, List/Grid toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (state.isListMode) Icons.Default.GridView else Icons.Default.ViewList,
-                    contentDescription = "Toggle view",
-                    tint = colors.text,
-                    modifier = Modifier.size(20.dp)
+                ExpressiveChip(
+                    label = when (state.sortMode) {
+                        SortMode.ALPHABETICAL -> stringResource(R.string.sort_name)
+                        SortMode.DATE -> stringResource(R.string.sort_date_modified)
+                        SortMode.SIZE -> stringResource(R.string.sort_size_label)
+                    },
+                    selected = state.sortMode != SortMode.ALPHABETICAL,
+                    icon = Icons.Outlined.Sort,
+                    onClick = { showSortSheet = true }
                 )
+
+                ExpressiveChip(
+                    label = if (state.filter != "all") {
+                        when (state.filter) {
+                            "image", "images" -> stringResource(R.string.cat_images)
+                            "video", "videos" -> stringResource(R.string.cat_videos)
+                            "audio" -> stringResource(R.string.cat_audio)
+                            "doc", "docs" -> stringResource(R.string.cat_docs)
+                            "apk", "apps" -> stringResource(R.string.cat_apps)
+                            "archive", "archives" -> stringResource(R.string.cat_archives)
+                            else -> state.filter.replaceFirstChar { it.uppercase() }
+                        }
+                    } else stringResource(R.string.filter_label),
+                    selected = state.filter != "all",
+                    icon = Icons.Outlined.FilterList,
+                    onClick = { showFilterSheet = true }
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                IconButton(
+                    onClick = { onAction(AppAction.ToggleViewMode) },
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(colors.card)
+                ) {
+                    Icon(
+                        imageVector = if (state.isListMode) Icons.Default.GridView else Icons.Default.ViewList,
+                        contentDescription = "Toggle view",
+                        tint = colors.text,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+        } else {
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Content in SectionContainer
-        SectionContainer(
+        // 5. HorizontalPager for swiping between storages
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-        ) {
-            if (state.files.isEmpty()) {
-                InnerCard(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(32.dp),
-                        contentAlignment = Alignment.Center
+        ) { pageIndex ->
+            val page = pages[pageIndex]
+            when (page) {
+                is BrowseStoragePage.ConnectPrompt -> {
+                    ConnectCloudPromptContent(
+                        onConnectGoogleDrive = onConnectGoogleDrive,
+                        onConnectMega = onConnectMega,
+                        onConnectDropbox = onConnectDropbox,
+                        onConnectNextcloud = onConnectNextcloud,
+                        onConnectWebDav = onConnectWebDav,
+                        onConnectSftp = onConnectSftp,
+                        onConnectFtp = onConnectFtp,
+                        onConnectSmb = onConnectSmb
+                    )
+                }
+                is BrowseStoragePage.Storage -> {
+                    val isActivePage = page.item.id == currentStorageId
+                    SectionContainer(
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        Text(
-                            text = "This folder is empty",
-                            fontSize = 15.sp,
-                            color = colors.muted,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            } else if (state.isListMode) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 130.dp)
-                ) {
-                    items(state.files, key = { it.id }) { file ->
-                        BrowseListRow(
-                            file = file,
-                            isSelected = state.selectedFiles.contains(file.id),
-                            onSelect = { onAction(AppAction.ToggleSelection(file.id)) },
-                            onClick = { onFileClick(file) },
-                            onMenuClick = { onFileMenuClick(file) }
-                        )
-                    }
-                }
-            } else {
-                // Grid mode
-                val columns = state.gridColumns.coerceIn(2, 4)
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(columns),
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 130.dp)
-                ) {
-                    items(state.files, key = { it.id }) { file ->
-                        BrowseGridCard(
-                            file = file,
-                            isSelected = state.selectedFiles.contains(file.id),
-                            onSelect = { onAction(AppAction.ToggleSelection(file.id)) },
-                            onClick = { onFileClick(file) },
-                            onMenuClick = { onFileMenuClick(file) },
-                            columns = columns
-                        )
+                        if (!isActivePage || state.isLoading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                com.ripple.filemanager.ui.ExpressiveCircularLoader(
+                                    size = 46.dp,
+                                    color = colors.accent
+                                )
+                            }
+                        } else if (state.errorMessage != null && state.files.isEmpty()) {
+                            StorageErrorCard(
+                                message = state.errorMessage,
+                                onRetry = { onAction(AppAction.Reload) }
+                            )
+                        } else if ((state.location.contains("Android/data") || state.location.contains("Android/obb")) && !state.hasShizuku) {
+                            ShizukuRestrictedAccessCard(
+                                location = state.location,
+                                onAction = onAction
+                            )
+                        } else if (state.files.isEmpty()) {
+                            InnerCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.this_folder_empty),
+                                        fontSize = 15.sp,
+                                        color = colors.muted,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    if (currentStorageId == "drive") {
+                                        Spacer(modifier = Modifier.height(14.dp))
+                                        Button(
+                                            onClick = onConnectGoogleDrive,
+                                            shape = RoundedCornerShape(24.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = colors.accent,
+                                                contentColor = colors.ink
+                                            )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Cloud,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = stringResource(R.string.select_files_from_drive),
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (state.isListMode) {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(bottom = 130.dp)
+                            ) {
+                                items(state.files, key = { it.id }) { file ->
+                                    BrowseListRow(
+                                        file = file,
+                                        isSelected = state.selectedFiles.contains(file.id),
+                                        onSelect = { onAction(AppAction.ToggleSelection(file.id)) },
+                                        onClick = { onFileClick(file) },
+                                        onMenuClick = { onFileMenuClick(file) }
+                                    )
+                                }
+                            }
+                        } else {
+                            val columns = state.gridColumns.coerceIn(2, 4)
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(columns),
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                contentPadding = PaddingValues(bottom = 130.dp)
+                            ) {
+                                items(state.files, key = { it.id }) { file ->
+                                    BrowseGridCard(
+                                        file = file,
+                                        isSelected = state.selectedFiles.contains(file.id),
+                                        onSelect = { onAction(AppAction.ToggleSelection(file.id)) },
+                                        onClick = { onFileClick(file) },
+                                        onMenuClick = { onFileMenuClick(file) },
+                                        columns = columns
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    // Storage Switcher Bottom Sheet
+    if (showStorageSheet) {
+        StorageSwitcherBottomSheet(
+            state = state,
+            currentStorageId = currentStorageId,
+            onDismissRequest = { showStorageSheet = false },
+            onSelectStorage = { location ->
+                val stId = com.ripple.filemanager.getStorageIdForLocation(location, state.sdCardPath)
+                onAction(AppAction.SwitchToStorage(stId, location))
+                showStorageSheet = false
+            },
+            onAddConnection = {
+                showStorageSheet = false
+                onOpenNewConnection()
+            },
+            onLogoutStorage = { storage ->
+                when {
+                    storage.id == "drive" -> {
+                        onAction(AppAction.SetGoogleDriveAuthStatus(false, null))
+                    }
+                    storage.id == "mega" -> {
+                        onAction(AppAction.SetMegaAuthStatus(false, null, null))
+                    }
+                    storage.id == "dropbox" -> {
+                        onAction(AppAction.SetDropboxAuthStatus(false, null))
+                    }
+                    storage.id.startsWith("smb_") -> {
+                        val smbId = storage.id.removePrefix("smb_")
+                        onAction(AppAction.SmbAction.DeleteConnection(smbId))
+                        onAction(AppAction.SmbAction.Disconnect(smbId))
+                    }
+                    storage.id.startsWith("ftp_") -> {
+                        val ftpId = storage.id.removePrefix("ftp_")
+                        onAction(AppAction.FtpAction.DeleteConnection(ftpId))
+                        onAction(AppAction.FtpAction.Disconnect(ftpId))
+                    }
+                    storage.id.startsWith("sftp_") -> {
+                        val sftpId = storage.id.removePrefix("sftp_")
+                        onAction(AppAction.SftpAction.DeleteConnection(sftpId))
+                        onAction(AppAction.SftpAction.Disconnect(sftpId))
+                    }
+                    storage.id.startsWith("webdav_") || storage.id.startsWith("nextcloud_") -> {
+                        val webdavId = storage.id.substringAfter("_")
+                        onAction(AppAction.WebDavAction.DeleteConnection(webdavId))
+                        onAction(AppAction.WebDavAction.Disconnect(webdavId))
+                    }
+                }
+                val internalRoot = Environment.getExternalStorageDirectory().absolutePath
+                onAction(AppAction.SwitchToStorage("internal", internalRoot))
+                showStorageSheet = false
+            }
+        )
     }
 
     // Sort Bottom Sheet
@@ -273,6 +529,9 @@ fun ExpressiveBrowseScreen(
 internal fun BrowseBreadcrumbs(
     currentLocation: String,
     rootPath: String,
+    driveFolderStack: List<Pair<String, String>> = emptyList(),
+    currentFolderName: String? = null,
+    storageName: String = "Storage",
     onNavigate: (String) -> Unit
 ) {
     val colors = ExpressiveTheme.colors
@@ -285,66 +544,489 @@ internal fun BrowseBreadcrumbs(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        val rootLabel = when {
-            currentLocation.startsWith("drive") -> "Google Drive"
-            currentLocation.startsWith("mega") -> "Mega"
-            currentLocation.startsWith("dropbox") -> "Dropbox"
-            currentLocation.startsWith("smb") -> "SMB"
-            currentLocation.startsWith("ftp") -> "FTP"
-            currentLocation.startsWith("sftp") -> "SFTP"
-            currentLocation.startsWith("nextcloud") -> "Nextcloud"
-            currentLocation.startsWith("webdav") -> "WebDAV"
-            currentLocation == "recent" -> "Recent"
-            currentLocation == "pinned" -> "Pinned"
-            else -> "Storage"
+        val isLocalPath = currentLocation.startsWith("/")
+        val isRoot = if (isLocalPath) {
+            currentLocation == rootPath || currentLocation.length <= rootPath.length
+        } else {
+            driveFolderStack.isEmpty() && (currentLocation == rootPath || currentLocation == "drive" || currentLocation == "mega" || currentLocation == "dropbox" || currentLocation.endsWith(":/"))
         }
-        val isRoot = currentLocation == rootPath || currentLocation == "home" || currentLocation == "drive" || currentLocation == "mega" || currentLocation == "dropbox" || currentLocation == "recent" || currentLocation == "pinned"
-        
+
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(16.dp))
                 .background(if (isRoot) colors.accent else colors.card)
-                .clickable { 
-                    if (currentLocation.startsWith("drive")) onNavigate("drive")
-                    else if (currentLocation.startsWith("mega")) onNavigate("mega")
-                    else if (currentLocation.startsWith("dropbox")) onNavigate("dropbox")
-                    else onNavigate(rootPath) 
-                }
+                .clickable { onNavigate(rootPath) }
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
             Text(
-                text = rootLabel,
+                text = storageName,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = if (isRoot) colors.ink else colors.text
             )
         }
 
-        // Relative segments
-        if (currentLocation.startsWith(rootPath) && currentLocation.length > rootPath.length) {
-            val relative = currentLocation.removePrefix(rootPath).removePrefix("/")
-            val segments = relative.split("/")
-            var accumulated = rootPath
+        if (isLocalPath) {
+            // Local path segments
+            if (currentLocation.startsWith(rootPath) && currentLocation.length > rootPath.length) {
+                val relative = currentLocation.removePrefix(rootPath).removePrefix("/")
+                val segments = relative.split("/").filter { it.isNotEmpty() }
+                var accumulated = rootPath
 
-            segments.forEachIndexed { index, seg ->
+                segments.forEachIndexed { index, seg ->
+                    Text("/", color = colors.muted, fontSize = 12.sp)
+                    accumulated = "$accumulated/$seg"
+                    val target = accumulated
+                    val isLast = index == segments.size - 1
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isLast) colors.accent else colors.card)
+                            .clickable { onNavigate(target) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = seg,
+                            fontSize = 12.sp,
+                            fontWeight = if (isLast) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isLast) colors.ink else colors.text
+                        )
+                    }
+                }
+            }
+        } else {
+            // Cloud folder stack segments
+            driveFolderStack.forEach { (stackLoc, stackName) ->
                 Text("/", color = colors.muted, fontSize = 12.sp)
-                accumulated = "$accumulated/$seg"
-                val target = accumulated
-                val isLast = index == segments.size - 1
-
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
-                        .background(if (isLast) colors.accent else colors.card)
-                        .clickable { onNavigate(target) }
+                        .background(colors.card)
+                        .clickable { onNavigate(stackLoc) }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = seg,
+                        text = stackName,
                         fontSize = 12.sp,
-                        fontWeight = if (isLast) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isLast) colors.ink else colors.text
+                        fontWeight = FontWeight.Normal,
+                        color = colors.text
                     )
+                }
+            }
+            if (currentFolderName != null && !isRoot) {
+                Text("/", color = colors.muted, fontSize = 12.sp)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.accent)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = currentFolderName,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.ink
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun StorageErrorCard(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExpressiveTheme.colors
+    InnerCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CookieIcon(
+                icon = Icons.Outlined.CloudOff,
+                bgColor = ExpressiveTokens.PastelCoral,
+                size = 52.dp,
+                lobes = 8
+            )
+            Text(
+                text = stringResource(R.string.failed_to_load_files),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.text,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = message,
+                fontSize = 13.sp,
+                color = colors.muted,
+                textAlign = TextAlign.Center
+            )
+            Button(
+                onClick = onRetry,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.accent,
+                    contentColor = colors.ink
+                )
+            ) {
+                Text(stringResource(R.string.retry), fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShizukuRestrictedAccessCard(
+    location: String,
+    onAction: (AppAction) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExpressiveTheme.colors
+    val context = LocalContext.current
+    var isShizukuRunning by remember { mutableStateOf(false) }
+
+    val isShizukuInstalled = remember(context) {
+        try {
+            context.packageManager.getPackageInfo("moe.shizuku.privileged.api", 0) != null
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    LaunchedEffect(location) {
+        while (true) {
+            val running = try { rikka.shizuku.Shizuku.pingBinder() } catch (e: Exception) { false }
+            isShizukuRunning = running
+            if (running) {
+                val hasPerm = try {
+                    rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } catch (e: Exception) {
+                    false
+                }
+                if (hasPerm) {
+                    onAction(AppAction.Reload)
+                    break
+                }
+            }
+            kotlinx.coroutines.delay(2000)
+        }
+    }
+
+    InnerCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CookieIcon(
+                icon = Icons.Outlined.Lock,
+                bgColor = ExpressiveTokens.PastelCoral,
+                size = 56.dp,
+                lobes = 8
+            )
+
+            Text(
+                text = stringResource(R.string.access_restricted_title),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.text,
+                textAlign = TextAlign.Center
+            )
+
+            Text(
+                text = stringResource(R.string.access_restricted_desc),
+                fontSize = 13.sp,
+                color = colors.muted,
+                textAlign = TextAlign.Center
+            )
+
+            val statusText = when {
+                isShizukuRunning -> stringResource(R.string.shizuku_running_desc)
+                isShizukuInstalled -> stringResource(R.string.shizuku_not_running_desc)
+                else -> stringResource(R.string.shizuku_not_installed_desc)
+            }
+
+            Text(
+                text = statusText,
+                fontSize = 12.sp,
+                color = colors.text.copy(alpha = 0.85f),
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            when {
+                isShizukuRunning -> {
+                    Button(
+                        onClick = { onAction(AppAction.RequestShizukuAccess) },
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.accent,
+                            contentColor = colors.ink
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Security,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.grant_access_action),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+                isShizukuInstalled -> {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                val launchIntent = context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                                if (launchIntent != null) {
+                                    context.startActivity(launchIntent)
+                                }
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.accent,
+                                contentColor = colors.ink
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Launch,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.open_shizuku_action),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onAction(AppAction.Reload) },
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.check_again_action),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                val playIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api")).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                try {
+                                    context.startActivity(playIntent)
+                                } catch (e: Exception) {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api")).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    })
+                                }
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.accent,
+                                contentColor = colors.ink
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Download,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.install_shizuku_action),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onAction(AppAction.RequestShizukuAccess) },
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.grant_access_action),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class BrowseAddStorageOption(
+    val name: String,
+    val icon: ImageVector,
+    val pastelKey: String,
+    val onClick: () -> Unit
+)
+
+@Composable
+private fun BrowseAddStorageTile(
+    option: BrowseAddStorageOption,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExpressiveTheme.colors
+    val pastel = ExpressiveTokens.categoryPastel(option.pastelKey)
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = option.onClick
+            )
+            .padding(4.dp)
+    ) {
+        CookieIcon(
+            icon = option.icon,
+            bgColor = pastel,
+            size = 52.dp,
+            lobes = cookieLobesForName(option.name)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = option.name,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            fontFamily = LocalAppFont.current,
+            color = colors.text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun ConnectCloudPromptContent(
+    onConnectGoogleDrive: () -> Unit,
+    onConnectMega: () -> Unit,
+    onConnectDropbox: () -> Unit,
+    onConnectNextcloud: () -> Unit,
+    onConnectWebDav: () -> Unit,
+    onConnectSftp: () -> Unit,
+    onConnectFtp: () -> Unit,
+    onConnectSmb: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExpressiveTheme.colors
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 130.dp)
+    ) {
+        item {
+            SectionContainer {
+                InnerCard {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CookieIcon(
+                            icon = Icons.Outlined.Cloud,
+                            bgColor = ExpressiveTokens.PastelSky,
+                            size = 56.dp,
+                            lobes = 10
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.connect_cloud_storage),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.text,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.connect_cloud_desc),
+                            fontSize = 13.sp,
+                            color = colors.muted,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            SectionTitle(title = stringResource(R.string.cloud_network_drives))
+        }
+
+        item {
+            SectionContainer {
+                val providers = listOf(
+                    BrowseAddStorageOption("Google", Icons.Outlined.Cloud, "images", onConnectGoogleDrive),
+                    BrowseAddStorageOption("Mega", Icons.Outlined.Cloud, "archives", onConnectMega),
+                    BrowseAddStorageOption("Dropbox", Icons.Outlined.Cloud, "videos", onConnectDropbox),
+                    BrowseAddStorageOption("SMB (NAS)", Icons.Outlined.Dns, "large", onConnectSmb),
+                    BrowseAddStorageOption("Nextcloud", Icons.Outlined.CloudSync, "downloads", onConnectNextcloud),
+                    BrowseAddStorageOption("WebDAV", Icons.Outlined.Http, "docs", onConnectWebDav),
+                    BrowseAddStorageOption("SFTP", Icons.Outlined.Security, "apps", onConnectSftp),
+                    BrowseAddStorageOption("FTP", Icons.Outlined.FolderShared, "audio", onConnectFtp)
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        providers.take(4).forEach { p ->
+                            BrowseAddStorageTile(option = p, modifier = Modifier.weight(1f))
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        providers.drop(4).take(4).forEach { p ->
+                            BrowseAddStorageTile(option = p, modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }
@@ -377,6 +1059,7 @@ internal fun BrowseListRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(if (file.isHidden) 0.55f else 1f)
             .clip(rowShape)
             .background(if (isSelected) colors.accent.copy(alpha = 0.25f) else colors.card)
             .combinedClickable(
@@ -393,10 +1076,9 @@ internal fun BrowseListRow(
                 onClick = onSelect
             )
         ) {
-            CookieIcon(
-                icon = if (isSelected) Icons.Outlined.Check else (if (file.type == "folder") Icons.Outlined.Folder else Icons.AutoMirrored.Outlined.InsertDriveFile),
-                bgColor = if (isSelected) colors.accent else pastel,
-                iconTint = if (isSelected) colors.ink else ExpressiveTokens.OnPastel,
+            ExpressiveFileThumbnail(
+                file = file,
+                isSelected = isSelected,
                 size = 48.dp,
                 lobes = cookieLobesForName(file.name)
             )
@@ -481,6 +1163,7 @@ internal fun BrowseGridCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(if (file.isHidden) 0.55f else 1f)
             .clip(cardShape)
             .background(colors.card)
             .border(
@@ -507,21 +1190,12 @@ internal fun BrowseGridCard(
             modifier = Modifier.padding(cardPadding),
             verticalArrangement = Arrangement.spacedBy(if (columns >= 4) 6.dp else if (columns == 3) 8.dp else 12.dp)
         ) {
-            Box(
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onSelect
-                )
-            ) {
-                CookieIcon(
-                    icon = if (isSelected) Icons.Outlined.Check else (if (file.type == "folder") Icons.Outlined.Folder else Icons.AutoMirrored.Outlined.InsertDriveFile),
-                    bgColor = if (isSelected) colors.accent else pastel,
-                    iconTint = if (isSelected) colors.ink else ExpressiveTokens.OnPastel,
-                    size = iconSize,
-                    lobes = cookieLobesForName(file.name)
-                )
-            }
+            ExpressiveFileThumbnail(
+                file = file,
+                isSelected = isSelected,
+                size = iconSize,
+                lobes = cookieLobesForName(file.name)
+            )
 
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
@@ -585,12 +1259,12 @@ internal fun SortBottomSheet(
         containerColor = colors.container,
         shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
     ) {
-        ExpressiveSheetContent(title = "Sort by") {
+        ExpressiveSheetContent(title = stringResource(R.string.sort_by)) {
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 listOf(
-                    SortMode.ALPHABETICAL to "Name",
-                    SortMode.DATE to "Date modified",
-                    SortMode.SIZE to "Size"
+                    SortMode.ALPHABETICAL to stringResource(R.string.sort_name),
+                    SortMode.DATE to stringResource(R.string.sort_date_modified),
+                    SortMode.SIZE to stringResource(R.string.sort_size_label)
                 ).forEach { (mode, label) ->
                     val isSelected = mode == currentMode
                     Row(
@@ -633,16 +1307,16 @@ internal fun FilterBottomSheet(
         containerColor = colors.container,
         shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
     ) {
-        ExpressiveSheetContent(title = "Filter") {
+        ExpressiveSheetContent(title = stringResource(R.string.filter_label)) {
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 listOf(
-                    "all" to "All files",
-                    "image" to "Images",
-                    "video" to "Videos",
-                    "audio" to "Audio",
-                    "doc" to "Documents",
-                    "apk" to "Apps",
-                    "archive" to "Archives"
+                    "all" to stringResource(R.string.all_files),
+                    "image" to stringResource(R.string.cat_images),
+                    "video" to stringResource(R.string.cat_videos),
+                    "audio" to stringResource(R.string.cat_audio),
+                    "doc" to stringResource(R.string.cat_docs),
+                    "apk" to stringResource(R.string.cat_apps),
+                    "archive" to stringResource(R.string.cat_archives)
                 ).forEach { (filter, label) ->
                     val isSelected = filter == currentFilter
                     Row(

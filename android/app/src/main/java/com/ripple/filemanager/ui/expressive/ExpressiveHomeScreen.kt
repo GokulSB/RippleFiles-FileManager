@@ -12,14 +12,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.*
@@ -28,6 +31,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -37,12 +41,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
 import com.ripple.filemanager.FileItem
+import com.ripple.filemanager.R
 import java.util.Date
 import kotlin.math.cos
 import kotlin.math.sin
@@ -76,6 +82,7 @@ fun ExpressiveHomeScreen(
     onOrganiseClick: () -> Unit,
     onFileClick: (FileItem) -> Unit,
     onFileMenuClick: (FileItem) -> Unit,
+    onOpenNewConnection: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     SideEffect {
@@ -107,7 +114,8 @@ fun ExpressiveHomeScreen(
             item(key = "storage_card") {
                 ExpressiveStorageCard(
                     state = state,
-                    onOpenStorageSwitcher = { showStorageSheet = true }
+                    onOpenStorageSwitcher = { showStorageSheet = true },
+                    onAction = onAction
                 )
             }
 
@@ -132,7 +140,9 @@ fun ExpressiveHomeScreen(
             val displayedFiles = if (state.query.isNotEmpty()) {
                 state.files
             } else {
-                state.recentFiles.ifEmpty { state.files }.take(10)
+                val pool = state.recentFiles.filter { state.showHiddenFiles || !it.isHidden }
+                    .ifEmpty { state.files.filter { state.showHiddenFiles || !it.isHidden } }
+                pool.take(10)
             }
 
             if (displayedFiles.isEmpty()) {
@@ -145,7 +155,11 @@ fun ExpressiveHomeScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (state.query.isNotEmpty()) "No files found for \"${state.query}\"" else "No recent files",
+                                text = if (state.query.isNotEmpty()) {
+                                    stringResource(R.string.no_files_found_query, state.query)
+                                } else {
+                                    stringResource(R.string.no_recent_files)
+                                },
                                 fontSize = 14.sp,
                                 color = colors.muted,
                                 textAlign = TextAlign.Center
@@ -183,15 +197,54 @@ fun ExpressiveHomeScreen(
 
     // Storage Switcher Bottom Sheet
     if (showStorageSheet) {
+        val currentStId = com.ripple.filemanager.getStorageIdForLocation(state.location, state.sdCardPath)
         StorageSwitcherBottomSheet(
             state = state,
+            currentStorageId = currentStId,
             onDismissRequest = { showStorageSheet = false },
             onSelectStorage = { location ->
-                onAction(AppAction.SetLocation(location))
+                val stId = com.ripple.filemanager.getStorageIdForLocation(location, state.sdCardPath)
+                onAction(AppAction.SwitchToStorage(stId, location))
                 showStorageSheet = false
             },
             onAddConnection = {
-                onAction(AppAction.SetLocation("cloud"))
+                showStorageSheet = false
+                onOpenNewConnection()
+            },
+            onLogoutStorage = { storage ->
+                when {
+                    storage.id == "drive" -> {
+                        onAction(AppAction.SetGoogleDriveAuthStatus(false, null))
+                    }
+                    storage.id == "mega" -> {
+                        onAction(AppAction.SetMegaAuthStatus(false, null, null))
+                    }
+                    storage.id == "dropbox" -> {
+                        onAction(AppAction.SetDropboxAuthStatus(false, null))
+                    }
+                    storage.id.startsWith("smb_") -> {
+                        val smbId = storage.id.removePrefix("smb_")
+                        onAction(AppAction.SmbAction.DeleteConnection(smbId))
+                        onAction(AppAction.SmbAction.Disconnect(smbId))
+                    }
+                    storage.id.startsWith("ftp_") -> {
+                        val ftpId = storage.id.removePrefix("ftp_")
+                        onAction(AppAction.FtpAction.DeleteConnection(ftpId))
+                        onAction(AppAction.FtpAction.Disconnect(ftpId))
+                    }
+                    storage.id.startsWith("sftp_") -> {
+                        val sftpId = storage.id.removePrefix("sftp_")
+                        onAction(AppAction.SftpAction.DeleteConnection(sftpId))
+                        onAction(AppAction.SftpAction.Disconnect(sftpId))
+                    }
+                    storage.id.startsWith("webdav_") || storage.id.startsWith("nextcloud_") -> {
+                        val webdavId = storage.id.substringAfter("_")
+                        onAction(AppAction.WebDavAction.DeleteConnection(webdavId))
+                        onAction(AppAction.WebDavAction.Disconnect(webdavId))
+                    }
+                }
+                val internalRoot = Environment.getExternalStorageDirectory().absolutePath
+                onAction(AppAction.SwitchToStorage("internal", internalRoot))
                 showStorageSheet = false
             }
         )
@@ -216,7 +269,7 @@ fun ExpressiveHomeHeader(
     }
 
     ExpressiveScreenHeader(
-        title = "Files",
+        title = stringResource(R.string.app_name),
         subtitle = currentDateStr,
         modifier = modifier,
         leftIcon = Icons.Default.Menu,
@@ -228,7 +281,7 @@ fun ExpressiveHomeHeader(
         showSearch = true,
         query = query,
         onQueryChange = onQueryChange,
-        searchPlaceholder = "Search files & folders...",
+        searchPlaceholder = stringResource(R.string.search_files_hint),
         onAiSearchClick = onAiSearchClick
     )
 }
@@ -269,15 +322,16 @@ fun getConnectedStorages(state: AppState): List<ConnectedStorageItem> {
     )
 
     // 2. SD Card (if present)
-    if (state.sdCardStorageTotalGb > 0f) {
+    val sdLoc = state.sdCardPath ?: "sd"
+    if (state.sdCardStorageTotalGb > 0f || (state.sdCardPath != null && state.sdCardPath != "sd")) {
         items.add(
             ConnectedStorageItem(
                 id = "sd",
                 name = "SD Card",
                 detail = "%.1f GB free".format(state.sdCardStorageFreeGb),
-                totalGb = state.sdCardStorageTotalGb,
+                totalGb = state.sdCardStorageTotalGb.coerceAtLeast(0.1f),
                 freeGb = state.sdCardStorageFreeGb.coerceAtLeast(0f),
-                location = "sd",
+                location = sdLoc,
                 icon = Icons.Outlined.SdCard,
                 category = "large",
                 gaugeColor = ExpressiveTokens.PastelSand
@@ -346,6 +400,75 @@ fun getConnectedStorages(state: AppState): List<ConnectedStorageItem> {
         )
     }
 
+    // 6. SMB (Home NAS / local shares)
+    state.smbState.savedConnections.forEach { conn ->
+        items.add(
+            ConnectedStorageItem(
+                id = "smb_${conn.id}",
+                name = conn.displayName.ifBlank { conn.host },
+                detail = "SMB · ${conn.host}",
+                totalGb = 0f,
+                freeGb = 0f,
+                location = "smb_${conn.id}:/",
+                icon = Icons.Outlined.Dns,
+                category = "large",
+                gaugeColor = ExpressiveTokens.PastelTeal
+            )
+        )
+    }
+
+    // 7. FTP
+    state.ftpState.savedConnections.forEach { conn ->
+        items.add(
+            ConnectedStorageItem(
+                id = "ftp_${conn.id}",
+                name = conn.displayName.ifBlank { conn.host },
+                detail = "FTP · ${conn.host}",
+                totalGb = 0f,
+                freeGb = 0f,
+                location = "ftp_${conn.id}:/",
+                icon = Icons.Outlined.FolderShared,
+                category = "audio",
+                gaugeColor = ExpressiveTokens.PastelLilac
+            )
+        )
+    }
+
+    // 8. SFTP
+    state.sftpState.savedConnections.forEach { conn ->
+        items.add(
+            ConnectedStorageItem(
+                id = "sftp_${conn.id}",
+                name = conn.displayName.ifBlank { conn.host },
+                detail = "SFTP · ${conn.host}",
+                totalGb = 0f,
+                freeGb = 0f,
+                location = "sftp_${conn.id}:/",
+                icon = Icons.Outlined.Security,
+                category = "apps",
+                gaugeColor = ExpressiveTokens.PastelSky
+            )
+        )
+    }
+
+    // 9. WebDAV / Nextcloud
+    state.webDavState.savedConnections.forEach { conn ->
+        val prefix = if (conn.isNextcloud) "nextcloud" else "webdav"
+        items.add(
+            ConnectedStorageItem(
+                id = "${prefix}_${conn.id}",
+                name = conn.displayName.ifBlank { if (conn.isNextcloud) "Nextcloud" else "WebDAV" },
+                detail = if (conn.isNextcloud) "Nextcloud · ${conn.serverUrl}" else "WebDAV · ${conn.serverUrl}",
+                totalGb = 0f,
+                freeGb = 0f,
+                location = "${prefix}_${conn.id}:/",
+                icon = Icons.Outlined.CloudSync,
+                category = "downloads",
+                gaugeColor = ExpressiveTokens.PastelSand
+            )
+        )
+    }
+
     return items
 }
 
@@ -357,7 +480,8 @@ fun getConnectedStorages(state: AppState): List<ConnectedStorageItem> {
 fun ExpressiveStorageCard(
     state: AppState,
     onOpenStorageSwitcher: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onAction: (AppAction) -> Unit = {}
 ) {
     val colors = ExpressiveTheme.colors
     val storages = remember(state) { getConnectedStorages(state) }
@@ -409,7 +533,12 @@ fun ExpressiveStorageCard(
                         }
                     }
 
-                    InnerCard(modifier = cardModifier) {
+                    InnerCard(
+                        modifier = cardModifier.clickable {
+                            val stId = com.ripple.filemanager.getStorageIdForLocation(storage.location, state.sdCardPath)
+                            onAction(AppAction.SwitchToStorage(stId, storage.location))
+                        }
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -443,7 +572,7 @@ fun ExpressiveStorageCard(
                                             .padding(horizontal = 8.dp, vertical = 3.dp)
                                     ) {
                                         Text(
-                                            text = "GB free",
+                                            text = stringResource(R.string.storage_gb_free),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             fontFamily = LocalAppFont.current,
@@ -463,7 +592,12 @@ fun ExpressiveStorageCard(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "${storage.name} · %.1f of %.1f GB".format(usedGb, totalGb),
+                                        text = stringResource(
+                                            R.string.used_of_storage,
+                                            storage.name,
+                                            "%.1f".format(usedGb),
+                                            "%.1f".format(totalGb)
+                                        ),
                                         fontSize = 12.sp,
                                         fontFamily = LocalAppFont.current,
                                         color = colors.muted,
@@ -472,7 +606,7 @@ fun ExpressiveStorageCard(
                                     )
                                     Icon(
                                         imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = "Switch storage",
+                                        contentDescription = stringResource(R.string.switch_storage),
                                         tint = colors.muted,
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -579,7 +713,7 @@ fun StorageDotsGauge(
     val colors = ExpressiveTheme.colors
     val totalDots = 24
     val usedDots = ((usedPercent / 100f) * totalDots).toInt().coerceIn(0, totalDots)
-    val peachShape = remember { CookieShape(lobes = 10, amplitude = 0.08f) }
+    val peachShape = rememberIconShape(lobes = 10, amplitude = 0.08f)
     val reduced = ExpressiveMotion.isReducedMotion()
 
     // Sequential pop-in animation on first load (single session)
@@ -650,14 +784,14 @@ fun ExpressiveCategoriesSection(
 ) {
     val categories = remember {
         listOf(
-            CategoryItem("Images", Icons.Outlined.Image, "images", "image"),
-            CategoryItem("Videos", Icons.Outlined.VideoFile, "videos", "video"),
-            CategoryItem("Audio", Icons.Outlined.AudioFile, "audio", "audio"),
-            CategoryItem("Docs", Icons.Outlined.Description, "docs", "doc"),
-            CategoryItem("Apps", Icons.Outlined.Apps, "apps", "apk"),
-            CategoryItem("Downloads", Icons.Outlined.Download, "downloads", "download"),
-            CategoryItem("Archives", Icons.Outlined.Archive, "archives", "archive"),
-            CategoryItem("Large", Icons.Outlined.Storage, "large", "large")
+            CategoryItem(R.string.cat_images, Icons.Outlined.Image, "images", "image"),
+            CategoryItem(R.string.cat_videos, Icons.Outlined.VideoFile, "videos", "video"),
+            CategoryItem(R.string.cat_audio, Icons.Outlined.AudioFile, "audio", "audio"),
+            CategoryItem(R.string.cat_docs, Icons.Outlined.Description, "docs", "doc"),
+            CategoryItem(R.string.cat_apps, Icons.Outlined.Apps, "apps", "apk"),
+            CategoryItem(R.string.cat_downloads, Icons.Outlined.Download, "downloads", "download"),
+            CategoryItem(R.string.cat_archives, Icons.Outlined.Archive, "archives", "archive"),
+            CategoryItem(R.string.cat_large, Icons.Outlined.Storage, "large", "large")
         )
     }
 
@@ -723,7 +857,7 @@ fun ExpressiveCategoriesSection(
 }
 
 private data class CategoryItem(
-    val title: String,
+    @androidx.annotation.StringRes val titleRes: Int,
     val icon: ImageVector,
     val pastelKey: String,
     val filterKey: String
@@ -771,11 +905,11 @@ private fun CategoryCookieTile(
             icon = item.icon,
             bgColor = pastel,
             size = 46.dp,
-            lobes = cookieLobesForName(item.title)
+            lobes = cookieLobesForName(item.pastelKey)
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = item.title,
+            text = stringResource(item.titleRes),
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             fontFamily = LocalAppFont.current,
@@ -857,6 +991,7 @@ fun ExpressiveRecentFileRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .alpha(if (file.isHidden) 0.55f else 1f)
             .clip(rowShape)
             .background(rowBg)
             .combinedClickable(
@@ -866,7 +1001,7 @@ fun ExpressiveRecentFileRow(
             .padding(vertical = 10.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Cookie file-type icon (tap = toggle selection) with spring-animated check overlay
+        // File thumbnail / icon (tap = toggle selection)
         Box(
             modifier = Modifier
                 .clickable(
@@ -876,33 +1011,12 @@ fun ExpressiveRecentFileRow(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            CookieIcon(
-                icon = icon,
-                bgColor = pastel,
-                iconTint = ExpressiveTokens.OnPastel,
+            ExpressiveFileThumbnail(
+                file = file,
+                isSelected = isSelected,
                 size = 42.dp,
                 lobes = cookieLobesForName(file.name)
             )
-
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isSelected,
-                enter = if (reduced) androidx.compose.animation.fadeIn() else androidx.compose.animation.scaleIn(
-                    initialScale = 0.5f,
-                    animationSpec = ExpressiveMotion.SpringSpec
-                ) + androidx.compose.animation.fadeIn(ExpressiveMotion.FastTween),
-                exit = if (reduced) androidx.compose.animation.fadeOut() else androidx.compose.animation.scaleOut(
-                    targetScale = 0.5f,
-                    animationSpec = if (reduced) androidx.compose.animation.core.snap() else ExpressiveMotion.FastTween
-                ) + androidx.compose.animation.fadeOut(ExpressiveMotion.FadeTween)
-            ) {
-                CookieIcon(
-                    icon = Icons.Outlined.Check,
-                    bgColor = colors.accent,
-                    iconTint = colors.ink,
-                    size = 42.dp,
-                    lobes = 8
-                )
-            }
         }
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -956,10 +1070,13 @@ fun StorageSwitcherBottomSheet(
     state: AppState,
     onDismissRequest: () -> Unit,
     onSelectStorage: (String) -> Unit,
-    onAddConnection: () -> Unit
+    onAddConnection: () -> Unit,
+    currentStorageId: String? = null,
+    onLogoutStorage: ((ConnectedStorageItem) -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState()
     val colors = ExpressiveTheme.colors
+    var storageToDisconnect by remember { mutableStateOf<ConnectedStorageItem?>(null) }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -968,7 +1085,7 @@ fun StorageSwitcherBottomSheet(
         containerColor = colors.container,
         shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
     ) {
-        ExpressiveSheetContent(title = "Storage locations") {
+        ExpressiveSheetContent(title = stringResource(R.string.storage_locations)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -977,33 +1094,100 @@ fun StorageSwitcherBottomSheet(
             ) {
                 val storages = remember(state) { getConnectedStorages(state) }
                 storages.forEach { storage ->
+                    val isSelected = currentStorageId != null && storage.id == currentStorageId
+                    val isCloudOrNetwork = storage.id != "internal" && storage.id != "sd"
                     StorageSourceTile(
                         name = storage.name,
                         detail = storage.detail,
                         icon = storage.icon,
                         category = storage.category,
-                        onClick = { onSelectStorage(storage.location) }
+                        isSelected = isSelected,
+                        onClick = { onSelectStorage(storage.location) },
+                        onDisconnectClick = if (isCloudOrNetwork && onLogoutStorage != null) {
+                            { storageToDisconnect = storage }
+                        } else null
                     )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Add connection button
-                Button(
-                    onClick = onAddConnection,
+                val cloudStorages = remember(storages) {
+                    storages.filter { it.id != "internal" && it.id != "sd" }
+                }
+                val activeCloudStorage = remember(currentStorageId, cloudStorages) {
+                    cloudStorages.find { it.id == currentStorageId } ?: cloudStorages.firstOrNull()
+                }
+
+                // Row with Add connection and Logout button
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.accent,
-                        contentColor = colors.ink
-                    )
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add connection", fontWeight = FontWeight.SemiBold)
+                    Button(
+                        onClick = onAddConnection,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.accent,
+                            contentColor = colors.ink
+                        )
+                    ) {
+                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(stringResource(R.string.add_connection), fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+
+                    if (onLogoutStorage != null && activeCloudStorage != null) {
+                        val isCloud = activeCloudStorage.id in listOf("drive", "mega", "dropbox")
+                        Button(
+                            onClick = {
+                                storageToDisconnect = activeCloudStorage
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.card,
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.Logout,
+                                contentDescription = if (isCloud) stringResource(R.string.logout_action) else stringResource(R.string.disconnect_action),
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isCloud) stringResource(R.string.logout_action) else stringResource(R.string.disconnect_action),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+
+    val itemToDisconnect = storageToDisconnect
+    if (itemToDisconnect != null) {
+        val isCloud = itemToDisconnect.id in listOf("drive", "mega", "dropbox")
+        ExpressiveConfirmationSheet(
+            title = if (isCloud) stringResource(R.string.logout_prompt, itemToDisconnect.name) else stringResource(R.string.disconnect_prompt, itemToDisconnect.name),
+            subtitle = "You will be disconnected from ${itemToDisconnect.detail}.",
+            confirmLabel = if (isCloud) stringResource(R.string.logout_action) else stringResource(R.string.disconnect_action),
+            cancelLabel = stringResource(R.string.cancel),
+            onConfirm = {
+                onLogoutStorage?.invoke(itemToDisconnect)
+                storageToDisconnect = null
+                onDismissRequest()
+            },
+            onDismissRequest = {
+                storageToDisconnect = null
+            }
+        )
     }
 }
 
@@ -1013,7 +1197,9 @@ private fun StorageSourceTile(
     detail: String,
     icon: ImageVector,
     category: String,
-    onClick: () -> Unit
+    isSelected: Boolean = false,
+    onClick: () -> Unit,
+    onDisconnectClick: (() -> Unit)? = null
 ) {
     val colors = ExpressiveTheme.colors
     val pastel = ExpressiveTokens.categoryPastel(category)
@@ -1022,7 +1208,11 @@ private fun StorageSourceTile(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(colors.card)
+            .background(if (isSelected) colors.card.copy(alpha = 0.85f) else colors.card)
+            .then(
+                if (isSelected) Modifier.border(1.5.dp, colors.accent, RoundedCornerShape(16.dp))
+                else Modifier
+            )
             .clickable(onClick = onClick)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1038,13 +1228,35 @@ private fun StorageSourceTile(
             Text(
                 text = name,
                 fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                 color = colors.text
             )
             Text(
                 text = detail,
                 fontSize = 12.sp,
                 color = colors.muted
+            )
+        }
+        if (onDisconnectClick != null) {
+            IconButton(
+                onClick = onDisconnectClick,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.Logout,
+                    contentDescription = "Disconnect",
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+        }
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "Active",
+                tint = colors.accent,
+                modifier = Modifier.size(20.dp)
             )
         }
     }

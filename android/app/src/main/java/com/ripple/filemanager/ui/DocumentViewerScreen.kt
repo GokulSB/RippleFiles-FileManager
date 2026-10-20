@@ -91,6 +91,8 @@ fun DocumentViewerScreen(
             file.name.endsWith(".docx", true) -> DocumentSource.Docx(file)
             file.name.endsWith(".md", true) -> DocumentSource.Markdown(file)
             file.name.endsWith(".json", true) -> DocumentSource.Txt(file)
+            file.name.endsWith(".xml", true) -> DocumentSource.Txt(file)
+            file.name.endsWith(".html", true) || file.name.endsWith(".htm", true) -> DocumentSource.Txt(file)
             else -> DocumentSource.Txt(file)
         }
 

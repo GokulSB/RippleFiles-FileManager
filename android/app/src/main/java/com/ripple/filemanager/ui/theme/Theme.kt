@@ -1,8 +1,5 @@
 package com.ripple.filemanager.ui.theme
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -13,6 +10,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -20,7 +18,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
-import androidx.compose.runtime.CompositionLocalProvider
+import com.ripple.filemanager.DarkSurfaceStyle
+import com.ripple.filemanager.ui.expressive.AmoledExpressiveColorScheme
 import com.ripple.filemanager.ui.expressive.DarkExpressiveColorScheme
 import com.ripple.filemanager.ui.expressive.LightExpressiveColorScheme
 import com.ripple.filemanager.ui.expressive.LocalExpressiveColors
@@ -63,33 +62,33 @@ fun hsl(h: Float, s: Float, l: Float): Color {
 // ── Skyline Ledger design tokens ──────────────────────────────────────────────
 object SkylineColors {
 
-    var Background    by mutableStateOf(Color(0xFF1B1210))
-    var Surface       by mutableStateOf(Color(0xFF1F1D1B))
-    var Surface2      by mutableStateOf(Color(0xFF282522))
-    var Border        by mutableStateOf(Color(0xFF3D3833))
+    var Background: Color = Color(0xFF1B1210)
+    var Surface: Color = Color(0xFF1F1D1B)
+    var Surface2: Color = Color(0xFF282522)
+    var Border: Color = Color(0xFF3D3833)
     
-    var Amber         by mutableStateOf(Color(0xFFF1B761))
-    var AmberDim      by mutableStateOf(Color(0xFFC08630))
-    var ContainerSecondary by mutableStateOf(Color(0xFF2A1F14))
-    var ContainerTertiary  by mutableStateOf(Color(0xFF2A1F14))
-    var Dust          by mutableStateOf(Color(0xFF7A8686))
-    var Sage          by mutableStateOf(Color(0xFF7A867A))
-    var Rust          by mutableStateOf(Color(0xFF867A7A))
+    var Amber: Color = Color(0xFFF1B761)
+    var AmberDim: Color = Color(0xFFC08630)
+    var ContainerSecondary: Color = Color(0xFF2A1F14)
+    var ContainerTertiary: Color = Color(0xFF2A1F14)
+    var Dust: Color = Color(0xFF7A8686)
+    var Sage: Color = Color(0xFF7A867A)
+    var Rust: Color = Color(0xFF867A7A)
 
-    var TextPrimary   by mutableStateOf(Color(0xFFE4E4E4))
-    var TextPrimary2  by mutableStateOf(Color(0xFFCCCCCC))
-    var TextDim       by mutableStateOf(Color(0xFF999999))
-    var TextDim2      by mutableStateOf(Color(0xFF666666))
+    var TextPrimary: Color = Color(0xFFE4E4E4)
+    var TextPrimary2: Color = Color(0xFFCCCCCC)
+    var TextDim: Color = Color(0xFF999999)
+    var TextDim2: Color = Color(0xFF666666)
 
-    var AccentGreen   by mutableStateOf(Color(0xFF81C784))
-    var AccentBlue    by mutableStateOf(Color(0xFF64B5F6))
-    var AccentTeal    by mutableStateOf(Color(0xFF4DB6AC))
-    var AccentPrimary by mutableStateOf(Color(0xFFFFB74D))
-    var AccentRed     by mutableStateOf(Color(0xFFE57373))
-    var AccentPink    by mutableStateOf(Color(0xFFF06292))
-    var AccentViolet  by mutableStateOf(Color(0xFFBA68C8))
+    var AccentGreen: Color = Color(0xFF81C784)
+    var AccentBlue: Color = Color(0xFF64B5F6)
+    var AccentTeal: Color = Color(0xFF4DB6AC)
+    var AccentPrimary: Color = Color(0xFFFFB74D)
+    var AccentRed: Color = Color(0xFFE57373)
+    var AccentPink: Color = Color(0xFFF06292)
+    var AccentViolet: Color = Color(0xFFBA68C8)
 
-    fun updateColors(isDark: Boolean, dynamicColor: Boolean, customHue: Float, lightnessOffset: Float, invertText: Boolean, context: android.content.Context) {
+    fun updateColors(isDark: Boolean, dynamicColor: Boolean, customHue: Float, lightnessOffset: Float, invertText: Boolean, context: android.content.Context, isAmoled: Boolean = false) {
         val isDynamic = dynamicColor && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
         val dynamicScheme = if (isDynamic) {
             try {
@@ -111,14 +110,21 @@ object SkylineColors {
 
         if (isDark) {
             if (isCocoa) {
-                Background = Color(0xFF1B1210)
-                Surface2 = Color(0xFF3F2420)
-                Surface = Color(0xFF5E352D)
-                Border = Color(0xFFFFCDBE).copy(alpha = 0.14f)
+                if (isAmoled) {
+                    Background = Color(0xFF000000)
+                    Surface2 = Color(0xFF0A0605)
+                    Surface = Color(0xFF110B09)
+                    Border = Color(0xFFFFE4DC).copy(alpha = 0.10f)
+                } else {
+                    Background = Color(0xFF1B1210)
+                    Surface2 = Color(0xFF3F2420)
+                    Surface = Color(0xFF5E352D)
+                    Border = Color(0xFFFFCDBE).copy(alpha = 0.14f)
+                }
                 Amber = Color(0xFFF8B8A8)
-                AmberDim = Color(0xFF5E352D)
-                ContainerSecondary = Color(0xFF3F2420)
-                ContainerTertiary = Color(0xFF71443A)
+                AmberDim = if (isAmoled) Color(0xFF1A1210) else Color(0xFF5E352D)
+                ContainerSecondary = if (isAmoled) Color(0xFF110B09) else Color(0xFF3F2420)
+                ContainerTertiary = if (isAmoled) Color(0xFF1A1210) else Color(0xFF71443A)
                 Dust = Color(0xFFD6A598)
                 Sage = Color(0xFF7FD9C8)
                 Rust = Color(0xFFFF9F88)
@@ -130,14 +136,21 @@ object SkylineColors {
                 AccentPink = Color(0xFFF5A9C3)
                 AccentViolet = Color(0xFFB892F2)
             } else {
-                Background = hsl(effectiveHue, 18f, (8f + lightnessOffset).coerceIn(4f, 20f))
-                Surface2 = hsl(effectiveHue, 26f, (11f + lightnessOffset).coerceIn(5f, 25f))
-                Surface = hsl(effectiveHue, 24f, (16f + lightnessOffset).coerceIn(8f, 35f))
-                Border = hsl(effectiveHue, 25f, 85f).copy(alpha = 0.14f)
-                Amber = if (dynamicScheme != null) dynamicScheme.primary else hsl(effectiveHue, 82f, (74f + lightnessOffset).coerceIn(45f, 90f))
-                AmberDim = if (dynamicScheme != null) dynamicScheme.primaryContainer else hsl(effectiveHue, 24f, 16f)
-                ContainerSecondary = hsl(effectiveHue, 26f, 11f)
-                ContainerTertiary = hsl(effectiveHue, 22f, 22f)
+                if (isAmoled) {
+                    Background = Color(0xFF000000)
+                    Surface2 = Color(0xFF0A0605)
+                    Surface = Color(0xFF110B09)
+                    Border = hsl(effectiveHue, 25f, 85f).copy(alpha = 0.10f)
+                } else {
+                    Background = hsl(effectiveHue, 18f, (8f + lightnessOffset).coerceIn(4f, 20f))
+                    Surface2 = hsl(effectiveHue, 26f, (11f + lightnessOffset).coerceIn(5f, 25f))
+                    Surface = hsl(effectiveHue, 24f, (16f + lightnessOffset).coerceIn(8f, 35f))
+                    Border = hsl(effectiveHue, 25f, 85f).copy(alpha = 0.14f)
+                }
+                Amber = hsl(effectiveHue, 82f, (74f + lightnessOffset).coerceIn(45f, 90f))
+                AmberDim = if (isAmoled) Color(0xFF1A1210) else hsl(effectiveHue, 24f, 16f)
+                ContainerSecondary = if (isAmoled) Color(0xFF110B09) else hsl(effectiveHue, 26f, 11f)
+                ContainerTertiary = if (isAmoled) Color(0xFF1A1210) else hsl(effectiveHue, 22f, 22f)
                 Dust = hsl(effectiveHue, 20f, 72f)
                 Sage = hsl(effectiveHue + 90f, 40f, 75f)
                 Rust = hsl(effectiveHue + 180f, 40f, 75f)
@@ -174,8 +187,8 @@ object SkylineColors {
                 Surface = hsl(effectiveHue, 30f, (81f + lightnessOffset).coerceIn(68f, 88f))
                 Surface2 = hsl(effectiveHue, 32f, (89f + lightnessOffset).coerceIn(78f, 95f))
                 Border = hsl(effectiveHue, 25f, 25f).copy(alpha = 0.14f)
-                Amber = if (dynamicScheme != null) dynamicScheme.primary else hsl(effectiveHue, 72f, (48f + lightnessOffset).coerceIn(30f, 70f))
-                AmberDim = if (dynamicScheme != null) dynamicScheme.primaryContainer else hsl(effectiveHue, 32f, 89f)
+                Amber = hsl(effectiveHue, 72f, (48f + lightnessOffset).coerceIn(30f, 70f))
+                AmberDim = hsl(effectiveHue, 32f, 89f)
                 ContainerSecondary = hsl(effectiveHue, 32f, 71f)
                 ContainerTertiary = hsl(effectiveHue, 30f, 81f)
                 Dust = hsl(effectiveHue, 25f, 35f)
@@ -239,6 +252,7 @@ fun fileTypeCode(type: String): String = when (type) {
 @Composable
 fun SiftTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    darkSurfaceStyle: DarkSurfaceStyle = DarkSurfaceStyle.STANDARD,
     dynamicColor: Boolean = true,
     customHue: Float = 262f,
     lightnessOffset: Float = 0f,
@@ -248,9 +262,11 @@ fun SiftTheme(
     subTextScale: Float = 1.0f,
     invertText: Boolean = false,
     cornerRoundness: Float = 0.5f,
+    iconShape: com.ripple.filemanager.IconShapeType = com.ripple.filemanager.IconShapeType.COOKIE,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
+    val isAmoled = darkTheme && darkSurfaceStyle == DarkSurfaceStyle.AMOLED
     val isDynamic = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val dynamicScheme = if (isDynamic) {
         try {
@@ -270,7 +286,7 @@ fun SiftTheme(
     }
     val isCocoa = !isDynamic && kotlin.math.abs(customHue - 14f) < 4f
 
-    SkylineColors.updateColors(darkTheme, dynamicColor, customHue, lightnessOffset, invertText, context)
+    SkylineColors.updateColors(darkTheme, dynamicColor, customHue, lightnessOffset, invertText, context, isAmoled)
     
     val colorScheme = when {
         darkTheme -> darkColorScheme(
@@ -297,7 +313,7 @@ fun SiftTheme(
             surfaceVariant       = SkylineColors.Surface2,
             onSurfaceVariant     = SkylineColors.TextDim,
             surfaceContainer     = SkylineColors.Surface2,
-            surfaceContainerHigh = Color(0xFF2F2218),
+            surfaceContainerHigh = if (isAmoled) Color(0xFF1A1210) else Color(0xFF2F2218),
             outline              = SkylineColors.Border,
             outlineVariant       = Color(0xFF2A1F14),
             inverseSurface       = SkylineColors.TextPrimary,
@@ -345,7 +361,28 @@ fun SiftTheme(
     val customTypography = getSkylineTypography(fontStyle, textDecorations, mainTextScale, subTextScale)
 
     val expressiveColors = if (darkTheme) {
-        if (isCocoa) {
+        if (isAmoled) {
+            if (isCocoa) {
+                AmoledExpressiveColorScheme.copy(
+                    text = if (invertText) Color.Black else ExpressiveTokens.DarkText,
+                    muted = if (invertText) Color(0xFF444444) else ExpressiveTokens.DarkMuted
+                )
+            } else {
+                AmoledExpressiveColorScheme.copy(
+                    accent = hsl(effectiveHue, 82f, (74f + lightnessOffset).coerceIn(45f, 90f)),
+                    ink = hsl(effectiveHue, 40f, 15f),
+                    sand = hsl(effectiveHue + 25f, 70f, 75f),
+                    text = if (invertText) Color.Black else hsl(effectiveHue, 25f, 94f),
+                    muted = if (invertText) Color(0xFF444444) else hsl(effectiveHue, 20f, 72f),
+                    line = hsl(effectiveHue, 25f, 85f),
+                    lineAlpha = 0.10f,
+                    shadow = Color(0x99000000),
+                    glow = hsl(effectiveHue, 25f, 35f).let {
+                        it.copy(alpha = it.alpha * 0.50f)
+                    }
+                )
+            }
+        } else if (isCocoa) {
             DarkExpressiveColorScheme.copy(
                 text = if (invertText) Color.Black else ExpressiveTokens.DarkText,
                 muted = if (invertText) Color(0xFF444444) else ExpressiveTokens.DarkMuted
@@ -356,7 +393,7 @@ fun SiftTheme(
                 container = hsl(effectiveHue, 24f, (16f + lightnessOffset).coerceIn(8f, 35f)),
                 card = hsl(effectiveHue, 22f, (22f + lightnessOffset).coerceIn(12f, 45f)),
                 insetCard = hsl(effectiveHue, 26f, (11f + lightnessOffset).coerceIn(5f, 25f)),
-                accent = if (dynamicScheme != null) dynamicScheme.primary else hsl(effectiveHue, 82f, (74f + lightnessOffset).coerceIn(45f, 90f)),
+                accent = hsl(effectiveHue, 82f, (74f + lightnessOffset).coerceIn(45f, 90f)),
                 ink = hsl(effectiveHue, 40f, 15f),
                 sand = hsl(effectiveHue + 25f, 70f, 75f),
                 text = if (invertText) Color.Black else hsl(effectiveHue, 25f, 94f),
@@ -364,7 +401,7 @@ fun SiftTheme(
                 line = hsl(effectiveHue, 25f, 85f),
                 lineAlpha = 0.14f,
                 shadow = Color(0x47000000),
-                glow = if (dynamicScheme != null) dynamicScheme.primary.copy(alpha = 0.45f) else hsl(effectiveHue, 25f, 35f)
+                glow = hsl(effectiveHue, 25f, 35f)
             )
         }
     } else {
@@ -379,7 +416,7 @@ fun SiftTheme(
                 container = hsl(effectiveHue, 32f, (89f + lightnessOffset).coerceIn(78f, 95f)),
                 card = hsl(effectiveHue, 30f, (81f + lightnessOffset).coerceIn(68f, 88f)),
                 insetCard = hsl(effectiveHue, 32f, (71f + lightnessOffset).coerceIn(58f, 80f)),
-                accent = if (dynamicScheme != null) dynamicScheme.primary else hsl(effectiveHue, 72f, (48f + lightnessOffset).coerceIn(30f, 70f)),
+                accent = hsl(effectiveHue, 72f, (48f + lightnessOffset).coerceIn(30f, 70f)),
                 ink = Color(0xFFFFF8F2),
                 sand = hsl(effectiveHue + 25f, 65f, 35f),
                 text = if (invertText) Color.White else hsl(effectiveHue, 40f, 12f),
@@ -387,7 +424,7 @@ fun SiftTheme(
                 line = hsl(effectiveHue, 25f, 25f),
                 lineAlpha = 0.09f,
                 shadow = hsl(effectiveHue, 35f, 25f).copy(alpha = 0.22f),
-                glow = if (dynamicScheme != null) dynamicScheme.primary.copy(alpha = 0.4f) else hsl(effectiveHue, 45f, (80f + lightnessOffset).coerceIn(60f, 85f))
+                glow = hsl(effectiveHue, 45f, (80f + lightnessOffset).coerceIn(60f, 85f)).copy(alpha = 0.4f)
             )
         }
     }
@@ -397,6 +434,7 @@ fun SiftTheme(
     CompositionLocalProvider(
         LocalExpressiveColors provides expressiveColors,
         com.ripple.filemanager.ui.expressive.LocalCornerRoundness provides cornerRoundness,
+        com.ripple.filemanager.ui.expressive.LocalIconShapeType provides iconShape,
         LocalAppFont provides currentAppFont
     ) {
         MaterialTheme(

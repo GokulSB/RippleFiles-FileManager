@@ -164,10 +164,10 @@ class LocalSendServer(
                     NearbyPeer(
                         ip = remoteIp,
                         port = remoteDevice.port,
-                        alias = remoteDevice.alias,
+                        alias = remoteDevice.alias.ifBlank { "Unknown" },
                         deviceModel = remoteDevice.deviceModel,
                         deviceType = remoteDevice.deviceType ?: "mobile",
-                        protocol = remoteDevice.protocol,
+                        protocol = remoteDevice.protocol.ifBlank { "https" },
                         fingerprint = remoteDevice.fingerprint,
                         lastSeenMs = System.currentTimeMillis()
                     )
@@ -183,29 +183,53 @@ class LocalSendServer(
     }
 
     private fun handlePrepareUpload(session: IHTTPSession): Response {
+        var rawBody = ""
         try {
-            val body = getBodyString(session)
-            val request = gson.fromJson(body, PrepareUploadRequestDto::class.java)
+            rawBody = getBodyString(session)
+            Log.d(TAG, "prepare-upload received rawBody (${rawBody.length} chars): $rawBody")
+
+            if (rawBody.isBlank()) {
+                Log.w(TAG, "prepare-upload: empty body received")
+                return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Empty body")
+            }
+
+            val request = gson.fromJson(rawBody, PrepareUploadRequestDto::class.java)
                 ?: return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Invalid JSON")
 
+            val filesMap = request.files
+            if (filesMap.isNullOrEmpty()) {
+                Log.w(TAG, "prepare-upload: no files in request")
+                return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "No files provided")
+            }
+
+            val senderDevice = request.info ?: DeviceDto(
+                alias = "LocalSend Device",
+                fingerprint = ""
+            )
+
             val sessionId = UUID.randomUUID().toString()
-            val tokens = request.files.mapValues { UUID.randomUUID().toString() }
+            val tokens = filesMap.keys.associateWith { UUID.randomUUID().toString() }
             val decisionChannel = CompletableDeferred<Boolean>()
 
-            val transferFiles = request.files.values.map { fileDto ->
+            val transferFiles = filesMap.values.mapNotNull { fileDto ->
+                val id = fileDto.id.ifBlank { UUID.randomUUID().toString() }
+                val token = tokens[id] ?: UUID.randomUUID().toString()
                 TransferFileItem(
-                    fileId = fileDto.id,
-                    token = tokens[fileDto.id],
-                    fileName = fileDto.fileName,
+                    fileId = id,
+                    token = token,
+                    fileName = fileDto.fileName.ifBlank { "received_file" },
                     size = fileDto.size,
-                    fileType = fileDto.fileType
+                    fileType = fileDto.fileType ?: "application/octet-stream"
                 )
+            }
+            if (transferFiles.isEmpty()) {
+                return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Empty file list")
             }
             val totalBytes = transferFiles.sumOf { it.size }
 
             val incomingRequest = IncomingTransferRequest(
                 sessionId = sessionId,
-                sender = request.info,
+                sender = senderDevice,
                 senderIp = session.remoteIpAddress ?: "unknown",
                 files = transferFiles,
                 totalBytes = totalBytes,
@@ -242,18 +266,20 @@ class LocalSendServer(
             // Record active session
             activeSessions[sessionId] = ActiveSession(
                 sessionId = sessionId,
-                sender = request.info,
+                sender = senderDevice,
                 tokens = tokens,
-                fileDtos = request.files
+                fileDtos = filesMap
             )
 
             val responseBody = PrepareUploadResponseDto(
                 sessionId = sessionId,
                 files = tokens
             )
-            return newFixedLengthResponse(Response.Status.OK, "application/json", gson.toJson(responseBody))
+            val responseJson = gson.toJson(responseBody)
+            Log.d(TAG, "prepare-upload returning 200 OK: $responseJson")
+            return newFixedLengthResponse(Response.Status.OK, "application/json", responseJson)
         } catch (e: Exception) {
-            Log.e(TAG, "Error in prepare-upload", e)
+            Log.e(TAG, "Error in prepare-upload. Raw body was: '$rawBody'", e)
             return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, e.message ?: "Server error")
         }
     }
@@ -364,16 +390,49 @@ class LocalSendServer(
     }
 
     private fun getBodyString(session: IHTTPSession): String {
-        val contentLength = session.headers["content-length"]?.toIntOrNull() ?: 0
-        val buffer = ByteArray(contentLength)
-        var totalRead = 0
-        val inputStream: InputStream = session.inputStream
-        while (totalRead < contentLength) {
-            val read = inputStream.read(buffer, totalRead, contentLength - totalRead)
-            if (read == -1) break
-            totalRead += read
+        // Attempt 1: NanoHTTPD standard parseBody into postData map
+        val files = HashMap<String, String>()
+        try {
+            session.parseBody(files)
+            val postData = files["postData"]
+            if (!postData.isNullOrBlank()) {
+                return postData
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "parseBody did not yield postData: ${e.message}")
         }
-        return String(buffer, 0, totalRead, Charsets.UTF_8)
+
+        // Attempt 2: NanoHTTPD queryParameterString (populated after parseBody for raw bodies)
+        try {
+            val queryParam = session.queryParameterString
+            if (!queryParam.isNullOrBlank()) {
+                return queryParam
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "queryParameterString unavailable: ${e.message}")
+        }
+
+        // Attempt 3: Direct stream reading from session.inputStream
+        try {
+            val contentLength = session.headers["content-length"]?.toIntOrNull() ?: 0
+            if (contentLength > 0) {
+                val buffer = ByteArray(contentLength)
+                var totalRead = 0
+                val inputStream: InputStream = session.inputStream
+                while (totalRead < contentLength) {
+                    val read = inputStream.read(buffer, totalRead, contentLength - totalRead)
+                    if (read == -1) break
+                    totalRead += read
+                }
+                if (totalRead > 0) {
+                    return String(buffer, 0, totalRead, Charsets.UTF_8)
+                }
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Direct inputStream read failed: ${e.message}")
+        }
+
+        return ""
     }
 
     private fun getReceivedDirectory(): File {

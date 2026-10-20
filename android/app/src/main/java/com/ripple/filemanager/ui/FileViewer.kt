@@ -70,16 +70,16 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: F
                 .padding(paddingValues)
         ) {
             val file = File(fileItem.path)
+            val isText = listOf(".txt", ".log", ".md", ".json", ".xml", ".html", ".htm", ".csv", ".kt", ".java", ".py", ".js", ".ts", ".css", ".sh", ".yaml", ".yml", ".properties", ".conf", ".ini")
+                .any { fileItem.name.endsWith(it, ignoreCase = true) }
             if (fileItem.name.endsWith(".pdf", ignoreCase = true)) {
                 PdfViewer(file, cornerRoundness)
-            } else if (fileItem.name.endsWith(".txt", ignoreCase = true) || fileItem.name.endsWith(".log", ignoreCase = true) || fileItem.name.endsWith(".md", ignoreCase = true)) {
-                TextViewer(file)
             } else if (fileItem.name.endsWith(".zip", ignoreCase = true)) {
                 ZipViewer(file)
+            } else if (isText || fileItem.type == "doc") {
+                TextViewer(file)
             } else {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.no_viewer_available), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                TextViewer(file)
             }
         }
     }

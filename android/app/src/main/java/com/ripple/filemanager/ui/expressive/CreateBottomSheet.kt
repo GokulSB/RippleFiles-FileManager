@@ -19,9 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ripple.filemanager.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,7 +44,7 @@ fun CreateBottomSheet(
         containerColor = colors.container,
         shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
     ) {
-        ExpressiveSheetContent(title = "Create") {
+        ExpressiveSheetContent(title = stringResource(R.string.create_title)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -51,7 +53,7 @@ fun CreateBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 CreateTileItem(
-                    title = "New folder",
+                    title = stringResource(R.string.new_folder),
                     icon = Icons.Outlined.CreateNewFolder,
                     category = "folder",
                     onClick = {
@@ -60,7 +62,7 @@ fun CreateBottomSheet(
                     }
                 )
                 CreateTileItem(
-                    title = "New file",
+                    title = stringResource(R.string.new_file),
                     icon = Icons.Outlined.NoteAdd,
                     category = "docs",
                     onClick = {
@@ -69,7 +71,7 @@ fun CreateBottomSheet(
                     }
                 )
                 CreateTileItem(
-                    title = "Add cloud",
+                    title = stringResource(R.string.add_cloud),
                     icon = Icons.Outlined.CloudUpload,
                     category = "archives",
                     onClick = {
@@ -78,7 +80,7 @@ fun CreateBottomSheet(
                     }
                 )
                 CreateTileItem(
-                    title = "Receive",
+                    title = stringResource(R.string.receive_action),
                     icon = Icons.AutoMirrored.Outlined.Send,
                     category = "large",
                     onClick = {

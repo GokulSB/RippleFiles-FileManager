@@ -185,6 +185,7 @@ fun UnifiedBottomPill(
                     )
             }
         },
+        contentAlignment = Alignment.Center,
         modifier = modifier.animateContentSize(
             animationSpec = if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)
         ),
@@ -760,6 +761,9 @@ fun ExtractingStatePill(
             .border(1.dp, SkylineColors.Border, RoundedCornerShape(999.dp))
             .clip(RoundedCornerShape(999.dp))
             .background(SkylineColors.Surface)
+            .then(
+                if (isComplete) Modifier.clickable { haptics.tap(); onCancel() } else Modifier
+            )
     ) {
         Row(
             modifier = Modifier
@@ -801,20 +805,16 @@ fun ExtractingStatePill(
                 color = SkylineColors.Amber
             )
             Spacer(modifier = Modifier.width(12.dp))
-            if (!isComplete) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = stringResource(R.string.cancel),
-                    tint = SkylineColors.TextDim2,
-                    modifier = Modifier
-                        .size(26.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .clickable { haptics.copyPaste(); onCancel() }
-                        .padding(6.dp)
-                )
-            } else {
-                Spacer(modifier = Modifier.width(18.dp))
-            }
+            Icon(
+                Icons.Default.Close,
+                contentDescription = stringResource(R.string.cancel),
+                tint = SkylineColors.TextDim2,
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable { haptics.copyPaste(); onCancel() }
+                    .padding(6.dp)
+            )
         }
         
         val animatedProgress by animateFloatAsState(

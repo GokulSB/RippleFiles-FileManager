@@ -11,6 +11,7 @@ enum class AuthReason { OPEN_FILE, LOCK_FILE, UNLOCK_FILE }
 sealed class AppAction {
     // Navigation & View State
     data class SetLocation(val path: String, val folderName: String? = null) : AppAction()
+    data class SwitchToStorage(val storageId: String, val defaultLocation: String) : AppAction()
     data class NavTabTapped(val id: String) : AppAction()
     object NavigateBackInDrive : AppAction()
     data class SetQuery(val query: String) : AppAction()
@@ -24,6 +25,11 @@ sealed class AppAction {
     data class SetShowBatchRenameDialog(val show: Boolean) : AppAction()
     data class SetSortMode(val mode: SortMode) : AppAction()
     data class ShowToast(val message: String) : AppAction()
+    data class SetShowHiddenFiles(val show: Boolean) : AppAction()
+    data class SetHasSeenHideWarning(val seen: Boolean) : AppAction()
+    data class ToggleHideFiles(val files: List<FileItem>) : AppAction()
+    data class ResolveHideConflict(val resolution: com.ripple.filemanager.data.core.ConflictResolution) : AppAction()
+    object DismissHideConflict : AppAction()
     
     // File Selection
     object ClearSelection : AppAction()
@@ -128,9 +134,12 @@ sealed class AppAction {
     object PlayNextAudio : AppAction()
     object PlayPreviousAudio : AppAction()
     data class SetShowFullScreenPlayer(val show: Boolean) : AppAction()
+    data class SetMiniPlayerAutoCloseSeconds(val seconds: Int) : AppAction()
     
     // Theme & Customization
     data class SetThemeMode(val mode: ThemeMode) : AppAction()
+    data class SetDarkSurfaceStyle(val style: DarkSurfaceStyle) : AppAction()
+    data class SetLanguage(val tag: String) : AppAction()
     data class SetThemeHue(val hue: Float) : AppAction()
     data class SetThemeLightnessOffset(val offset: Float) : AppAction()
     data class SetDynamicSystemTheme(val dynamic: Boolean) : AppAction()

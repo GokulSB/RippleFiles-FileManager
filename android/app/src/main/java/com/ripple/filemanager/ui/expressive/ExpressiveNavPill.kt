@@ -35,7 +35,6 @@ import com.ripple.filemanager.ui.theme.LocalAppFont
 enum class ExpressiveTab(val id: String, val label: String, val icon: ImageVector) {
     HOME("home", "Home", Icons.Outlined.Home),
     BROWSE("browse", "Browse", Icons.Outlined.Folder),
-    CLOUD("cloud", "Cloud", Icons.Outlined.Cloud),
     SEND("send", "Send", Icons.AutoMirrored.Outlined.Send)
 }
 
@@ -59,7 +58,9 @@ fun ExpressiveNavShell(
     onSelectAll: (() -> Unit)? = null,
     onSelectNone: (() -> Unit)? = null,
     onBatchRename: (() -> Unit)? = null,
-    isFabExpanded: Boolean = false
+    isFabExpanded: Boolean = false,
+    onToggleHide: (() -> Unit)? = null,
+    isAllHidden: Boolean = false
 ) {
     if (isSelectionMode) {
         ExpressiveSelectionBar(
@@ -72,7 +73,9 @@ fun ExpressiveNavShell(
             onCopy = onCopy,
             onCut = onMove,
             onDelete = onDelete,
-            modifier = modifier
+            modifier = modifier,
+            onToggleHide = onToggleHide,
+            isAllHidden = isAllHidden
         )
     } else {
         val colors = ExpressiveTheme.colors
@@ -82,51 +85,54 @@ fun ExpressiveNavShell(
             selectedTab = activeTab
         }
 
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        Box(
+            modifier = modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            // Floating pill with Home, Browse, Cloud, Send
             Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .height(60.dp)
-                    .shadow(
-                        elevation = 8.dp,
-                        shape = RoundedCornerShape(30.dp),
-                        ambientColor = Color.Transparent,
-                        spotColor = colors.shadow.copy(alpha = 0.25f)
-                    )
-                    .clip(RoundedCornerShape(30.dp))
-                    .background(colors.insetCard)
-                    .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), RoundedCornerShape(30.dp))
-                    .padding(horizontal = 6.dp),
+                    .fillMaxWidth(0.75f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.Center
             ) {
-                ExpressiveTab.values().forEach { tab ->
-                    val isActive = tab == selectedTab
-                    ExpressiveNavTabItem(
-                        tab = tab,
-                        isActive = isActive,
-                        onClick = {
-                            com.ripple.filemanager.ui.TabSwitchLatencyTracker.onTabTap(tab.name)
-                            if (selectedTab != tab) {
-                                selectedTab = tab
+                // Floating pill with Home, Browse, Send
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(60.dp)
+                        .shadow(
+                            elevation = 8.dp,
+                            shape = RoundedCornerShape(30.dp),
+                            ambientColor = Color.Transparent,
+                            spotColor = colors.shadow.copy(alpha = 0.25f)
+                        )
+                        .clip(RoundedCornerShape(30.dp))
+                        .background(colors.insetCard)
+                        .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), RoundedCornerShape(30.dp))
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    ExpressiveTab.values().forEach { tab ->
+                        val isActive = tab == selectedTab
+                        ExpressiveNavTabItem(
+                            tab = tab,
+                            isActive = isActive,
+                            onClick = {
+                                com.ripple.filemanager.ui.TabSwitchLatencyTracker.onTabTap(tab.name)
+                                if (selectedTab != tab) {
+                                    selectedTab = tab
+                                }
+                                onTabSelected(tab)
                             }
-                            onTabSelected(tab)
-                        }
-                    )
+                        )
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-            // Cookie FAB (66dp, accent, "+")
-            val fabShape = remember { CookieShape(lobes = 10, amplitude = 0.08f) }
+                // Cookie/Icon-shape FAB (60dp matching pill height, accent, "+")
+            val fabShape = rememberIconShape(lobes = 10, amplitude = 0.08f)
             val fabInteractionSource = remember { MutableInteractionSource() }
             val fabRotation by androidx.compose.animation.core.animateFloatAsState(
                 targetValue = if (isFabExpanded) 45f else 0f,
@@ -136,7 +142,7 @@ fun ExpressiveNavShell(
 
             Box(
                 modifier = Modifier
-                    .size(66.dp)
+                    .size(60.dp)
                     .pressScale(pressedScale = 0.94f, interactionSource = fabInteractionSource)
                     .shadow(
                         elevation = 6.dp,
@@ -158,12 +164,13 @@ fun ExpressiveNavShell(
                     contentDescription = if (isFabExpanded) "Close" else "Create",
                     tint = colors.ink,
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(26.dp)
                         .graphicsLayer { rotationZ = fabRotation }
                 )
             }
         }
     }
+}
 }
 
 @Composable
@@ -188,6 +195,12 @@ private fun ExpressiveNavTabItem(
         label = "tab_icon_tint"
     )
 
+    val tabLabel = when (tab) {
+        ExpressiveTab.HOME -> stringResource(R.string.nav_home)
+        ExpressiveTab.BROWSE -> stringResource(R.string.nav_browse)
+        ExpressiveTab.SEND -> stringResource(R.string.nav_send)
+    }
+
     Box(
         modifier = Modifier
             .height(46.dp)
@@ -198,7 +211,7 @@ private fun ExpressiveNavTabItem(
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = if (isActive) 12.dp else 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -207,7 +220,7 @@ private fun ExpressiveNavTabItem(
         ) {
             Icon(
                 imageVector = tab.icon,
-                contentDescription = tab.label,
+                contentDescription = tabLabel,
                 tint = iconTint,
                 modifier = Modifier.size(22.dp)
             )
@@ -221,7 +234,7 @@ private fun ExpressiveNavTabItem(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = tab.label,
+                        text = tabLabel,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         fontFamily = LocalAppFont.current,

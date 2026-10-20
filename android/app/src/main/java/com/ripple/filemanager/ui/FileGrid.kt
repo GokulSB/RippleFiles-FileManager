@@ -829,7 +829,7 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
 }
 
 @Composable
-fun FileShapeIcon(type: String, name: String = "", size: Int, path: String = "", iconShape: com.ripple.filemanager.IconShapeType = com.ripple.filemanager.IconShapeType.SYSTEM, duration: String? = null, thumbnailLink: String? = null) {
+fun FileShapeIcon(type: String, name: String = "", size: Int, path: String = "", iconShape: com.ripple.filemanager.IconShapeType = com.ripple.filemanager.IconShapeType.COOKIE, duration: String? = null, thumbnailLink: String? = null) {
     val shapeData = getShapeData(type, name, iconShape)
     Box(
         modifier = Modifier
@@ -949,22 +949,11 @@ val FlowerShape = GenericShape { size, _ ->
 }
 
 fun getCustomShape(type: com.ripple.filemanager.IconShapeType): androidx.compose.ui.graphics.Shape {
-    return when (type) {
-        com.ripple.filemanager.IconShapeType.CIRCLE -> CircleShape
-        com.ripple.filemanager.IconShapeType.SQUARE -> RoundedCornerShape(12.dp)
-        com.ripple.filemanager.IconShapeType.SQUIRCLE -> BlobShape
-        com.ripple.filemanager.IconShapeType.DIAMOND -> DiamondShape
-        com.ripple.filemanager.IconShapeType.HEXAGON -> HexShape
-        com.ripple.filemanager.IconShapeType.ARCH -> ArchShape
-        com.ripple.filemanager.IconShapeType.COOKIE -> CookieShape
-        com.ripple.filemanager.IconShapeType.STAR -> StarShape
-        com.ripple.filemanager.IconShapeType.FLOWER -> FlowerShape
-        com.ripple.filemanager.IconShapeType.SYSTEM -> CircleShape
-    }
+    return com.ripple.filemanager.ui.expressive.IconShapes.forType(type)
 }
 
 @Composable
-fun getShapeData(type: String, name: String, iconShape: com.ripple.filemanager.IconShapeType = com.ripple.filemanager.IconShapeType.SYSTEM): ShapeData {
+fun getShapeData(type: String, name: String, iconShape: com.ripple.filemanager.IconShapeType = com.ripple.filemanager.IconShapeType.COOKIE): ShapeData {
     val baseShape = when (type) {
         "folder" -> BlobShape
         "image" -> HexShape
@@ -975,7 +964,7 @@ fun getShapeData(type: String, name: String, iconShape: com.ripple.filemanager.I
         else -> BlobShape
     }
     
-    val finalShape = if (iconShape == com.ripple.filemanager.IconShapeType.SYSTEM) baseShape else getCustomShape(iconShape)
+    val finalShape = getCustomShape(iconShape)
 
     return when (type) {
         "folder" -> {

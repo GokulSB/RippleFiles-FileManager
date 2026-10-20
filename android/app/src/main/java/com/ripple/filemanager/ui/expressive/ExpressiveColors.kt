@@ -25,6 +25,16 @@ object ExpressiveTokens {
     val DarkShadow = Color(0x47000000)
     val DarkGlow = Color(0xFF7A4A3F)
 
+    // ── AMOLED palette (pure black surface variant layered on dark mode) ──
+    val AmoledBg = Color(0xFF000000)
+    val AmoledContainer = Color(0xFF110B09)
+    val AmoledCard = Color(0xFF1A1210)
+    val AmoledInsetCard = Color(0xFF0A0605)
+    val AmoledLine = Color(0xFFFFE4DC)
+    val AmoledLineAlpha = 0.10f
+    val AmoledShadow = Color(0x99000000) // rgba(0,0,0,.6)
+    val AmoledGlow = Color(0xFF7A4A3F).copy(alpha = 0.50f)
+
     // ── Light palette ──
     val LightBg = Color(0xFFFDF8F3)
     val LightContainer = Color(0xFFF2E1CB)
@@ -81,8 +91,11 @@ data class ExpressiveColorScheme(
     val line: Color,
     val lineAlpha: Float,
     val shadow: Color = Color(0x47000000),
-    val glow: Color = Color(0xFF7A4A3F)
-)
+    val glow: Color = Color(0xFF7A4A3F),
+    val isAmoled: Boolean = false
+) {
+    val card2: Color get() = insetCard
+}
 
 val DarkExpressiveColorScheme = ExpressiveColorScheme(
     bg = ExpressiveTokens.DarkBg,
@@ -97,7 +110,25 @@ val DarkExpressiveColorScheme = ExpressiveColorScheme(
     line = ExpressiveTokens.DarkLine,
     lineAlpha = ExpressiveTokens.DarkLineAlpha,
     shadow = ExpressiveTokens.DarkShadow,
-    glow = ExpressiveTokens.DarkGlow
+    glow = ExpressiveTokens.DarkGlow,
+    isAmoled = false
+)
+
+val AmoledExpressiveColorScheme = ExpressiveColorScheme(
+    bg = ExpressiveTokens.AmoledBg,
+    container = ExpressiveTokens.AmoledContainer,
+    card = ExpressiveTokens.AmoledCard,
+    insetCard = ExpressiveTokens.AmoledInsetCard,
+    accent = ExpressiveTokens.DarkAccent,
+    ink = ExpressiveTokens.DarkInk,
+    sand = ExpressiveTokens.DarkSand,
+    text = ExpressiveTokens.DarkText,
+    muted = ExpressiveTokens.DarkMuted,
+    line = ExpressiveTokens.AmoledLine,
+    lineAlpha = ExpressiveTokens.AmoledLineAlpha,
+    shadow = ExpressiveTokens.AmoledShadow,
+    glow = ExpressiveTokens.AmoledGlow,
+    isAmoled = true
 )
 
 val LightExpressiveColorScheme = ExpressiveColorScheme(

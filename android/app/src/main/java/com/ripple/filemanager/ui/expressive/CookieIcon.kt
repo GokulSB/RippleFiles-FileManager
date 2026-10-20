@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -19,7 +20,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Icon inside a cookie-shaped container filled with a category pastel.
+ * Icon inside a container styled with the active icon shape filled with a category pastel.
  * Glyph is ~46% of container size with dark on-color.
  */
 @Composable
@@ -29,13 +30,14 @@ fun CookieIcon(
     modifier: Modifier = Modifier,
     iconTint: Color = ExpressiveTokens.OnPastel,
     size: Dp = 44.dp,
-    lobes: Int = 8
+    lobes: Int = 8,
+    shape: Shape? = null
 ) {
-    val shape = remember(lobes) { CookieShape(lobes = lobes) }
+    val activeShape = shape ?: rememberIconShape(lobes = lobes)
     Box(
         modifier = modifier
             .size(size)
-            .clip(shape)
+            .clip(activeShape)
             .background(bgColor),
         contentAlignment = Alignment.Center
     ) {
@@ -49,7 +51,7 @@ fun CookieIcon(
 }
 
 /**
- * Clickable cookie icon button with accessibility description.
+ * Clickable icon button styled with the active icon shape and accessibility description.
  */
 @Composable
 fun CookieIconButton(
@@ -61,15 +63,16 @@ fun CookieIconButton(
     iconTint: Color = ExpressiveTokens.OnPastel,
     size: Dp = 44.dp,
     iconSize: Dp = size * 0.48f,
-    lobes: Int = 8
+    lobes: Int = 8,
+    shape: Shape? = null
 ) {
-    val shape = remember(lobes) { CookieShape(lobes = lobes) }
+    val activeShape = shape ?: rememberIconShape(lobes = lobes)
     val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .size(size)
             .pressScale(pressedScale = 0.94f, interactionSource = interactionSource)
-            .clip(shape)
+            .clip(activeShape)
             .background(bgColor)
             .clickable(
                 interactionSource = interactionSource,

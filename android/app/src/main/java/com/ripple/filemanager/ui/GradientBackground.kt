@@ -144,10 +144,13 @@ fun rememberAuroraColors(): AuroraColors {
 
 fun Modifier.appGradientBackground(): Modifier = composed {
     val exprColors = com.ripple.filemanager.ui.expressive.LocalExpressiveColors.current
-    val fallback = Color(0xFF1B1210)
+    val isAmoled = exprColors.isAmoled
+    val fallback = if (isAmoled) Color(0xFF000000) else Color(0xFF1B1210)
     val bg = if (exprColors.bg != Color.Unspecified) exprColors.bg else fallback
     val textColor = if (exprColors.text != Color.Unspecified) exprColors.text else Color(0xFFFFE4DC)
-    val glowColor = if (exprColors.glow != Color.Unspecified) exprColors.glow else Color(0xFF7A4A3F)
+    val baseGlow = if (exprColors.glow != Color.Unspecified) exprColors.glow else Color(0xFF7A4A3F)
+    val glowColor = if (isAmoled) baseGlow.copy(alpha = baseGlow.alpha * 0.50f) else baseGlow
+    val radiusScale = if (isAmoled) 0.82f else 1.0f
     val lineStrokeColor = if (exprColors.line != Color.Unspecified) exprColors.line.copy(alpha = exprColors.lineAlpha) else textColor.copy(alpha = 0.14f)
     this.drawWithCache {
         onDrawBehind {
@@ -155,7 +158,7 @@ fun Modifier.appGradientBackground(): Modifier = composed {
 
             // Layer 1: Radial gradient centered at top-right corner (~90% width, 0% height), radius ~46% of height
             val trCenter = Offset(size.width * 0.90f, 0f)
-            val trRadius = size.height * 0.46f
+            val trRadius = size.height * 0.46f * radiusScale
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(glowColor, Color.Transparent),
@@ -168,10 +171,10 @@ fun Modifier.appGradientBackground(): Modifier = composed {
 
             // Layer 2: Second faint radial gradient top-left (~10% width, 0% height), ~35% opacity, radius ~30% of height
             val tlCenter = Offset(size.width * 0.10f, 0f)
-            val tlRadius = size.height * 0.30f
+            val tlRadius = size.height * 0.30f * radiusScale
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(glowColor.copy(alpha = 0.35f), Color.Transparent),
+                    colors = listOf(glowColor.copy(alpha = glowColor.alpha * 0.35f), Color.Transparent),
                     center = tlCenter,
                     radius = tlRadius
                 ),

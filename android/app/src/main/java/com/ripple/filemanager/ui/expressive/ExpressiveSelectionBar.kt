@@ -72,7 +72,9 @@ fun ExpressiveSelectionBar(
     modifier: Modifier = Modifier,
     onInstallApks: (() -> Unit)? = null,
     isSingleApk: Boolean = false,
-    onPaste: (() -> Unit)? = null
+    onPaste: (() -> Unit)? = null,
+    onToggleHide: (() -> Unit)? = null,
+    isAllHidden: Boolean = false
 ) {
     val colors = ExpressiveTheme.colors
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
@@ -260,6 +262,15 @@ fun ExpressiveSelectionBar(
                 label = if (selectedCount == 1) "Rename" else stringResource(R.string.batch_rename),
                 onClick = onBatchRename
             )
+
+            // Hide / Unhide
+            if (onToggleHide != null) {
+                SelectionActionCard(
+                    icon = if (isAllHidden) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                    label = if (isAllHidden) "Unhide" else "Hide",
+                    onClick = onToggleHide
+                )
+            }
 
             // 5. Share
             SelectionActionCard(

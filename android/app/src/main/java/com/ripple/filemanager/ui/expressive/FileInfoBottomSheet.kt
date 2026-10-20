@@ -12,6 +12,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -40,7 +42,8 @@ fun FileInfoBottomSheet(
     onDismissRequest: () -> Unit,
     onShare: () -> Unit,
     onRename: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onToggleHide: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = ExpressiveTheme.colors
@@ -101,12 +104,12 @@ fun FileInfoBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Primary actions row (Share / Rename / Delete)
+            // Primary actions row (Share / Rename / Hide or Unhide / Delete)
             // Each rendered as cookie-icon-over-label tile (cookie shape ~48dp, label below 13-14sp)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -123,6 +126,14 @@ fun FileInfoBottomSheet(
                     iconTint = colors.text,
                     labelColor = colors.text,
                     onClick = onRename
+                )
+                val isHidden = file.name.startsWith(".")
+                ActionTileItem(
+                    title = if (isHidden) "Unhide" else "Hide",
+                    icon = if (isHidden) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                    iconTint = colors.text,
+                    labelColor = colors.text,
+                    onClick = onToggleHide
                 )
                 ActionTileItem(
                     title = "Delete",

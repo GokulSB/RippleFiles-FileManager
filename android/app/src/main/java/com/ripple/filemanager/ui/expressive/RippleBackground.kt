@@ -24,7 +24,10 @@ fun RippleBackground(
     content: (@Composable BoxScope.() -> Unit)? = null
 ) {
     val colors = ExpressiveTheme.colors
-    val glowColor = colors.glow
+    val isAmoled = colors.isAmoled
+    // For AMOLED: reduce glow intensity/opacity by roughly half and shrink radius slightly
+    val glowColor = if (isAmoled) colors.glow.copy(alpha = colors.glow.alpha * 0.50f) else colors.glow
+    val radiusScale = if (isAmoled) 0.82f else 1.0f
     val lineColor = colors.line.copy(alpha = colors.lineAlpha)
 
     Box(
@@ -34,7 +37,7 @@ fun RippleBackground(
             .drawWithCache {
                 // Layer 1: Radial gradient centered at top-right corner (~90% width, 0% height), radius ~46% of height
                 val trCenter = Offset(size.width * 0.90f, 0f)
-                val trRadius = size.height * 0.46f
+                val trRadius = size.height * 0.46f * radiusScale
                 val trBrush = Brush.radialGradient(
                     colors = listOf(glowColor, Color.Transparent),
                     center = trCenter,
@@ -43,9 +46,9 @@ fun RippleBackground(
 
                 // Layer 2: Second faint radial gradient top-left (~10% width, 0% height), ~35% opacity, radius ~30% of height
                 val tlCenter = Offset(size.width * 0.10f, 0f)
-                val tlRadius = size.height * 0.30f
+                val tlRadius = size.height * 0.30f * radiusScale
                 val tlBrush = Brush.radialGradient(
-                    colors = listOf(glowColor.copy(alpha = 0.35f), Color.Transparent),
+                    colors = listOf(glowColor.copy(alpha = glowColor.alpha * 0.35f), Color.Transparent),
                     center = tlCenter,
                     radius = tlRadius
                 )

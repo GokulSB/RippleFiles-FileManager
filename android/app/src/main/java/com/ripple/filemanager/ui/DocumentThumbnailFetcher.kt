@@ -27,6 +27,8 @@ class DocumentThumbnailFetcher(
         val bitmap = when (ext) {
             "pdf" -> generatePdfThumbnail()
             "docx", "pptx", "xlsx" -> generateDocxThumbnail()
+            "apk" -> generateApkThumbnail()
+            "txt", "log", "md", "json", "xml", "kt", "java", "py", "html", "css", "js" -> generateTextThumbnail()
             else -> null
         }
         
@@ -104,6 +106,8 @@ class DocumentThumbnailFetcher(
             var bitmap: Bitmap? = null
             ZipFile(file).use { zip ->
                 val entry = zip.getEntry("docProps/thumbnail.jpeg")
+                    ?: zip.getEntry("docProps/thumbnail.png")
+                    ?: zip.getEntry("docProps/thumbnail.wmf")
                 if (entry != null) {
                     zip.getInputStream(entry).use { input ->
                         bitmap = BitmapFactory.decodeStream(input)
@@ -116,11 +120,55 @@ class DocumentThumbnailFetcher(
         }
     }
 
+    private fun generateApkThumbnail(): Bitmap? {
+        return try {
+            val pm = options.context.packageManager
+            val info = pm.getPackageArchiveInfo(file.absolutePath, 0) ?: return null
+            val appInfo = info.applicationInfo ?: return null
+            appInfo.sourceDir = file.absolutePath
+            appInfo.publicSourceDir = file.absolutePath
+            val drawable = appInfo.loadIcon(pm) ?: return null
+            if (drawable is BitmapDrawable && drawable.bitmap != null) {
+                drawable.bitmap
+            } else {
+                val width = drawable.intrinsicWidth.takeIf { it > 0 } ?: 128
+                val height = drawable.intrinsicHeight.takeIf { it > 0 } ?: 128
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                drawable.setBounds(0, 0, canvas.width, canvas.height)
+                drawable.draw(canvas)
+                bitmap
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    companion object {
+        val SUPPORTED_EXTENSIONS = setOf(
+            "pdf", "docx", "pptx", "xlsx", "apk",
+            "txt", "log", "md", "json", "xml", "kt", "java", "py", "html", "css", "js"
+        )
+    }
+
     class Factory : Fetcher.Factory<File> {
         override fun create(data: File, options: Options, imageLoader: ImageLoader): Fetcher? {
             val ext = data.extension.lowercase()
-            if (ext in listOf("pdf", "docx", "pptx", "xlsx")) {
+            if (ext in SUPPORTED_EXTENSIONS) {
                 return DocumentThumbnailFetcher(data, options)
+            }
+            return null
+        }
+    }
+
+    class UriFactory : Fetcher.Factory<android.net.Uri> {
+        override fun create(data: android.net.Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
+            if (data.scheme == "file" && data.path != null) {
+                val file = File(data.path!!)
+                val ext = file.extension.lowercase()
+                if (ext in SUPPORTED_EXTENSIONS) {
+                    return DocumentThumbnailFetcher(file, options)
+                }
             }
             return null
         }

@@ -81,12 +81,13 @@ fun CleanerScreen(
                                 "documents", "docs", "doc" -> "doc"
                                 "images", "image" -> "image"
                                 "videos", "video" -> "video"
-                                "audio" -> "audio"
-                                "apps", "apk" -> "apk"
+                                "audio", "music" -> "audio"
+                                "apps", "app", "apk" -> "apk"
                                 "downloads", "download" -> "download"
                                 "archives", "archive" -> "archive"
-                                "duplicates" -> "duplicates"
-                                "other files", "large" -> "large"
+                                "duplicates", "duplicate" -> "duplicates"
+                                "large files", "large", "other files", "other" -> "large"
+                                "empty folders", "empty_folders" -> "empty_folders"
                                 else -> categoryName.lowercase()
                             }
                             if (onNavigateToCategory != null) {
@@ -107,14 +108,17 @@ fun CleanerScreen(
                     )
                 }
             } else {
-                val categoryData = when (state.currentCleanerCategory) {
-                    "Documents" -> data.documents
-                    "Images" -> data.images
-                    "Videos" -> data.videos
-                    "Audio" -> data.audio
-                    "Apps" -> data.apps
-                    "Empty folders" -> data.emptyFolders
-                    "Duplicates" -> data.duplicates
+                val categoryData = when (state.currentCleanerCategory?.lowercase()) {
+                    "documents", "docs", "doc" -> data.documents
+                    "images", "image" -> data.images
+                    "videos", "video" -> data.videos
+                    "audio", "music" -> data.audio
+                    "apps", "app", "apk" -> data.apps
+                    "archives", "archive" -> data.archives
+                    "downloads", "download" -> data.downloads
+                    "large files", "large", "other files", "other" -> data.large
+                    "duplicates", "duplicate" -> data.duplicates
+                    "empty folders", "empty_folders" -> data.emptyFolders
                     else -> null
                 }
                 if (categoryData != null) {
@@ -168,13 +172,15 @@ private fun ExpressiveStorageOverview(
 
     val categoryList = remember(data) {
         listOf(
-            StorageBreakdownItem("Documents", data.documents.totalSizeBytes, ExpressiveTokens.PastelSky, Icons.Outlined.Description, "docs"),
-            StorageBreakdownItem("Images", data.images.totalSizeBytes, ExpressiveTokens.PastelCoral, Icons.Outlined.Image, "images"),
-            StorageBreakdownItem("Videos", data.videos.totalSizeBytes, ExpressiveTokens.PastelRose, Icons.Outlined.VideoFile, "videos"),
+            StorageBreakdownItem("Documents", data.documents.totalSizeBytes, ExpressiveTokens.PastelSky, Icons.Outlined.Description, "doc"),
+            StorageBreakdownItem("Images", data.images.totalSizeBytes, ExpressiveTokens.PastelCoral, Icons.Outlined.Image, "image"),
+            StorageBreakdownItem("Videos", data.videos.totalSizeBytes, ExpressiveTokens.PastelRose, Icons.Outlined.VideoFile, "video"),
             StorageBreakdownItem("Audio", data.audio.totalSizeBytes, ExpressiveTokens.PastelViolet, Icons.Outlined.AudioFile, "audio"),
-            StorageBreakdownItem("Apps", data.apps.totalSizeBytes, ExpressiveTokens.PastelSage, Icons.Outlined.Apps, "apps"),
-            StorageBreakdownItem("Other files", data.otherBytes, ExpressiveTokens.PastelTeal, Icons.AutoMirrored.Outlined.InsertDriveFile, "large"),
-            StorageBreakdownItem("Duplicates", data.duplicates.totalSizeBytes, ExpressiveTokens.PastelSand, Icons.Outlined.FolderOpen, "archives")
+            StorageBreakdownItem("Apps", data.apps.totalSizeBytes, ExpressiveTokens.PastelSage, Icons.Outlined.Apps, "apk"),
+            StorageBreakdownItem("Archives", data.archives.totalSizeBytes, ExpressiveTokens.PastelLilac, Icons.Outlined.Archive, "archive"),
+            StorageBreakdownItem("Downloads", data.downloads.totalSizeBytes, ExpressiveTokens.PastelTeal, Icons.Outlined.Download, "download"),
+            StorageBreakdownItem("Large files", data.large.totalSizeBytes, ExpressiveTokens.PastelSand, Icons.AutoMirrored.Outlined.InsertDriveFile, "large"),
+            StorageBreakdownItem("Duplicates", data.duplicates.totalSizeBytes, ExpressiveTokens.PastelPeach, Icons.Outlined.FolderOpen, "duplicates")
         )
     }
 

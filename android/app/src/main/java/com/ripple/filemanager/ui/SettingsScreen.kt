@@ -46,16 +46,25 @@ import androidx.compose.ui.unit.sp
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
 import com.ripple.filemanager.ThemeMode
+import com.ripple.filemanager.DarkSurfaceStyle
+import com.ripple.filemanager.IconShapeType
 import com.ripple.filemanager.R
 import com.ripple.filemanager.ui.expressive.*
+import com.ripple.filemanager.ui.theme.LocalAppFont
 import com.ripple.filemanager.ui.theme.hsl
+import androidx.compose.material.icons.outlined.Casino
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
+import com.ripple.filemanager.data.AppLanguage
+import com.ripple.filemanager.data.AppLanguages
 
 @Composable
 fun SettingsScreen(
     state: AppState,
     onAction: (AppAction) -> Unit
 ) {
-    var expandedSection by remember { mutableStateOf<String?>("appearance") }
+    var expandedSection by rememberSaveable { mutableStateOf<String?>("appearance") }
     val colors = ExpressiveTheme.colors
     val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
 
@@ -114,7 +123,7 @@ fun SettingsScreen(
     ) {
         // PageHeader "Settings"
         PageHeader(
-            title = "Settings",
+            title = stringResource(R.string.settings_title),
             onBack = { onAction(AppAction.SetShowSettingsScreen(false)) }
         )
 
@@ -148,13 +157,13 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(14.dp))
                             Column {
                                 Text(
-                                    text = "Vibration Feedback",
+                                    text = stringResource(R.string.settings_vibration),
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = colors.text
                                 )
                                 Text(
-                                    text = "Haptic feedback for touches",
+                                    text = stringResource(R.string.settings_vibration_desc),
                                     fontSize = 12.sp,
                                     color = colors.muted
                                 )
@@ -171,8 +180,8 @@ fun SettingsScreen(
 
             // Accordion 1: Appearance
             ExpressiveAccordionSection(
-                title = "Appearance",
-                subtitle = "Theme, colors, font & layout",
+                title = stringResource(R.string.settings_appearance),
+                subtitle = stringResource(R.string.settings_appearance_desc),
                 icon = Icons.Outlined.Palette,
                 pastel = ExpressiveTokens.PastelCoral,
                 isExpanded = expandedSection == "appearance",
@@ -183,10 +192,41 @@ fun SettingsScreen(
                 SettingsThemeContent(state, hapticOnAction)
             }
 
-            // Accordion 2: Security
+            // Accordion 2: Language
+            val currentLangTag = state.currentLanguage
+            val defaultLangLabel = stringResource(R.string.settings_language_default)
+            val languageSubtitle = remember(currentLangTag, defaultLangLabel) {
+                if (currentLangTag == "device_default" || currentLangTag.isBlank()) {
+                    defaultLangLabel
+                } else {
+                    val active = AppLanguages.SUPPORTED_LANGUAGES.find { lang ->
+                        lang.tag.equals(currentLangTag, ignoreCase = true)
+                    }
+                    active?.nativeName ?: currentLangTag
+                }
+            }
+
             ExpressiveAccordionSection(
-                title = "Security",
-                subtitle = "Password & biometric access",
+                title = stringResource(R.string.settings_language),
+                subtitle = languageSubtitle,
+                icon = Icons.Outlined.Translate,
+                pastel = ExpressiveTokens.PastelTeal,
+                isExpanded = expandedSection == "language",
+                onToggle = {
+                    expandedSection = if (expandedSection == "language") null else "language"
+                }
+            ) {
+                SettingsLanguageContent(
+                    currentLanguage = state.currentLanguage,
+                    onSelectLanguage = { tag -> onAction(AppAction.SetLanguage(tag)) },
+                    onHaptic = { haptics.settingsToggle() }
+                )
+            }
+
+            // Accordion 3: Security
+            ExpressiveAccordionSection(
+                title = stringResource(R.string.settings_security),
+                subtitle = stringResource(R.string.settings_security_desc),
                 icon = Icons.Outlined.Security,
                 pastel = ExpressiveTokens.PastelLilac,
                 isExpanded = expandedSection == "security",
@@ -197,10 +237,10 @@ fun SettingsScreen(
                 SettingsSecurityContent(state, hapticOnAction)
             }
 
-            // Accordion 3: Viewers
+            // Accordion 4: Viewers
             ExpressiveAccordionSection(
-                title = "Viewers",
-                subtitle = "File open preferences",
+                title = stringResource(R.string.settings_viewers),
+                subtitle = stringResource(R.string.settings_viewers_desc),
                 icon = Icons.Outlined.Visibility,
                 pastel = ExpressiveTokens.PastelSky,
                 isExpanded = expandedSection == "viewers",
@@ -211,10 +251,10 @@ fun SettingsScreen(
                 SettingsViewersContent(state, hapticOnAction)
             }
 
-            // Accordion 4: File Organiser
+            // Accordion 5: File Organiser
             ExpressiveAccordionSection(
-                title = "File organiser",
-                subtitle = "Category destination folders",
+                title = stringResource(R.string.settings_organizer),
+                subtitle = stringResource(R.string.settings_organizer_desc),
                 icon = Icons.Outlined.FolderSpecial,
                 pastel = ExpressiveTokens.PastelSage,
                 isExpanded = expandedSection == "organiser",
@@ -225,10 +265,10 @@ fun SettingsScreen(
                 SettingsOrganiserContent(state, hapticOnAction, launcher, currentPickingCategory)
             }
 
-            // Accordion 5: Nearby Share
+            // Accordion 6: Nearby Share
             ExpressiveAccordionSection(
-                title = "Nearby Share",
-                subtitle = "Device name, save location & quick transfer",
+                title = stringResource(R.string.settings_nearby_share),
+                subtitle = stringResource(R.string.settings_nearby_desc),
                 icon = Icons.Outlined.Share,
                 pastel = ExpressiveTokens.PastelPeach,
                 isExpanded = expandedSection == "nearby_share",
@@ -237,6 +277,20 @@ fun SettingsScreen(
                 }
             ) {
                 SettingsNearbyShareContent(state, hapticOnAction, nearbyFolderLauncher)
+            }
+
+            // Accordion 7: Music Player
+            ExpressiveAccordionSection(
+                title = stringResource(R.string.settings_music_player),
+                subtitle = stringResource(R.string.settings_music_player_desc),
+                icon = Icons.Outlined.MusicNote,
+                pastel = ExpressiveTokens.categoryPastel("audio"),
+                isExpanded = expandedSection == "music_player",
+                onToggle = {
+                    expandedSection = if (expandedSection == "music_player") null else "music_player"
+                }
+            ) {
+                SettingsMusicPlayerContent(state, hapticOnAction)
             }
 
             Spacer(modifier = Modifier.height(130.dp))
@@ -331,15 +385,15 @@ private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit)
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
         // Theme mode (System / Light / Dark)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Theme mode", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.text)
+            Text(stringResource(R.string.theme_mode_label), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.text)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf(
-                    Triple(ThemeMode.SYSTEM, "System", Icons.Outlined.BrightnessAuto),
-                    Triple(ThemeMode.LIGHT, "Light", Icons.Outlined.LightMode),
-                    Triple(ThemeMode.DARK, "Dark", Icons.Outlined.DarkMode)
+                    Triple(ThemeMode.SYSTEM, stringResource(R.string.theme_system), Icons.Outlined.BrightnessAuto),
+                    Triple(ThemeMode.LIGHT, stringResource(R.string.theme_light), Icons.Outlined.LightMode),
+                    Triple(ThemeMode.DARK, stringResource(R.string.theme_dark), Icons.Outlined.DarkMode)
                 ).forEach { (mode, label, icon) ->
                     ExpressiveChip(
                         label = label,
@@ -352,6 +406,43 @@ private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit)
             }
         }
 
+        // AMOLED black
+        val isDarkThemeActive = when (state.themeMode) {
+            ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+            ThemeMode.DARK -> true
+            ThemeMode.LIGHT -> false
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.amoled_black),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isDarkThemeActive) colors.text else colors.text.copy(alpha = 0.45f)
+                )
+                Text(
+                    text = if (isDarkThemeActive) {
+                        stringResource(R.string.amoled_black_subtitle)
+                    } else {
+                        stringResource(R.string.amoled_black_disabled_subtitle)
+                    },
+                    fontSize = 12.sp,
+                    color = colors.muted.copy(alpha = if (isDarkThemeActive) 1f else 0.45f)
+                )
+            }
+            ExpressiveSwitch(
+                checked = state.darkSurfaceStyle == DarkSurfaceStyle.AMOLED,
+                onCheckedChange = { 
+                    onAction(AppAction.SetDarkSurfaceStyle(if (it) DarkSurfaceStyle.AMOLED else DarkSurfaceStyle.STANDARD)) 
+                },
+                enabled = isDarkThemeActive
+            )
+        }
+
         // Dynamic system theme
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -359,8 +450,8 @@ private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit)
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Dynamic system theme", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
-                Text("Match system wallpaper palette", fontSize = 12.sp, color = colors.muted)
+                Text(stringResource(R.string.dynamic_color_label), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
+                Text(stringResource(R.string.use_system_theme_color), fontSize = 12.sp, color = colors.muted)
             }
             ExpressiveSwitch(
                 checked = state.useDynamicSystemTheme,
@@ -410,7 +501,7 @@ private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit)
                 presets.forEach { hue ->
                     val color = hsl(hue, 65f, 66f)
                     val isActive = kotlin.math.abs(state.themeHue - hue) < 1f && !state.useDynamicSystemTheme
-                    val cookieShape = remember { CookieShape(lobes = 8, amplitude = 0.08f) }
+                    val cookieShape = rememberIconShape(lobes = 8, amplitude = 0.08f)
 
                     Box(
                         modifier = Modifier
@@ -430,6 +521,86 @@ private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit)
                         }
                     }
                 }
+            }
+        }
+
+        // Icon shape
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Icon shape",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.text
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconShapeType.selectableShapes.forEach { shapeType ->
+                    val isSelected = state.iconShapeSetting == shapeType
+                    val previewShape = IconShapes.forType(shapeType)
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            onAction(AppAction.SetIconShape(shapeType))
+                        }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(previewShape)
+                                .background(colors.accent)
+                                .then(
+                                    if (isSelected) {
+                                        Modifier.border(2.dp, colors.text, previewShape)
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = colors.ink,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            } else if (shapeType == IconShapeType.AUTO) {
+                                Icon(
+                                    Icons.Outlined.Casino,
+                                    contentDescription = "Auto",
+                                    tint = colors.ink.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = shapeType.label,
+                            fontSize = 11.5.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            fontFamily = LocalAppFont.current,
+                            color = if (isSelected) colors.text else colors.muted,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+            if (state.iconShapeSetting == IconShapeType.AUTO) {
+                Text(
+                    text = "Changes each time you open the app",
+                    fontSize = 12.sp,
+                    fontFamily = LocalAppFont.current,
+                    color = colors.muted
+                )
             }
         }
 
@@ -533,6 +704,22 @@ private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit)
                 )
             }
         }
+
+        // Show hidden files
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.settings_hidden_files), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
+                Text(stringResource(R.string.settings_hidden_files_desc), fontSize = 12.sp, color = colors.muted)
+            }
+            ExpressiveSwitch(
+                checked = state.showHiddenFiles,
+                onCheckedChange = { onAction(AppAction.SetShowHiddenFiles(it)) }
+            )
+        }
     }
 }
 
@@ -549,7 +736,7 @@ private fun SettingsSecurityContent(state: AppState, onAction: (AppAction) -> Un
         OutlinedTextField(
             value = oldPassword,
             onValueChange = { oldPassword = it },
-            label = { Text("Old password") },
+            label = { Text(stringResource(R.string.old_password_label)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
@@ -567,7 +754,7 @@ private fun SettingsSecurityContent(state: AppState, onAction: (AppAction) -> Un
         OutlinedTextField(
             value = currentPassword,
             onValueChange = { currentPassword = it },
-            label = { Text("New password") },
+            label = { Text(stringResource(R.string.set_new_password_label)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
@@ -626,8 +813,8 @@ private fun SettingsSecurityContent(state: AppState, onAction: (AppAction) -> Un
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Enable fingerprint access", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
-                Text("Use biometric unlock", fontSize = 12.sp, color = colors.muted)
+                Text(stringResource(R.string.enable_fingerprint_access), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
+                Text(stringResource(R.string.settings_security_desc), fontSize = 12.sp, color = colors.muted)
             }
             ExpressiveSwitch(
                 checked = biometricEnabled,
@@ -1003,5 +1190,180 @@ private fun SettingsNearbyShareContent(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun SettingsLanguageContent(
+    currentLanguage: String,
+    onSelectLanguage: (String) -> Unit,
+    onHaptic: () -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        val isDefaultSelected = currentLanguage == "device_default" || currentLanguage.isBlank()
+        LanguageOptionRow(
+            nativeName = stringResource(R.string.settings_language_default),
+            englishGloss = null,
+            isSelected = isDefaultSelected,
+            onClick = {
+                if (!isDefaultSelected) {
+                    onHaptic()
+                    onSelectLanguage("device_default")
+                }
+            }
+        )
+
+        AppLanguages.SUPPORTED_LANGUAGES.forEach { lang ->
+            val isSelected = currentLanguage.equals(lang.tag, ignoreCase = true)
+
+            LanguageOptionRow(
+                nativeName = lang.nativeName,
+                englishGloss = lang.englishGloss,
+                isSelected = isSelected,
+                onClick = {
+                    if (!isSelected) {
+                        onHaptic()
+                        onSelectLanguage(lang.tag)
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LanguageOptionRow(
+    nativeName: String,
+    englishGloss: String?,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = ExpressiveTheme.colors
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isSelected) colors.card.copy(alpha = 0.85f) else Color.Transparent)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = nativeName,
+                fontSize = 15.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                fontFamily = LocalAppFont.current,
+                color = colors.text
+            )
+            if (englishGloss != null) {
+                Text(
+                    text = englishGloss,
+                    fontSize = 12.sp,
+                    fontFamily = LocalAppFont.current,
+                    color = colors.muted
+                )
+            }
+        }
+
+        // Radio-style filled / outlined circle indicator
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .border(
+                    width = 2.dp,
+                    color = if (isSelected) colors.accent else colors.muted.copy(alpha = 0.5f),
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(colors.accent)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsMusicPlayerContent(
+    state: AppState,
+    onAction: (AppAction) -> Unit
+) {
+    val colors = ExpressiveTheme.colors
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column {
+            Text(
+                text = stringResource(R.string.settings_mini_player_auto_close),
+                fontFamily = LocalAppFont.current,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+                color = colors.text
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = stringResource(R.string.settings_mini_player_auto_close_desc),
+                fontFamily = LocalAppFont.current,
+                fontSize = 12.sp,
+                color = colors.muted
+            )
+        }
+
+        val options = listOf(
+            0 to stringResource(R.string.auto_close_never),
+            5 to stringResource(R.string.auto_close_5s),
+            10 to stringResource(R.string.auto_close_10s),
+            30 to stringResource(R.string.auto_close_30s)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { (seconds, label) ->
+                val isSelected = state.miniPlayerAutoCloseSeconds == seconds
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (isSelected) colors.accent else colors.card)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) colors.accent else colors.line.copy(alpha = colors.lineAlpha),
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .clickable {
+                            onAction(AppAction.SetMiniPlayerAutoCloseSeconds(seconds))
+                        }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        fontFamily = LocalAppFont.current,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        fontSize = 12.sp,
+                        color = if (isSelected) colors.ink else colors.text,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
     }
 }

@@ -8,11 +8,11 @@ import kotlinx.coroutines.CompletableDeferred
  */
 
 data class DeviceDto(
-    val alias: String,
+    val alias: String = "Unknown",
     val version: String = "2.0",
     val deviceModel: String? = null,
     val deviceType: String? = "mobile", // mobile | desktop | web | headless | server
-    val fingerprint: String,
+    val fingerprint: String = "",
     val port: Int = 53317,
     val protocol: String = "https", // https | http
     val download: Boolean = false,
@@ -20,15 +20,15 @@ data class DeviceDto(
 )
 
 data class PrepareUploadRequestDto(
-    val info: DeviceDto,
-    val files: Map<String, FileDto>
+    val info: DeviceDto? = null,
+    val files: Map<String, FileDto>? = null
 )
 
 data class FileDto(
-    val id: String,
-    val fileName: String,
-    val size: Long,
-    val fileType: String,
+    val id: String = "",
+    val fileName: String = "",
+    val size: Long = 0L,
+    val fileType: String? = null,
     val sha256: String? = null,
     val preview: String? = null,
     val metadata: FileMetadataDto? = null
@@ -40,8 +40,8 @@ data class FileMetadataDto(
 )
 
 data class PrepareUploadResponseDto(
-    val sessionId: String,
-    val files: Map<String, String> // fileId to token
+    val sessionId: String = "",
+    val files: Map<String, String> = emptyMap() // fileId to token
 )
 
 data class NearbyPeer(

@@ -43,6 +43,7 @@ import com.ripple.filemanager.AppState
 import com.ripple.filemanager.R
 import com.ripple.filemanager.haptics.LocalHaptics
 import com.ripple.filemanager.ui.expressive.CookieIcon
+import com.ripple.filemanager.ui.expressive.ExpressiveSlider
 import com.ripple.filemanager.ui.expressive.ExpressiveTheme
 import com.ripple.filemanager.ui.expressive.ExpressiveTokens
 import com.ripple.filemanager.ui.expressive.pressScale
@@ -146,41 +147,8 @@ fun MiniMusicPlayer(
                 .padding(start = 14.dp, end = 10.dp, top = 2.dp, bottom = if (isExpanded) 4.dp else 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Album Art or Pastel CookieIcon
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clickable {
-                        haptics.tap()
-                        onAction(AppAction.SetShowFullScreenPlayer(true))
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (artworkBitmap != null) {
-                    AsyncImage(
-                        model = artworkBitmap,
-                        contentDescription = stringResource(R.string.album_art),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, colors.line.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                    )
-                } else {
-                    CookieIcon(
-                        icon = Icons.Outlined.MusicNote,
-                        bgColor = ExpressiveTokens.categoryPastel("audio"),
-                        iconTint = ExpressiveTokens.OnPastel,
-                        size = 44.dp,
-                        lobes = 8
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Track title & artist
-            Column(
+            // Track Info (Album Art + Title + Artist) - Tapping toggles expand/collapse inline
+            Row(
                 modifier = Modifier
                     .weight(1f)
                     .clickable(
@@ -188,31 +156,65 @@ fun MiniMusicPlayer(
                         indication = null
                     ) {
                         haptics.tap()
-                        onAction(AppAction.SetShowFullScreenPlayer(true))
-                    }
+                        isExpanded = !isExpanded
+                    },
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = state.audioTitle.ifEmpty { stringResource(R.string.now_playing) },
-                    fontFamily = LocalAppFont.current,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.5.sp,
-                    color = colors.text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                val artistText = state.audioArtist.ifEmpty { "Unknown Artist" }
-                val timeText = if (state.audioDuration > 0) {
-                    " · ${formatTime(audioPosition)} / ${formatTime(state.audioDuration)}"
-                } else ""
-                Text(
-                    text = "$artistText$timeText",
-                    fontFamily = LocalAppFont.current,
-                    fontSize = 11.5.sp,
-                    color = colors.muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                // Album Art or Pastel CookieIcon
+                Box(
+                    modifier = Modifier.size(44.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (artworkBitmap != null) {
+                        AsyncImage(
+                            model = artworkBitmap,
+                            contentDescription = stringResource(R.string.album_art),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, colors.line.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                        )
+                    } else {
+                        CookieIcon(
+                            icon = Icons.Outlined.MusicNote,
+                            bgColor = ExpressiveTokens.categoryPastel("audio"),
+                            iconTint = ExpressiveTokens.OnPastel,
+                            size = 44.dp,
+                            lobes = 8
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Track title & artist
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = state.audioTitle.ifEmpty { stringResource(R.string.now_playing) },
+                        fontFamily = LocalAppFont.current,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.5.sp,
+                        color = colors.text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    val artistText = state.audioArtist.ifEmpty { "Unknown Artist" }
+                    val timeText = if (state.audioDuration > 0) {
+                        " · ${formatTime(audioPosition)} / ${formatTime(state.audioDuration)}"
+                    } else ""
+                    Text(
+                        text = "$artistText$timeText",
+                        fontFamily = LocalAppFont.current,
+                        fontSize = 11.5.sp,
+                        color = colors.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(8.dp))
@@ -346,7 +348,7 @@ fun MiniMusicPlayer(
                 var isSeeking by remember { mutableStateOf(false) }
                 var seekPos by remember { mutableStateOf(0f) }
 
-                Slider(
+                ExpressiveSlider(
                     value = if (isSeeking) seekPos else audioPosition.toFloat(),
                     onValueChange = {
                         isSeeking = true
@@ -357,14 +359,7 @@ fun MiniMusicPlayer(
                         onAction(AppAction.SeekAudio(seekPos.toLong()))
                     },
                     valueRange = 0f..(state.audioDuration.takeIf { it > 0 }?.toFloat() ?: 100f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(26.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = colors.accent,
-                        activeTrackColor = colors.accent,
-                        inactiveTrackColor = colors.card
-                    )
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 // Timestamps Row
@@ -378,13 +373,15 @@ fun MiniMusicPlayer(
                         text = formatTime(if (isSeeking) seekPos.toLong() else audioPosition),
                         fontFamily = LocalAppFont.current,
                         fontSize = 11.5.sp,
-                        color = colors.muted
+                        color = colors.muted,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
                     Text(
                         text = formatTime(state.audioDuration),
                         fontFamily = LocalAppFont.current,
                         fontSize = 11.5.sp,
-                        color = colors.muted
+                        color = colors.muted,
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
                     )
                 }
 

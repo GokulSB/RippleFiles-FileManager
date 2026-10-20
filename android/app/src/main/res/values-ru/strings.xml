@@ -99,7 +99,13 @@
     <string name="access_restricted_title">Доступ ограничен</string>
     <string name="access_restricted_desc">Android 11+ ограничивает доступ к этой папке. Пожалуйста, предоставьте доступ с помощью Shizuku или совместимой альтернативы.</string>
     <string name="shizuku_not_detected">Служба Shizuku не обнаружена. Убедитесь, что она запущена.</string>
-    <string name="grant_access_action">Предоставить доступ</string>
+    <string name="grant_access_action">Разрешить</string>
+    <string name="install_shizuku_action">Установить Shizuku</string>
+    <string name="open_shizuku_action">Открыть Shizuku</string>
+    <string name="shizuku_not_installed_desc">Для просмотра папок Android/data и Android/obb необходимо установить Shizuku.</string>
+    <string name="shizuku_not_running_desc">Shizuku установлено, но служба не запущена. Откройте Shizuku и запустите службу.</string>
+    <string name="shizuku_running_desc">Служба Shizuku запущена. Предоставьте разрешение для просмотра этой папки.</string>
+    <string name="check_again_action">Проверить снова</string>
     <string name="empty_folder_content_desc">Пусто</string>
     <string name="no_files_found">Файлы не найдены</string>
     <string name="batch_rename">Пакетное переименование</string>
@@ -129,8 +135,6 @@
     <string name="fingerprint_failed_fallback">Сканирование отпечатка не удалось 3 раза. Пожалуйста, введите пароль.</string>
     <string name="enter_global_password">Введите глобальный пароль</string>
     <string name="verify_action">ПРОВЕРИТЬ</string>
-    
-    <!-- SkylineComponents.kt -->
     <string name="grid_view">Сетка</string>
     <string name="list_view">Список</string>
     <string name="menu_content_desc">Меню</string>
@@ -138,15 +142,11 @@
     <string name="organise_files">Организовать файлы</string>
     <string name="trash">Корзина</string>
     <string name="app_info">О приложении</string>
-    
-    <!-- SmbConnectionsScreen.kt -->
     <string name="smb_connections_title">Соединения SMB</string>
     <string name="add_content_desc">Добавить</string>
     <string name="new_connection">Новое соединение</string>
     <string name="stop_connection">Остановить</string>
     <string name="connect_action">Подключить</string>
-    
-    <!-- SmbFormScreen.kt -->
     <string name="add_smb_connection_title">Добавить соединение SMB</string>
     <string name="display_name_hint">Отображаемое имя (напр. Мой NAS)</string>
     <string name="host_ip_label">Хост или IP</string>
@@ -154,8 +154,6 @@
     <string name="share_name_label">Имя общего ресурса</string>
     <string name="domain_optional_label">Домен (Необязательно)</string>
     <string name="username_label">Имя пользователя</string>
-    
-    <!-- ThemeBottomSheet.kt -->
     <string name="theme_mode_label">Режим темы</string>
     <string name="dynamic_color_label">Динамический цвет</string>
     <string name="use_system_theme_color">Использовать системный цвет</string>
@@ -172,8 +170,6 @@
     <string name="enter_both_passwords_error">Пожалуйста, введите старый и новый пароль.</string>
     <string name="biometrics_label">Биометрия</string>
     <string name="enable_fingerprint_access">Включить доступ по отпечатку</string>
-    
-    <!-- TrashScreen.kt -->
     <string name="bin_disabled">Корзина (ОТКЛЮЧЕНА)</string>
     <string name="files_deleted_permanently">Файлы будут удалены навсегда</string>
     <string name="deselect_all">Снять выделение</string>
@@ -184,8 +180,6 @@
     <string name="enable_bin">Включить корзину</string>
     <string name="time_label">Время</string>
     <string name="unit_label">Единица измерения</string>
-    
-    <!-- SearchOverlay.kt & FolderScreen.kt -->
     <string name="search_files_hint">Поиск файлов...</string>
     <string name="filter_all">Все</string>
     <string name="filter_folders">Папки</string>
@@ -194,18 +188,8 @@
     <string name="filter_docs">Док-ты</string>
     <string name="filter_media">Медиа</string>
     <string name="filter_documents">Документы</string>
-    
-    <!-- DriveAuthScreen.kt -->
     <string name="connect_action_cloud">Подключить</string>
     <string name="disconnect_action_cloud">Отключить</string>
-    
-    <!-- Plurals -->
-    <plurals name="files_selected">
-        <item quantity="one">Выбран 1 файл</item>
-        <item quantity="few">Выбрано %1$d файла</item>
-        <item quantity="many">Выбрано %1$d файлов</item>
-        <item quantity="other">Выбрано %1$d файла</item>
-    </plurals>
     <string name="file_size_and_date">%1$s - %2$s</string>
     <string name="page_number">Страница %1$d</string>
     <string name="error_opening_pdf">Ошибка при открытии PDF: %1$s</string>
@@ -221,24 +205,16 @@
     <string name="grid_columns_value">%1$d</string>
     <string name="bin_retention_title">Корзина (%1$d %2$s)</string>
     <string name="bin_retention_desc">Файлы удаляются через %1$d %2$s</string>
-
-    <!-- New Strings -->
-    <plurals name="items_ready">
-        <item quantity="one">%1$d ЭЛЕМЕНТ ГОТОВ</item>
-        <item quantity="few">%1$d ЭЛЕМЕНТА ГОТОВЫ</item>
-        <item quantity="many">%1$d ЭЛЕМЕНТОВ ГОТОВЫ</item>
-        <item quantity="other">%1$d ЭЛЕМЕНТА ГОТОВО</item>
-    </plurals>
-    <string name="app_name_brand" translatable="false">Ripple Files</string>
-    <string name="app_tagline" translatable="false">Every file, in flow.</string>
-    <string name="developer_name" translatable="false">GokuCruz</string>
-    <string name="developer_email" translatable="false">gokulsb009@gmail.com</string>
-    <string name="provider_gdrive" translatable="false">GDrive</string>
-    <string name="provider_mega" translatable="false">Mega</string>
-    <string name="provider_dropbox" translatable="false">Dropbox</string>
-    <string name="provider_lan_smb" translatable="false">LAN/SMB</string>
-    <string name="provider_ftp" translatable="false">FTP</string>
-    <string name="provider_sftp" translatable="false">SFTP</string>
+    <string name="app_name_brand">Ripple Files</string>
+    <string name="app_tagline">Every file, in flow.</string>
+    <string name="developer_name">GokuCruz</string>
+    <string name="developer_email">gokulsb009@gmail.com</string>
+    <string name="provider_gdrive">GDrive</string>
+    <string name="provider_mega">Mega</string>
+    <string name="provider_dropbox">Dropbox</string>
+    <string name="provider_lan_smb">LAN/SMB</string>
+    <string name="provider_ftp">FTP</string>
+    <string name="provider_sftp">SFTP</string>
     <string name="version_label">Версия %1$s</string>
     <string name="about_app_title">О Ripple Files</string>
     <string name="app_description">Ripple Files — это современный, мощный и красиво оформленный файловый менеджер для Android.</string>
@@ -265,5 +241,98 @@
     <string name="and_more_files">И еще %1$d...</string>
     <string name="no_saved_connections">Нет сохраненных соединений</string>
     <string name="item_count_and_date">%1$s · %2$s</string>
-
+    <string name="nav_home">Главная</string>
+    <string name="nav_browse">Обзор</string>
+    <string name="nav_send">Отправить</string>
+    <string name="cat_images">Изображения</string>
+    <string name="cat_videos">Видео</string>
+    <string name="cat_audio">Аудио</string>
+    <string name="cat_docs">Документы</string>
+    <string name="cat_apps">Приложения</string>
+    <string name="cat_downloads">Загрузки</string>
+    <string name="cat_archives">Архивы</string>
+    <string name="cat_large">Большие</string>
+    <string name="gb_free">%1$s ГБ свободно</string>
+    <string name="storage_gb_free">ГБ свободно</string>
+    <string name="used_of_storage">%1$s · %2$s из %3$s ГБ</string>
+    <string name="no_recent_files">Нет недавних файлов</string>
+    <string name="no_files_found_query">Файлы не найдены для \"%1$s\"</string>
+    <string name="storage_locations">Места хранения</string>
+    <string name="add_connection">Добавить подключение</string>
+    <string name="switch_storage">Сменить накопитель</string>
+    <string name="disconnect_action">Отключить</string>
+    <string name="disconnect_prompt">Отключить %1$s?</string>
+    <string name="logout_prompt">Выйти из %1$s?</string>
+    <string name="sort_by">Сортировка по</string>
+    <string name="filter_label">Фильтр</string>
+    <string name="this_folder_empty">Эта папка пуста</string>
+    <string name="failed_to_load_files">Ошибка загрузки файлов</string>
+    <string name="select_files_from_drive">Выбрать файлы с Диска</string>
+    <string name="connect_cloud_storage">Подключить облачное хранилище</string>
+    <string name="connect_cloud_desc">Легко открывайте файлы из Google Диска, Mega, Dropbox или сетевых хранилищ в разделе «Обзор».</string>
+    <string name="cloud_network_drives">Облачные и сетевые диски</string>
+    <string name="sort_name">Имя</string>
+    <string name="sort_date_modified">Дата изменения</string>
+    <string name="sort_size_label">Размер</string>
+    <string name="all_files">Все файлы</string>
+    <string name="settings_vibration">Виброотклик</string>
+    <string name="settings_vibration_desc">Тактильный отклик при касаниях</string>
+    <string name="settings_appearance">Внешний вид</string>
+    <string name="settings_appearance_desc">Тема, цвета, шрифт и оформление</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_language_default">По умолчанию системы</string>
+    <string name="settings_security">Безопасность</string>
+    <string name="settings_security_desc">Пароль и биометрия</string>
+    <string name="settings_viewers">Просмотрщики</string>
+    <string name="settings_viewers_desc">Приложения для просмотра по умолчанию</string>
+    <string name="settings_organizer">Организатор</string>
+    <string name="settings_organizer_desc">Автоматическая сортировка файлов</string>
+    <string name="settings_trash_bin">Корзина</string>
+    <string name="settings_trash_desc">Хранение и автоудаление файлов</string>
+    <string name="settings_hidden_files">Показывать скрытые файлы</string>
+    <string name="settings_hidden_files_desc">Отображать системные и скрытые элементы</string>
+    <string name="settings_nearby_share">Быстрая отправка</string>
+    <string name="settings_nearby_desc">Имя устройства и настройки передачи</string>
+    <string name="settings_about">О приложении</string>
+    <string name="settings_about_desc">Версия, разработчик и лицензия</string>
+    <string name="settings_privacy_policy">Политика конфиденциальности</string>
+    <string name="theme_system">Как в системе</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="amoled_black">AMOLED черный</string>
+    <string name="amoled_black_subtitle">Истинно черный фон для OLED-экранов — только в темной теме.</string>
+    <string name="amoled_black_disabled_subtitle">Применяется только к темной теме</string>
+    <string name="add_ftp_connection_title">Добавить подключение FTP</string>
+    <string name="add_sftp_connection_title">Добавить подключение SFTP</string>
+    <string name="ftp_connections_title">Подключения FTP</string>
+    <string name="sftp_connections_title">Подключения SFTP</string>
+    <string name="use_ftps_label">Использовать FTPS (TLS)</string>
+    <string name="ftp_connection_details">%1$s:%2$d</string>
+    <string name="sftp_connection_details">%1$s:%2$d</string>
+    <string name="theme_lightness">Яркость темы (Темный режим)</string>
+    <string name="lock_file">Заблокировать</string>
+    <string name="unlock_file">Разблокировать</string>
+    <string name="pause">Пауза</string>
+    <string name="done_action">Готово</string>
+    <string name="new_folder">Новая папка</string>
+    <string name="new_file">Новый файл</string>
+    <string name="add_cloud">Добавить облако</string>
+    <string name="receive_action">Получить</string>
+    <string name="send_and_receive">Отправить и получить</string>
+    <string name="nearby_devices">Устройства поблизости (%1$d)</string>
+    <string name="staged_files">Выбранные файлы (%1$d)</string>
+    <string name="add_action">+ Добавить</string>
+    <string name="clear_action">Очистить</string>
+    <string name="create_title">Создать</string>
+    <string name="app_name">Ripple Files · Файловый менеджер</string>
+    <string name="launcher_name">Ripple Files\nФайловый менеджер</string>
+    <string name="settings_music_player">Музыкальный плеер</string>
+    <string name="settings_music_player_desc">Настройки воспроизведения и мини-плеера</string>
+    <string name="settings_mini_player_auto_close">Автозакрытие после паузы</string>
+    <string name="settings_mini_player_auto_close_desc">Закрывать мини-плеер после паузы</string>
+    <string name="auto_close_never">Не закрывать</string>
+    <string name="auto_close_5s">5 сек</string>
+    <string name="auto_close_10s">10 сек</string>
+    <string name="auto_close_30s">30 сек</string>
+    <string name="close_player">Закрыть плеер</string>
 </resources>

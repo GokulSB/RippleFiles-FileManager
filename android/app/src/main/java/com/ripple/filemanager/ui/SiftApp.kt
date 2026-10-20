@@ -131,7 +131,10 @@ fun SiftApp(
     val isWideScreen = windowWidthSizeClass != WindowWidthSizeClass.Compact
 
     val haptics = com.ripple.filemanager.haptics.rememberHapticsController { state.haptics }
-    androidx.compose.runtime.CompositionLocalProvider(com.ripple.filemanager.haptics.LocalHaptics provides haptics) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.ripple.filemanager.haptics.LocalHaptics provides haptics,
+        LocalIconShapeType provides state.activeIconShape
+    ) {
         val onAction: (AppAction) -> Unit = androidx.compose.runtime.remember(haptics, onActionOrig) { { action ->
             when (action) {
                 is AppAction.DeleteSelectedFiles,
@@ -175,6 +178,7 @@ fun SiftApp(
 
     SiftTheme(
         darkTheme = isDark,
+        darkSurfaceStyle = state.darkSurfaceStyle,
         dynamicColor = state.useDynamicSystemTheme,
         customHue = state.themeHue,
         lightnessOffset = state.themeLightnessOffset,
@@ -183,7 +187,8 @@ fun SiftApp(
         mainTextScale = state.mainTextScale,
         subTextScale = state.subTextScale,
         invertText = state.invertText,
-        cornerRoundness = state.cornerRoundness
+        cornerRoundness = state.cornerRoundness,
+        iconShape = state.activeIconShape
     ) {
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val drawerScope = rememberCoroutineScope()
@@ -203,7 +208,7 @@ fun SiftApp(
                         onAction(AppAction.SetMegaAuthStatus(false, null, null))
                         onAction(AppAction.SetShowMegaPopup(false))
                         if (state.location.startsWith("mega")) {
-                            onAction(AppAction.SetLocation("cloud"))
+                            onAction(AppAction.SetLocation(android.os.Environment.getExternalStorageDirectory().absolutePath))
                         }
                     },
                     onDismissRequest = {
@@ -573,6 +578,11 @@ fun SiftApp(
                                          state.viewingFile!!.name.endsWith(".txt", true) ||
                                          state.viewingFile!!.name.endsWith(".json", true) ||
                                          state.viewingFile!!.name.endsWith(".md", true) ||
+                                         state.viewingFile!!.name.endsWith(".xml", true) ||
+                                         state.viewingFile!!.name.endsWith(".html", true) ||
+                                         state.viewingFile!!.name.endsWith(".htm", true) ||
+                                         state.viewingFile!!.name.endsWith(".csv", true) ||
+                                         state.viewingFile!!.name.endsWith(".log", true) ||
                                          state.viewingFile!!.type == "doc"
                         if (isDocument) {
                             DocumentViewerScreen(
@@ -1075,7 +1085,7 @@ fun DrawerContent(
                         }
                         showGDrivePopup = false
                         if (state.location.startsWith("drive")) {
-                            onAction(AppAction.SetLocation("cloud"))
+                            onAction(AppAction.SetLocation(android.os.Environment.getExternalStorageDirectory().absolutePath))
                         }
                     },
                     onDismissRequest = {
@@ -1106,7 +1116,7 @@ fun DrawerContent(
                         onAction(AppAction.SetDropboxAuthStatus(false, null))
                         showDropboxPopup = false
                         if (state.location.startsWith("dropbox")) {
-                            onAction(AppAction.SetLocation("cloud"))
+                            onAction(AppAction.SetLocation(android.os.Environment.getExternalStorageDirectory().absolutePath))
                         }
                     },
                     onDismissRequest = {
@@ -1548,12 +1558,18 @@ fun handleFileOpen(
     if (file.path.startsWith("/")) {
         onAction(AppAction.LogRecentAction(file.path, "Opened"))
     }
-    if (file.name.endsWith(".pdf", ignoreCase = true) || file.type == "image" || file.type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { file.name.endsWith(it, ignoreCase = true) }) {
+    if (file.name.endsWith(".pdf", ignoreCase = true) || file.type == "image" || file.type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html", ".htm").any { file.name.endsWith(it, ignoreCase = true) }) {
         if (file.type == "image" && state.viewerImage == "Device default") {
             if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
             openFileInExternalApp(context, file, "image/*")
         } else if (file.type != "image" && state.viewerTextPdf == "Device default") {
-            val defaultMime = if (file.name.endsWith(".pdf", ignoreCase = true)) "application/pdf" else "text/plain"
+            val defaultMime = when {
+                file.name.endsWith(".pdf", ignoreCase = true) -> "application/pdf"
+                file.name.endsWith(".html", ignoreCase = true) || file.name.endsWith(".htm", ignoreCase = true) -> "text/html"
+                file.name.endsWith(".xml", ignoreCase = true) -> "text/xml"
+                file.name.endsWith(".json", ignoreCase = true) -> "application/json"
+                else -> "text/plain"
+            }
             if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
             openFileInExternalApp(context, file, defaultMime)
         } else {
@@ -1698,6 +1714,8 @@ fun MainContent(
     var showNewCloudConnectionSheet by remember { mutableStateOf(false) }
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var showCreateFileDialog by remember { mutableStateOf(false) }
+    var showFirstTimeHideWarning by remember { mutableStateOf(false) }
+    var pendingHideFiles by remember { mutableStateOf<List<FileItem>>(emptyList()) }
 
     LaunchedEffect(state.unlockedFileToOpen) {
         state.unlockedFileToOpen?.let { file ->
@@ -1867,7 +1885,19 @@ fun MainContent(
 
 
 
-            if (state.errorMessage != null) {
+            val screenKey = when {
+                showAboutScreen -> "about"
+                state.showSettingsScreen -> "settings"
+                state.showTrashScreen -> "trash"
+                state.showCleanerScreen -> "cleaner"
+                state.location == "home" -> "home"
+                state.location == "send" -> "send"
+                state.location.startsWith("category/") -> state.location
+                state.dualPaneMode != com.ripple.filemanager.DualPaneMode.OFF -> "dual_pane"
+                else -> "browse"
+            }
+
+            if (state.errorMessage != null && screenKey == "home" && state.files.isEmpty() && state.recentFiles.isEmpty()) {
                 val colors = ExpressiveTheme.colors
                 Column(
                     modifier = Modifier.weight(1f).fillMaxWidth()
@@ -1956,19 +1986,15 @@ fun MainContent(
                     fun getNavTabGroup(loc: String): String = when {
                         loc == "home" -> "home"
                         loc == "send" -> "send"
-                        loc == "cloud" || loc.startsWith("drive") || loc.startsWith("mega") ||
-                        loc.startsWith("dropbox") || loc.startsWith("smb_") || loc.startsWith("ftp_") ||
-                        loc.startsWith("sftp_") || loc.startsWith("webdav_") || loc.startsWith("nextcloud_") -> "cloud"
                         loc.startsWith("category/") -> "category"
-                        loc.startsWith("/") -> "browse"
                         loc == "cleaner" || loc == "trash" || loc == "settings" || loc == "about" -> "modal"
-                        else -> ""
+                        else -> "browse"
                     }
-                    val tabOrder = mapOf("home" to 0, "browse" to 1, "cloud" to 2, "send" to 3)
+                    val tabOrder = mapOf("home" to 0, "browse" to 1, "send" to 2)
                     val modalOrder = mapOf("cleaner" to 0, "trash" to 1, "settings" to 2, "about" to 3)
 
                     AnimatedContent(
-                        targetState = targetLocation,
+                        targetState = screenKey,
                         transitionSpec = {
                             if (isReducedMotion) {
                                 (fadeIn(animationSpec = androidx.compose.animation.core.snap()))
@@ -1985,7 +2011,7 @@ fun MainContent(
                                 com.ripple.filemanager.ui.TabSwitchLatencyTracker.onTransitionStart(initialState, targetState)
 
                                 val isForward = when {
-                                    // 1. Between distinct main tabs: follow horizontal tab order (Home < Browse < Cloud < Send)
+                                    // 1. Between distinct main tabs: follow horizontal tab order (Home < Browse < Send)
                                     isTabSwitch -> {
                                         targetTab!! > initialTab!!
                                     }
@@ -2001,7 +2027,7 @@ fun MainContent(
                                     // 4. Modal (Cleaner) <-> Category
                                     initialGroup == "modal" && targetGroup == "category" -> true
                                     initialGroup == "category" && targetGroup == "modal" -> false
-                                    // 5. From category to another main tab (browse, cloud, send): forward
+                                    // 5. From category to another main tab (browse, send): forward
                                     initialGroup == "category" && targetTab != null && targetTab > 0 -> true
                                     // 6. Home/Main <-> Category
                                     initialGroup != "category" && targetGroup == "category" -> true
@@ -2144,6 +2170,7 @@ fun MainContent(
                                 onMenuClick = onDrawerOpen,
                                 onTrashClick = { onAction(com.ripple.filemanager.AppAction.SetTrashScreenVisible(true)) },
                                 onOrganiseClick = { onAction(com.ripple.filemanager.AppAction.OrganiseDownloads) },
+                                onOpenNewConnection = { showNewCloudConnectionSheet = true },
                                 onFileClick = onFileClickCommon,
                                 onFileMenuClick = { file -> infoDialogFile = file },
                                 modifier = Modifier.fillMaxSize()
@@ -2152,55 +2179,6 @@ fun MainContent(
                             ExpressiveSendScreen(
                                 state = state,
                                 onAction = onAction,
-                                onMenuClick = onDrawerOpen,
-                                onTrashClick = { onAction(com.ripple.filemanager.AppAction.SetTrashScreenVisible(true)) },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else if (currentTargetLocation == "cloud" ||
-                            currentTargetLocation.startsWith("drive") ||
-                            currentTargetLocation.startsWith("mega") ||
-                            currentTargetLocation.startsWith("dropbox") ||
-                            currentTargetLocation.startsWith("smb_") ||
-                            currentTargetLocation.startsWith("ftp_") ||
-                            currentTargetLocation.startsWith("sftp_") ||
-                            currentTargetLocation.startsWith("webdav_") ||
-                            currentTargetLocation.startsWith("nextcloud_")) {
-                            ExpressiveCloudScreen(
-                                state = state,
-                                onAction = onAction,
-                                onConnectGoogleDrive = {
-                                    if (state.isGoogleDriveAuthenticated) {
-                                        launchDrivePicker()
-                                    } else {
-                                        val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                            .requestEmail()
-                                            .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
-                                            .build()
-                                        val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
-                                        client.signOut().addOnCompleteListener {
-                                            googleSignInLauncher.launch(client.signInIntent)
-                                        }
-                                    }
-                                },
-                                onConnectMega = { onAction(com.ripple.filemanager.AppAction.SetShowMegaPopup(true)) },
-                                onConnectDropbox = { showDropboxPopup = true },
-                                onConnectNextcloud = { showNextcloudConnections = true },
-                                onConnectWebDav = { showWebDavConnections = true },
-                                onConnectSftp = { showSftpConnections = true },
-                                onConnectFtp = { showFtpConnections = true },
-                                onConnectSmb = { showSmbConnections = true },
-                                onLogoutGoogleDrive = {
-                                    val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                        .requestEmail()
-                                        .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
-                                        .build()
-                                    val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
-                                    client.signOut().addOnCompleteListener {
-                                        onAction(AppAction.SetGoogleDriveAuthStatus(false, null))
-                                    }
-                                },
-                                onFileClick = onFileClickCommon,
-                                onFileMenuClick = { file -> infoDialogFile = file },
                                 onMenuClick = onDrawerOpen,
                                 onTrashClick = { onAction(com.ripple.filemanager.AppAction.SetTrashScreenVisible(true)) },
                                 modifier = Modifier.fillMaxSize()
@@ -2262,6 +2240,28 @@ fun MainContent(
                                 onMenuClick = onDrawerOpen,
                                 onTrashClick = { onAction(com.ripple.filemanager.AppAction.SetTrashScreenVisible(true)) },
                                 onOrganiseClick = { onAction(com.ripple.filemanager.AppAction.OrganiseDownloads) },
+                                onOpenNewConnection = { showNewCloudConnectionSheet = true },
+                                onConnectGoogleDrive = {
+                                    if (state.isGoogleDriveAuthenticated) {
+                                        launchDrivePicker()
+                                    } else {
+                                        val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                            .requestEmail()
+                                            .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
+                                            .build()
+                                        val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+                                        client.signOut().addOnCompleteListener {
+                                            googleSignInLauncher.launch(client.signInIntent)
+                                        }
+                                    }
+                                },
+                                onConnectMega = { onAction(com.ripple.filemanager.AppAction.SetShowMegaPopup(true)) },
+                                onConnectDropbox = { showDropboxPopup = true },
+                                onConnectNextcloud = { showNextcloudConnections = true },
+                                onConnectWebDav = { showWebDavConnections = true },
+                                onConnectSftp = { showSftpConnections = true },
+                                onConnectFtp = { showFtpConnections = true },
+                                onConnectSmb = { showSmbConnections = true },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -2579,6 +2579,10 @@ fun MainContent(
                 }
 
                 if ((!isModalScreen && !targetLocation.startsWith("category/")) || state.isSelectionMode || state.clipboardPaths.isNotEmpty()) {
+                    val selectedFileItems = remember(state.selectedFiles, state.files) {
+                        state.files.filter { it.id in state.selectedFiles }
+                    }
+                    val isAllSelectedHidden = selectedFileItems.isNotEmpty() && selectedFileItems.all { it.name.startsWith(".") }
                     UnifiedBottomPill(
                         state = state,
                         archiveProgress = archiveProgress,
@@ -2642,6 +2646,19 @@ fun MainContent(
                                     haptics.tap()
                                     showDeleteConfirm = true
                                 },
+                                onToggleHide = {
+                                    haptics.tap()
+                                    if (selectedFileItems.isNotEmpty()) {
+                                        if (!isAllSelectedHidden && !state.hasSeenHideWarning) {
+                                            pendingHideFiles = selectedFileItems
+                                            showFirstTimeHideWarning = true
+                                        } else {
+                                            onAction(AppAction.ToggleHideFiles(selectedFileItems))
+                                            onAction(AppAction.ClearSelection)
+                                        }
+                                    }
+                                },
+                                isAllHidden = isAllSelectedHidden,
                                 onInstallApks = if (showInstallFab) {
                                     {
                                         haptics.tap()
@@ -2660,9 +2677,8 @@ fun MainContent(
                         rippleNavContent = {
                             val activeTab = when {
                                 state.location == "send" -> ExpressiveTab.SEND
-                                state.location == "cloud" || state.location.startsWith("drive") || state.location.startsWith("mega") || state.location.startsWith("dropbox") || state.location.startsWith("smb_") || state.location.startsWith("ftp_") || state.location.startsWith("sftp_") || state.location.startsWith("webdav_") || state.location.startsWith("nextcloud_") -> ExpressiveTab.CLOUD
-                                state.location.startsWith("/") && state.location != "home" -> ExpressiveTab.BROWSE
-                                else -> ExpressiveTab.HOME
+                                state.location == "home" -> ExpressiveTab.HOME
+                                else -> ExpressiveTab.BROWSE
                             }
                             ExpressiveNavShell(
                                 activeTab = activeTab,
@@ -2674,13 +2690,12 @@ fun MainContent(
                                             onAction(AppAction.SelectNavTab(com.ripple.filemanager.NavTab.HOME))
                                         }
                                         ExpressiveTab.BROWSE -> {
-                                            val browseTarget = state.lastBrowseLocation.ifEmpty { android.os.Environment.getExternalStorageDirectory().absolutePath }
+                                            val defaultBrowse = android.os.Environment.getExternalStorageDirectory().absolutePath
+                                            val targetStorageId = com.ripple.filemanager.getStorageIdForLocation(state.location, state.sdCardPath)
+                                            val browseTarget = state.storageStates[targetStorageId]?.lastLocation
+                                                ?: state.lastBrowseLocation.ifEmpty { defaultBrowse }
                                             com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched(browseTarget)
                                             onAction(AppAction.SetLocation(browseTarget))
-                                        }
-                                        ExpressiveTab.CLOUD -> {
-                                            com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched("cloud")
-                                            onAction(AppAction.SelectNavTab(com.ripple.filemanager.NavTab.CLOUD))
                                         }
                                         ExpressiveTab.SEND -> {
                                             com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched("send")
@@ -2695,11 +2710,7 @@ fun MainContent(
                                 },
                                 onFabClick = {
                                     haptics.tap()
-                                    if (activeTab == ExpressiveTab.CLOUD) {
-                                        showNewCloudConnectionSheet = true
-                                    } else {
-                                        pillNavExpanded = true
-                                    }
+                                    pillNavExpanded = true
                                 },
                                 isSelectionMode = state.isSelectionMode,
                                 selectedCount = state.selectedFiles.size,
@@ -2727,6 +2738,19 @@ fun MainContent(
                                     showDeleteConfirm = true
                                 },
                                 onSelectAll = { onAction(AppAction.SelectAll()) },
+                                onToggleHide = {
+                                    haptics.tap()
+                                    if (selectedFileItems.isNotEmpty()) {
+                                        if (!isAllSelectedHidden && !state.hasSeenHideWarning) {
+                                            pendingHideFiles = selectedFileItems
+                                            showFirstTimeHideWarning = true
+                                        } else {
+                                            onAction(AppAction.ToggleHideFiles(selectedFileItems))
+                                            onAction(AppAction.ClearSelection)
+                                        }
+                                    }
+                                },
+                                isAllHidden = isAllSelectedHidden,
                                 isFabExpanded = pillNavExpanded || showNewCloudConnectionSheet
                             )
 
@@ -2848,16 +2872,18 @@ fun MainContent(
             }
         }
         
-        if (state.showFullScreenPlayer) {
-            androidx.compose.ui.window.Dialog(
-                onDismissRequest = { onAction(AppAction.SetShowFullScreenPlayer(false)) },
-                properties = androidx.compose.ui.window.DialogProperties(
-                    usePlatformDefaultWidth = false,
-                    decorFitsSystemWindows = false
-                )
-            ) {
-                FullScreenMusicPlayer(state = state, onAction = onAction)
-            }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = state.showFullScreenPlayer,
+            enter = androidx.compose.animation.slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)),
+            exit = androidx.compose.animation.slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180))
+        ) {
+            FullScreenMusicPlayer(state = state, onAction = onAction)
         }
         
         if (showDeleteConfirm) {
@@ -2933,7 +2959,7 @@ fun MainContent(
                         onAction(AppAction.SetDropboxAuthStatus(false, null))
                         showDropboxPopup = false
                         if (state.location.startsWith("dropbox")) {
-                            onAction(AppAction.SetLocation("cloud"))
+                            onAction(AppAction.SetLocation(android.os.Environment.getExternalStorageDirectory().absolutePath))
                         }
                     },
                     onDismissRequest = {
@@ -3215,6 +3241,17 @@ fun MainContent(
                     renameText = targetFile.name
                     showRenameForThisFile = true
                 },
+                onToggleHide = {
+                    haptics.tap()
+                    infoDialogFile = null
+                    val isUnhide = targetFile.name.startsWith(".")
+                    if (!isUnhide && !state.hasSeenHideWarning) {
+                        pendingHideFiles = listOf(targetFile)
+                        showFirstTimeHideWarning = true
+                    } else {
+                        onAction(AppAction.ToggleHideFiles(listOf(targetFile)))
+                    }
+                },
                 onDelete = {
                     haptics.tap()
                     fileToDelete = targetFile
@@ -3292,6 +3329,122 @@ fun MainContent(
                 onDismiss = {
                     onAction(com.ripple.filemanager.AppAction.DismissIncomingShare)
                 }
+            )
+        }
+
+        if (showFirstTimeHideWarning) {
+            com.ripple.filemanager.ui.GradientAlertDialog(
+                onDismissRequest = {
+                    showFirstTimeHideWarning = false
+                    pendingHideFiles = emptyList()
+                },
+                title = {
+                    Text(
+                        "Hiding files",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ExpressiveTheme.colors.text
+                    )
+                },
+                text = {
+                    Text(
+                        "Hiding renames the file so other apps can't see it. You can unhide it anytime from here.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ExpressiveTheme.colors.muted
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showFirstTimeHideWarning = false
+                            onAction(AppAction.SetHasSeenHideWarning(true))
+                            if (pendingHideFiles.isNotEmpty()) {
+                                onAction(AppAction.ToggleHideFiles(pendingHideFiles))
+                                if (state.isSelectionMode) {
+                                    onAction(AppAction.ClearSelection)
+                                }
+                                pendingHideFiles = emptyList()
+                            }
+                        }
+                    ) {
+                        Text("Got it", color = ExpressiveTheme.colors.accent, fontWeight = FontWeight.Medium)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showFirstTimeHideWarning = false
+                            pendingHideFiles = emptyList()
+                        }
+                    ) {
+                        Text(stringResource(R.string.cancel), color = ExpressiveTheme.colors.muted)
+                    }
+                },
+                shape = getDynamicCornerShape(16f, state.cornerRoundness),
+                containerColor = ExpressiveTheme.colors.container
+            )
+        }
+
+        if (state.pendingHideConflict != null) {
+            val conflict = state.pendingHideConflict!!
+            com.ripple.filemanager.ui.GradientAlertDialog(
+                onDismissRequest = {
+                    onAction(AppAction.DismissHideConflict)
+                },
+                title = {
+                    Text(
+                        "Item already exists",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ExpressiveTheme.colors.text
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "An item named \"${conflict.targetName}\" already exists in this destination.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ExpressiveTheme.colors.text
+                        )
+                        Text(
+                            "Would you like to overwrite it, rename to \"${conflict.suggestedName}\", or skip?",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ExpressiveTheme.colors.muted
+                        )
+                    }
+                },
+                confirmButton = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                onAction(AppAction.ResolveHideConflict(com.ripple.filemanager.data.core.ConflictResolution.Rename(conflict.suggestedName)))
+                            }
+                        ) {
+                            Text("Rename", color = ExpressiveTheme.colors.accent, fontWeight = FontWeight.Medium)
+                        }
+                        TextButton(
+                            onClick = {
+                                onAction(AppAction.ResolveHideConflict(com.ripple.filemanager.data.core.ConflictResolution.Overwrite))
+                            }
+                        ) {
+                            Text("Overwrite", color = ExpressiveTheme.colors.accent, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            onAction(AppAction.DismissHideConflict)
+                        }
+                    ) {
+                        Text("Skip", color = ExpressiveTheme.colors.muted)
+                    }
+                },
+                shape = getDynamicCornerShape(16f, state.cornerRoundness),
+                containerColor = ExpressiveTheme.colors.container
             )
         }
     }

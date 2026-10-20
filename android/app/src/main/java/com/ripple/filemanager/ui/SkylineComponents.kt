@@ -330,16 +330,32 @@ fun OffsetFab(
 // ─────────────────────────────────────────────────────────────────────────────
 
 fun getFolderAccent(folderName: String): Color {
-    val name = folderName.lowercase()
+    val name = folderName.lowercase().trim()
     return when {
-        name == "android" -> SkylineColors.AccentGreen
-        name == "dcim" || name == "camera" -> SkylineColors.AccentBlue
-        name == "documents" || name == "docs" -> SkylineColors.AccentTeal
-        name == "download" || name == "downloads" -> SkylineColors.AccentPrimary
-        name == "movies" || name == "video" || name == "videos" -> SkylineColors.AccentRed
-        name == "pictures" || name == "images" -> SkylineColors.AccentPink
-        name == "audio" || name == "ringtones" || name == "music" -> SkylineColors.AccentViolet
-        else -> SkylineColors.Dust
+        name == "android" || name.contains("system") -> SkylineColors.AccentGreen
+        name == "dcim" || name == "camera" || name.contains("photo") || name.contains("raw") -> SkylineColors.AccentBlue
+        name == "documents" || name == "docs" || name.contains("doc") || name.contains("pdf") || name.contains("note") -> SkylineColors.AccentTeal
+        name == "download" || name == "downloads" || name.contains("recv") || name.contains("temp") -> SkylineColors.AccentPrimary
+        name == "movies" || name == "video" || name == "videos" || name.contains("film") || name.contains("clip") || name.contains("screen record") -> SkylineColors.AccentRed
+        name == "pictures" || name == "images" || name.contains("screenshot") || name.contains("snap") || name.contains("wallpaper") -> SkylineColors.AccentPink
+        name == "audio" || name == "ringtones" || name == "music" || name.contains("song") || name.contains("podcast") || name.contains("record") -> SkylineColors.AccentViolet
+        name.contains("code") || name.contains("git") || name.contains("dev") || name.contains("project") -> SkylineColors.AccentGreen
+        name.contains("backup") || name.contains("data") || name.contains("archive") -> SkylineColors.AccentTeal
+        name.contains("social") || name.contains("whatsapp") || name.contains("telegram") || name.contains("chat") -> SkylineColors.AccentBlue
+        else -> {
+            val palette = listOf(
+                SkylineColors.AccentTeal,
+                SkylineColors.AccentPink,
+                SkylineColors.AccentBlue,
+                SkylineColors.AccentPrimary,
+                SkylineColors.AccentViolet,
+                SkylineColors.AccentGreen,
+                SkylineColors.AccentRed,
+                SkylineColors.Amber
+            )
+            val hash = name.hashCode() and 0x7FFFFFFF
+            palette[hash % palette.size]
+        }
     }
 }
 

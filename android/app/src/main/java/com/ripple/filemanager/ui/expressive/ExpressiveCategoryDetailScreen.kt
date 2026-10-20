@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -24,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -278,6 +280,7 @@ private fun CategoryFileRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(if (file.isHidden) 0.55f else 1f)
             .clip(rowShape)
             .background(if (isSelected) colors.accent.copy(alpha = 0.25f) else colors.card)
             .combinedClickable(
@@ -294,15 +297,9 @@ private fun CategoryFileRow(
                 onClick = onSelect
             )
         ) {
-            val icon = if (isSelected) {
-                Icons.Outlined.Check
-            } else {
-                fileIconForCategory(file.type, ext)
-            }
-            CookieIcon(
-                icon = icon,
-                bgColor = if (isSelected) colors.accent else pastel,
-                iconTint = if (isSelected) colors.ink else ExpressiveTokens.OnPastel,
+            ExpressiveFileThumbnail(
+                file = file,
+                isSelected = isSelected,
                 size = 48.dp,
                 lobes = cookieLobesForName(file.name)
             )
@@ -367,16 +364,13 @@ private fun CategoryGridCard(
     val cardShape = RoundedCornerShape((baseRadius * (roundness * 2).coerceIn(0f, 2f)).dp)
     val ext = file.name.substringAfterLast('.', "").lowercase(Locale.getDefault())
 
-    val hasPreview = remember(file.name, file.path) {
-        file.path.isNotEmpty() && (
-            file.type in setOf("image", "video") ||
-            ext in setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "mp4", "mkv", "mov", "webm", "avi", "pdf", "docx", "pptx", "xlsx")
-        )
+    val hasPreview = remember(file.name, file.path, file.thumbnailLink) {
+        hasThumbnail(file)
     }
 
     val pastel = remember(file.name, file.type) {
         if (file.type == "folder") getFolderAccent(file.name)
-        else ExpressiveTokens.categoryPastel(fileTypeCategory(file.name))
+        else ExpressiveTokens.categoryPastel(fileCategoryForName(file.name))
     }
 
     Card(
@@ -385,6 +379,7 @@ private fun CategoryGridCard(
         border = if (isSelected) BorderStroke(2.dp, colors.accent) else null,
         modifier = modifier
             .fillMaxWidth()
+            .alpha(if (file.isHidden) 0.55f else 1f)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onSelect
@@ -400,32 +395,60 @@ private fun CategoryGridCard(
                     .background(colors.insetCard)
             ) {
                 if (hasPreview) {
-                    var loadFailed by remember { mutableStateOf(false) }
+                    var loadFailed by remember(file.path, file.thumbnailLink) { mutableStateOf(false) }
+                    val isVideo = file.type == "video" || ext in setOf("mp4", "mkv", "mov", "webm", "avi", "3gp", "ts", "m4v")
                     if (!loadFailed) {
                         val context = LocalContext.current
-                        val request = remember(file.path) {
-                            ImageRequest.Builder(context)
-                                .data(File(file.path))
-                                .apply {
-                                    if (file.type == "video" || ext in setOf("mp4", "mkv", "mov", "webm", "avi")) {
-                                        videoFrameMillis(1000L)
-                                    }
-                                }
-                                .listener(
-                                    onError = { _, _ -> loadFailed = true }
-                                )
-                                .build()
+                        val model = remember(file.path, file.thumbnailLink) {
+                            when {
+                                file.thumbnailLink != null -> file.thumbnailLink
+                                file.path.isNotEmpty() -> File(file.path)
+                                else -> null
+                            }
                         }
-                        AsyncImage(
-                            model = request,
-                            contentDescription = file.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        if (model != null) {
+                            val request = remember(model) {
+                                ImageRequest.Builder(context)
+                                    .data(model)
+                                    .apply {
+                                        if (isVideo) {
+                                            videoFrameMillis(1000L)
+                                        }
+                                    }
+                                    .listener(
+                                        onError = { _, _ -> loadFailed = true }
+                                    )
+                                    .build()
+                            }
+                            AsyncImage(
+                                model = request,
+                                contentDescription = file.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            if (isVideo) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .size(38.dp)
+                                        .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            loadFailed = true
+                        }
                     } else {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CookieIcon(
-                                icon = fileIconForCategory(file.type, ext),
+                                icon = fileIconForFile(file.type, ext),
                                 bgColor = pastel,
                                 iconTint = ExpressiveTokens.OnPastel,
                                 size = if (columns >= 4) 34.dp else 44.dp,
@@ -436,7 +459,7 @@ private fun CategoryGridCard(
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CookieIcon(
-                            icon = fileIconForCategory(file.type, ext),
+                            icon = fileIconForFile(file.type, ext),
                             bgColor = pastel,
                             iconTint = ExpressiveTokens.OnPastel,
                             size = if (columns >= 4) 34.dp else 44.dp,
