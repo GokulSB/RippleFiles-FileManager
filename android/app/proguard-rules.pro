@@ -100,21 +100,21 @@
     public <init>(...);
 }
 
-# Mbassador event bus (net.engio.mbasso) -- SMBJ uses this internally for
+# Mbassador event bus (net.engio.mbassy) -- SMBJ uses this internally for
 # SMB2 packet/transport event dispatch. Mbassador discovers and instantiates
 # SubscriptionContext handlers via reflection; R8 strips their constructors
 # without these rules, causing the 'did not specify the necessary constructor
 # i(SubscriptionContext)' crash seen in release builds.
--keep class net.engio.mbasso.** { *; }
--keepclassmembers class net.engio.mbasso.** { *; }
+-keep class net.engio.mbassy.** { *; }
+-keepclassmembers class net.engio.mbassy.** { *; }
 -keepclassmembers class * {
-    @net.engio.mbasso.listener.Handler <methods>;
+    @net.engio.mbassy.listener.Handler <methods>;
 }
 -keepclassmembers class * {
-    public <init>(net.engio.mbasso.bus.config.IBusConfiguration);
-    public <init>(net.engio.mbasso.bus.common.PubSubSupport, net.engio.mbasso.listener.MessageListener, net.engio.mbasso.subscription.SubscriptionContext);
+    public <init>(net.engio.mbassy.bus.config.IBusConfiguration);
+    public <init>(net.engio.mbassy.bus.common.PubSubSupport, net.engio.mbassy.listener.MessageListener, net.engio.mbassy.subscription.SubscriptionContext);
 }
--dontwarn net.engio.mbasso.**
+-dontwarn net.engio.mbassy.**
 
 # SSHJ
 -keep class net.schmizz.sshj.** { *; }
