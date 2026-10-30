@@ -573,18 +573,8 @@ fun SiftApp(
                             }
                         )
                     } else {
-                        val isDocument = state.viewingFile!!.name.endsWith(".pdf", true) ||
-                                         state.viewingFile!!.name.endsWith(".docx", true) ||
-                                         state.viewingFile!!.name.endsWith(".txt", true) ||
-                                         state.viewingFile!!.name.endsWith(".json", true) ||
-                                         state.viewingFile!!.name.endsWith(".md", true) ||
-                                         state.viewingFile!!.name.endsWith(".xml", true) ||
-                                         state.viewingFile!!.name.endsWith(".html", true) ||
-                                         state.viewingFile!!.name.endsWith(".htm", true) ||
-                                         state.viewingFile!!.name.endsWith(".csv", true) ||
-                                         state.viewingFile!!.name.endsWith(".log", true) ||
-                                         state.viewingFile!!.type == "doc"
-                        if (isDocument) {
+                        val isPdf = state.viewingFile!!.name.endsWith(".pdf", true)
+                        if (isPdf) {
                             DocumentViewerScreen(
                                 fileItem = state.viewingFile!!,
                                 onClose = { onAction(AppAction.CloseFileViewer) },

@@ -70,16 +70,13 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: F
                 .padding(paddingValues)
         ) {
             val file = File(fileItem.path)
-            val isText = listOf(".txt", ".log", ".md", ".json", ".xml", ".html", ".htm", ".csv", ".kt", ".java", ".py", ".js", ".ts", ".css", ".sh", ".yaml", ".yml", ".properties", ".conf", ".ini")
-                .any { fileItem.name.endsWith(it, ignoreCase = true) }
+            val isDocx = fileItem.name.endsWith(".docx", ignoreCase = true) || fileItem.name.endsWith(".doc", ignoreCase = true)
             if (fileItem.name.endsWith(".pdf", ignoreCase = true)) {
                 PdfViewer(file, cornerRoundness)
             } else if (fileItem.name.endsWith(".zip", ignoreCase = true)) {
                 ZipViewer(file)
-            } else if (isText || fileItem.type == "doc") {
-                TextViewer(file)
             } else {
-                TextViewer(file)
+                TextViewer(file, isDocx = isDocx)
             }
         }
     }
@@ -249,21 +246,37 @@ fun PdfPageImage(pdfRenderer: PdfRenderer?, pageIndex: Int) {
 }
 
 @Composable
-fun TextViewer(file: File) {
+fun TextViewer(file: File, isDocx: Boolean = false) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var textContent by remember { mutableStateOf("Loading...") }
+    var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(file) {
-        // readTextContent() runs on IO dispatcher, handles permissions + charset gracefully
-        textContent = readTextContent(file)
+        isLoading = true
+        textContent = if (isDocx || file.name.endsWith(".docx", ignoreCase = true) || file.name.endsWith(".doc", ignoreCase = true)) {
+            readDocxContent(file, context)
+        } else {
+            readTextContent(file, context)
+        }
+        isLoading = false
     }
 
-    SelectionContainer {
-        Text(
-            text = textContent,
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else {
+        SelectionContainer {
+            Text(
+                text = textContent,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }
 

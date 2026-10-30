@@ -79,25 +79,63 @@ class NativePdfRenderer(private val file: File) : DocumentRenderer {
  * Handles plain text, markdown, json, xml, html, csv, log, code files.
  * Returns the full text or an error message.
  */
-suspend fun readTextContent(file: File): String = withContext(Dispatchers.IO) {
+suspend fun readTextContent(file: File, context: Context? = null): String = withContext(Dispatchers.IO) {
     try {
-        if (!file.exists()) return@withContext "File not found: ${file.path}"
-        if (!file.canRead()) return@withContext "Cannot read file (permission denied): ${file.name}"
-        val maxBytes = 4 * 1024 * 1024 // 4 MB cap
-        val bytes = file.inputStream().use { it.readBytes() }
-        val text = if (bytes.size > maxBytes) {
-            String(bytes, 0, maxBytes, Charsets.UTF_8) + "\n\n... [File truncated at 4 MB]"
-        } else {
-            // Try UTF-8 first, fall back to system default
-            try {
-                String(bytes, Charsets.UTF_8)
-            } catch (e: Exception) {
-                String(bytes)
-            }
+        if (!file.exists()) {
+            return@withContext "File not found: ${file.path}"
         }
-        text
+
+        val inputStream = try {
+            FileInputStream(file)
+        } catch (e: Exception) {
+            // Fallback via ContentResolver/FileProvider if direct FileInputStream fails
+            val uri = context?.let { ctx ->
+                try {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        ctx,
+                        "${ctx.packageName}.fileprovider",
+                        file
+                    )
+                } catch (_: Exception) { null }
+            }
+            uri?.let { context?.contentResolver?.openInputStream(it) } ?: throw e
+        }
+
+        inputStream.use { input ->
+            val maxBytes = 4 * 1024 * 1024 // 4 MB cap
+            val buffer = ByteArray(65536)
+            val output = java.io.ByteArrayOutputStream()
+            var totalRead = 0
+            var read: Int
+            while (input.read(buffer).also { read = it } != -1) {
+                if (totalRead + read > maxBytes) {
+                    val toTake = maxBytes - totalRead
+                    if (toTake > 0) output.write(buffer, 0, toTake)
+                    output.flush()
+                    val text = decodeBytes(output.toByteArray())
+                    return@withContext "$text\n\n... [File truncated at 4 MB]"
+                }
+                output.write(buffer, 0, read)
+                totalRead += read
+            }
+            output.flush()
+            decodeBytes(output.toByteArray())
+        }
     } catch (e: Exception) {
-        "Error reading file: ${e.message}"
+        "Error reading file: ${e.message ?: "Unable to read content"}"
+    }
+}
+
+private fun decodeBytes(bytes: ByteArray): String {
+    if (bytes.isEmpty()) return ""
+    return try {
+        String(bytes, Charsets.UTF_8)
+    } catch (_: Exception) {
+        try {
+            String(bytes, Charsets.ISO_8859_1)
+        } catch (_: Exception) {
+            String(bytes)
+        }
     }
 }
 
@@ -105,26 +143,72 @@ suspend fun readTextContent(file: File): String = withContext(Dispatchers.IO) {
  * Reads text content from a .docx file using Apache POI on the IO dispatcher.
  * Falls back to a clear error message if POI is unavailable or the file is corrupt.
  */
-suspend fun readDocxContent(file: File): String = withContext(Dispatchers.IO) {
+suspend fun readDocxContent(file: File, context: Context? = null): String = withContext(Dispatchers.IO) {
     try {
-        if (!file.exists()) return@withContext "File not found: ${file.path}"
-        if (!file.canRead()) return@withContext "Cannot read file (permission denied): ${file.name}"
-        FileInputStream(file).use { fis ->
-            // Dynamically load XWPFDocument so a missing class (ProGuard stripped)
-            // throws a clear ClassNotFoundException rather than a cryptic crash.
+        if (!file.exists()) {
+            return@withContext "File not found: ${file.path}"
+        }
+
+        val inputStream = try {
+            FileInputStream(file)
+        } catch (e: Exception) {
+            val uri = context?.let { ctx ->
+                try {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        ctx,
+                        "${ctx.packageName}.fileprovider",
+                        file
+                    )
+                } catch (_: Exception) { null }
+            }
+            uri?.let { context?.contentResolver?.openInputStream(it) } ?: throw e
+        }
+
+        inputStream.use { fis ->
             val docClass = Class.forName("org.apache.poi.xwpf.usermodel.XWPFDocument")
             val doc = docClass.getConstructor(java.io.InputStream::class.java).newInstance(fis)
-            val getParagraphs = docClass.getMethod("getParagraphs")
-            @Suppress("UNCHECKED_CAST")
-            val paragraphs = getParagraphs.invoke(doc) as List<*>
             val sb = StringBuilder()
-            for (para in paragraphs) {
-                val getText = para!!.javaClass.getMethod("getText")
-                sb.append(getText.invoke(para) as? String ?: "").append("\n")
-            }
-            // Close the document
+
+            // 1. Paragraphs
+            try {
+                val getParagraphs = docClass.getMethod("getParagraphs")
+                @Suppress("UNCHECKED_CAST")
+                val paragraphs = getParagraphs.invoke(doc) as? List<*>
+                paragraphs?.forEach { para ->
+                    val getText = para!!.javaClass.getMethod("getText")
+                    val text = getText.invoke(para) as? String
+                    if (!text.isNullOrBlank()) {
+                        sb.append(text).append("\n\n")
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // 2. Tables
+            try {
+                val getTables = docClass.getMethod("getTables")
+                @Suppress("UNCHECKED_CAST")
+                val tables = getTables.invoke(doc) as? List<*>
+                tables?.forEach { table ->
+                    val getRows = table!!.javaClass.getMethod("getRows")
+                    val rows = getRows.invoke(table) as? List<*> ?: return@forEach
+                    rows.forEach { row ->
+                        val getCells = row!!.javaClass.getMethod("getTableCells")
+                        val cells = getCells.invoke(row) as? List<*> ?: return@forEach
+                        val rowText = cells.mapNotNull { cell ->
+                            val getText = cell!!.javaClass.getMethod("getText")
+                            getText.invoke(cell) as? String
+                        }.filter { it.isNotBlank() }.joinToString(" | ")
+                        if (rowText.isNotBlank()) {
+                            sb.append(rowText).append("\n")
+                        }
+                    }
+                    sb.append("\n")
+                }
+            } catch (_: Exception) {}
+
             try { (doc as? AutoCloseable)?.close() } catch (_: Exception) {}
-            val result = sb.toString().trimEnd()
+
+            val result = sb.toString().trim()
             if (result.isBlank()) "(This document appears to be empty or contains only non-text content)" else result
         }
     } catch (e: ClassNotFoundException) {
@@ -132,7 +216,7 @@ suspend fun readDocxContent(file: File): String = withContext(Dispatchers.IO) {
         "Technical detail: Apache POI library was not included. " +
         "Use an external app (e.g. WPS Office, Google Docs) to open this file."
     } catch (e: Exception) {
-        "Error reading DOCX file: ${e.message}\n\n" +
+        "Error reading DOCX file: ${e.message ?: "Unable to read document"}\n\n" +
         "The file may be corrupt, password-protected, or in an unsupported format."
     }
 }

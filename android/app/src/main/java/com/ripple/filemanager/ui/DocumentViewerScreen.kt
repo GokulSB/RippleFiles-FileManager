@@ -195,7 +195,7 @@ fun DocumentViewerScreen(
             isLoading = true
             textContent = null
             val file = File(fileItem.path)
-            textContent = if (isDocx) readDocxContent(file) else readTextContent(file)
+            textContent = if (isDocx) readDocxContent(file, context) else readTextContent(file, context)
             isLoading = false
         }
 
