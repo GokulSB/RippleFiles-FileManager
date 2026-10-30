@@ -251,22 +251,12 @@ fun PdfPageImage(pdfRenderer: PdfRenderer?, pageIndex: Int) {
 @Composable
 fun TextViewer(file: File) {
     var textContent by remember { mutableStateOf("Loading...") }
-    
+
     LaunchedEffect(file) {
-        withContext(Dispatchers.IO) {
-            try {
-                val inputStream = file.inputStream()
-                val buffer = ByteArray(2 * 1024 * 1024) // up to 2MB
-                val bytesRead = inputStream.read(buffer)
-                val text = if (bytesRead > 0) String(buffer, 0, bytesRead) else ""
-                textContent = if (file.length() > 2 * 1024 * 1024) "$text\n\n... [File truncated at 2MB]" else text
-                inputStream.close()
-            } catch (e: Exception) {
-                textContent = "Error reading file: ${e.message}"
-            }
-        }
+        // readTextContent() runs on IO dispatcher, handles permissions + charset gracefully
+        textContent = readTextContent(file)
     }
-    
+
     SelectionContainer {
         Text(
             text = textContent,

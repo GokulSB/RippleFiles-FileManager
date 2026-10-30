@@ -201,8 +201,28 @@
 # ============================================================================
 -dontwarn androidx.media3.**
 -dontwarn coil.**
+
+# Apache POI (DOCX/XLSX/PPTX reading via XWPFDocument etc.)
+# Must be kept -- POI uses reflection heavily for XML parsing
+-keep class org.apache.poi.** { *; }
+-keepclassmembers class org.apache.poi.** { *; }
 -dontwarn org.apache.poi.**
+
+# PDFBox Android
+-keep class com.tom_roush.pdfbox.** { *; }
+-keepclassmembers class com.tom_roush.pdfbox.** { *; }
 -dontwarn com.tom_roush.pdfbox.**
+
+# XMLBeans (POI dependency for OOXML)
+-keep class org.apache.xmlbeans.** { *; }
+-keepclassmembers class org.apache.xmlbeans.** { *; }
+-dontwarn org.apache.xmlbeans.**
+
+# Stax / OpenXML4J (POI OOXML internals)
+-keep class org.openxmlformats.** { *; }
+-keep class schemaorg_apache_xmlbeans.** { *; }
+-dontwarn org.openxmlformats.**
+-dontwarn schemaorg_apache_xmlbeans.**
 -keep class * implements coil.fetch.Fetcher { *; }
 -keep class * implements coil.fetch.Fetcher$Factory { *; }
 -keep class * implements coil.decode.Decoder { *; }

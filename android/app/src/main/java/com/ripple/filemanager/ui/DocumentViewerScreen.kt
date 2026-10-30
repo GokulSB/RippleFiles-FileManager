@@ -80,161 +80,179 @@ fun DocumentViewerScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // Initialize renderer
-    var renderer by remember { mutableStateOf<DocumentRenderer?>(null) }
-    var pageCount by remember { mutableIntStateOf(0) }
+    // Determine if this is a PDF (bitmap pager) or text/docx (scrollable text)
+    val isPdf = fileItem.name.endsWith(".pdf", ignoreCase = true)
+    val isDocx = fileItem.name.endsWith(".docx", ignoreCase = true) ||
+                 fileItem.name.endsWith(".doc", ignoreCase = true)
 
-    DisposableEffect(fileItem) {
-        val file = File(fileItem.path)
-        val source = when {
-            file.name.endsWith(".pdf", true) -> DocumentSource.Pdf(file)
-            file.name.endsWith(".docx", true) -> DocumentSource.Docx(file)
-            file.name.endsWith(".md", true) -> DocumentSource.Markdown(file)
-            file.name.endsWith(".json", true) -> DocumentSource.Txt(file)
-            file.name.endsWith(".xml", true) -> DocumentSource.Txt(file)
-            file.name.endsWith(".html", true) || file.name.endsWith(".htm", true) -> DocumentSource.Txt(file)
-            else -> DocumentSource.Txt(file)
+    if (isPdf) {
+        // ── PDF: use existing bitmap-page renderer ──────────────────────────────
+        var renderer by remember { mutableStateOf<DocumentRenderer?>(null) }
+        var pageCount by remember { mutableIntStateOf(0) }
+
+        DisposableEffect(fileItem) {
+            val file = File(fileItem.path)
+            val newRenderer = NativePdfRenderer(file)
+            renderer = newRenderer
+            pageCount = newRenderer.pageCount
+            onDispose { newRenderer.close() }
         }
 
-        val newRenderer = when (source) {
-            is DocumentSource.Pdf -> NativePdfRenderer(file)
-            else -> SyntheticDocumentRenderer(context, file, source)
+        val thumbnailCache = remember { object : LruCache<Int, Bitmap>(20) {} }
+        val pageCache = remember { object : LruCache<Int, Bitmap>(3) {} }
+        val pagerState = rememberPagerState(pageCount = { pageCount })
+        val listState = rememberLazyListState()
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offset by remember { mutableStateOf(Offset.Zero) }
+        var bookmarkedPages by remember { mutableStateOf(setOf<Int>()) }
+        var isBottomExpanded by remember { mutableStateOf(false) }
+
+        androidx.activity.compose.BackHandler {
+            if (isBottomExpanded) isBottomExpanded = false else onClose()
         }
 
-        renderer = newRenderer
-        pageCount = newRenderer.pageCount
-
-        onDispose {
-            newRenderer.close()
-        }
-    }
-
-    // Thumbnail Cache (LRU)
-    val thumbnailCache = remember {
-        object : LruCache<Int, Bitmap>(20) {}
-    }
-
-    // High Res Page Cache (LRU)
-    val pageCache = remember {
-        object : LruCache<Int, Bitmap>(3) {}
-    }
-
-    val pagerState = rememberPagerState(pageCount = { pageCount })
-    val listState = rememberLazyListState()
-
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-    var bookmarkedPages by remember { mutableStateOf(setOf<Int>()) }
-    var isBottomExpanded by remember { mutableStateOf(false) }
-
-    androidx.activity.compose.BackHandler {
-        if (isBottomExpanded) {
-            isBottomExpanded = false
-        } else {
-            onClose()
-        }
-    }
-
-    // Sync scroll and reset zoom on page change
-    LaunchedEffect(pagerState.currentPage) {
-        if (pageCount > 0) {
-            listState.animateScrollToItem(pagerState.currentPage)
-            scale = 1f
-            offset = Offset.Zero
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .appGradientBackground()
-    ) {
-        // ═══ TOP BAR ═══
-        ExpressiveDocTopBar(
-            fileItem = fileItem,
-            currentPage = pagerState.currentPage,
-            pageCount = pageCount,
-            onBack = onClose
-        )
-
-        // ═══ MAIN CONTENT ═══
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            // Left thumbnail rail
-            ExpressiveDocThumbnailRail(
-                pageCount = pageCount,
-                renderer = renderer,
-                cache = thumbnailCache,
-                currentPage = pagerState.currentPage,
-                bookmarkedPages = bookmarkedPages,
-                listState = listState,
-                onPageClick = { index ->
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(index)
-                    }
-                }
-            )
-
-            // Main page area
-            Box(modifier = Modifier.fillMaxSize().weight(1f)) {
-                if (pageCount > 0) {
-                    VerticalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize(),
-                        userScrollEnabled = scale == 1f
-                    ) { page ->
-                        ExpressiveMainPageItem(
-                            index = page,
-                            renderer = renderer,
-                            cache = pageCache,
-                            scale = scale,
-                            offset = offset,
-                            onScaleChange = { scale = it },
-                            onOffsetChange = { offset = it }
-                        )
-                    }
-                } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = colors.accent)
-                    }
-                }
-
-                // Floating zoom/bookmark pill
-                ExpressiveFloatingPill(
-                    isBookmarked = bookmarkedPages.contains(pagerState.currentPage),
-                    onToggleBookmark = {
-                        val page = pagerState.currentPage
-                        bookmarkedPages = if (bookmarkedPages.contains(page)) {
-                            bookmarkedPages - page
-                        } else {
-                            bookmarkedPages + page
-                        }
-                    },
-                    onZoomIn = { scale = (scale * 1.5f).coerceAtMost(5f) },
-                    onZoomOut = {
-                        scale = (scale / 1.5f).coerceAtLeast(1f)
-                        if (scale == 1f) offset = Offset.Zero
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                )
+        LaunchedEffect(pagerState.currentPage) {
+            if (pageCount > 0) {
+                listState.animateScrollToItem(pagerState.currentPage)
+                scale = 1f
+                offset = Offset.Zero
             }
         }
 
-        // ═══ BOTTOM ACTION SHEET ═══
-        ExpressiveDocBottomSheet(
-            fileItem = fileItem,
-            currentPage = pagerState.currentPage,
-            pageCount = pageCount,
-            isExpanded = isBottomExpanded,
-            onToggleExpand = { isBottomExpanded = !isBottomExpanded },
-            onAction = onAction,
-            context = context
-        )
+        Column(modifier = Modifier.fillMaxSize().appGradientBackground()) {
+            ExpressiveDocTopBar(
+                fileItem = fileItem,
+                currentPage = pagerState.currentPage,
+                pageCount = pageCount,
+                onBack = onClose
+            )
+            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                ExpressiveDocThumbnailRail(
+                    pageCount = pageCount,
+                    renderer = renderer,
+                    cache = thumbnailCache,
+                    currentPage = pagerState.currentPage,
+                    bookmarkedPages = bookmarkedPages,
+                    listState = listState,
+                    onPageClick = { index -> coroutineScope.launch { pagerState.animateScrollToPage(index) } }
+                )
+                Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+                    if (pageCount > 0) {
+                        VerticalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize(),
+                            userScrollEnabled = scale == 1f
+                        ) { page ->
+                            ExpressiveMainPageItem(
+                                index = page,
+                                renderer = renderer,
+                                cache = pageCache,
+                                scale = scale,
+                                offset = offset,
+                                onScaleChange = { scale = it },
+                                onOffsetChange = { offset = it }
+                            )
+                        }
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = colors.accent)
+                        }
+                    }
+                    ExpressiveFloatingPill(
+                        isBookmarked = bookmarkedPages.contains(pagerState.currentPage),
+                        onToggleBookmark = {
+                            val page = pagerState.currentPage
+                            bookmarkedPages = if (bookmarkedPages.contains(page)) bookmarkedPages - page else bookmarkedPages + page
+                        },
+                        onZoomIn = { scale = (scale * 1.5f).coerceAtMost(5f) },
+                        onZoomOut = {
+                            scale = (scale / 1.5f).coerceAtLeast(1f)
+                            if (scale == 1f) offset = Offset.Zero
+                        },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+                    )
+                }
+            }
+            ExpressiveDocBottomSheet(
+                fileItem = fileItem,
+                currentPage = pagerState.currentPage,
+                pageCount = pageCount,
+                isExpanded = isBottomExpanded,
+                onToggleExpand = { isBottomExpanded = !isBottomExpanded },
+                onAction = onAction,
+                context = context
+            )
+        }
+
+    } else {
+        // ── Text / DOCX: load content on IO thread, display as scrollable text ──
+
+        // loading states
+        var textContent by remember { mutableStateOf<String?>(null) }
+        var isLoading by remember { mutableStateOf(true) }
+
+        LaunchedEffect(fileItem) {
+            isLoading = true
+            textContent = null
+            val file = File(fileItem.path)
+            textContent = if (isDocx) readDocxContent(file) else readTextContent(file)
+            isLoading = false
+        }
+
+        androidx.activity.compose.BackHandler { onClose() }
+
+        Column(modifier = Modifier.fillMaxSize().appGradientBackground()) {
+            // Top bar (pageCount = 0 hides the page counter, which is correct for text)
+            ExpressiveDocTopBar(
+                fileItem = fileItem,
+                currentPage = 0,
+                pageCount = 0,
+                onBack = onClose
+            )
+
+            when {
+                isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = colors.accent)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (isDocx) "Reading document…" else "Loading…",
+                                fontSize = 13.sp,
+                                color = colors.muted,
+                                fontFamily = LocalAppFont.current
+                            )
+                        }
+                    }
+                }
+                textContent != null -> {
+                    androidx.compose.foundation.text.selection.SelectionContainer(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            item {
+                                Text(
+                                    text = textContent!!,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = LocalAppFont.current,
+                                        color = colors.text,
+                                        lineHeight = 22.sp
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Could not read file.", color = MaterialTheme.colorScheme.error, fontFamily = LocalAppFont.current)
+                    }
+                }
+            }
+        }
     }
 }
 
