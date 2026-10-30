@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10秒</string>
     <string name="auto_close_30s">30秒</string>
     <string name="close_player">关闭播放器</string>
+
+    <string name="settings_app_name">应用名称</string>
+    <string name="settings_launcher_icon_label">启动器图标标签</string>
+    <string name="settings_pin_shortcut">以此名称固定到主屏幕</string>
+    <string name="settings_pin_shortcut_desc">以此名称在主屏幕上添加第二个图标</string>
+    <string name="launcher_icon_updated_toast">启动器图标已更新 — 您可能需要返回主屏幕查看更改。</string>
+    <string name="pin_shortcut_not_supported">您的启动器不支持固定快捷方式</string>
 </resources>

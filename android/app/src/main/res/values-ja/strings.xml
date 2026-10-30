@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10秒</string>
     <string name="auto_close_30s">30秒</string>
     <string name="close_player">プレーヤーを閉じる</string>
+
+    <string name="settings_app_name">アプリ名</string>
+    <string name="settings_launcher_icon_label">ランチャーアイコンのラベル</string>
+    <string name="settings_pin_shortcut">この名前でホーム画面に追加</string>
+    <string name="settings_pin_shortcut_desc">この名前でホーム画面に2つ目のアイコンを追加します</string>
+    <string name="launcher_icon_updated_toast">ランチャーアイコンを更新しました — 変更を確認するにはホーム画面に戻る必要がある場合があります。</string>
+    <string name="pin_shortcut_not_supported">お使いのランチャーはショートカットの固定をサポートしていません</string>
 </resources>

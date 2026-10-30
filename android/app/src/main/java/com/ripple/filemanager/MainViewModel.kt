@@ -239,6 +239,8 @@ data class AppState(
     val showBatchRenameDialog: Boolean = false,
     val iconShapeSetting: IconShapeType = IconShapeType.COOKIE,
     val activeIconShape: IconShapeType = IconShapeType.COOKIE,
+    val customAppName: String = "Ripple Files",
+    val launcherPreset: com.ripple.filemanager.data.LauncherPreset = com.ripple.filemanager.data.LauncherPreset.DEFAULT,
     val currentLanguage: String = "device_default",
     val fontStyle: String = "Outfit",
     val textDecorations: ImmutableSet<String> = persistentSetOf(),
@@ -413,6 +415,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val savedReceivePath = prefs.getString("nearby_receive_path", defaultReceivePath) ?: defaultReceivePath
         val savedAskBeforeReceiving = prefs.getBoolean("nearby_ask_before_receiving", true)
         val savedMiniPlayerAutoClose = prefs.getInt("mini_player_auto_close_seconds", 0)
+        val savedCustomAppName = prefs.getString("custom_app_name", "Ripple Files")?.takeIf { it.isNotBlank() } ?: "Ripple Files"
+        val savedLauncherPreset = com.ripple.filemanager.data.LauncherPreset.fromId(prefs.getString("launcher_preset", com.ripple.filemanager.data.LauncherPreset.DEFAULT.id))
 
         _state.update { it.copy(
             hasShizuku = false, 
@@ -435,6 +439,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             isListMode = savedIsListMode,
             gridColumns = savedGridColumns,
             cornerRoundness = savedCornerRoundness,
+            customAppName = savedCustomAppName,
+            launcherPreset = savedLauncherPreset,
             miniPlayerAutoCloseSeconds = savedMiniPlayerAutoClose,
             isRecycleBinEnabled = prefs.getBoolean("recycle_bin_enabled", true),
             recycleBinRetentionValue = prefs.getInt("recycle_bin_retention_value", 7),
@@ -1234,6 +1240,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setListMode(isList: Boolean) {
         prefs.edit().putBoolean("is_list_mode", isList).apply()
         _state.update { it.copy(isListMode = isList) }
+    }
+
+    fun setCustomAppName(name: String) {
+        prefs.edit().putString("custom_app_name", name).apply()
+        _state.update { it.copy(customAppName = name) }
+    }
+
+    fun setLauncherPreset(preset: com.ripple.filemanager.data.LauncherPreset) {
+        prefs.edit().putString("launcher_preset", preset.id).apply()
+        _state.update { it.copy(launcherPreset = preset) }
+        com.ripple.filemanager.data.LauncherPreset.applyPreset(getApplication(), preset)
     }
 
 

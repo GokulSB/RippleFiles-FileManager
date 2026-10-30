@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10 s</string>
     <string name="auto_close_30s">30 s</string>
     <string name="close_player">Zamknij odtwarzacz</string>
+
+    <string name="settings_app_name">Nazwa aplikacji</string>
+    <string name="settings_launcher_icon_label">Etykieta ikony launchera</string>
+    <string name="settings_pin_shortcut">Przypnij do ekranu głównego pod tą nazwą</string>
+    <string name="settings_pin_shortcut_desc">Dodaje drugą ikonę do ekranu głównego pod tą nazwą</string>
+    <string name="launcher_icon_updated_toast">Zaktualizowano ikonę launchera — może być konieczny powrót do ekranu głównego, aby zobaczyć zmianę.</string>
+    <string name="pin_shortcut_not_supported">Przypinanie skrótów nie jest obsługiwane przez Twój launcher</string>
 </resources>

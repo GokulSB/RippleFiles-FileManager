@@ -732,7 +732,7 @@ fun DrawerContent(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            "Ripple Files",
+                            state.customAppName.ifBlank { "Ripple Files" },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1235,6 +1235,7 @@ fun DrawerMenuItem(
 @Composable
 fun AboutScreen(
     cornerRoundness: Float,
+    appName: String = "Ripple Files",
     onClose: () -> Unit
 ) {
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
@@ -1296,7 +1297,7 @@ fun AboutScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    "Ripple Files",
+                    appName,
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -1323,20 +1324,20 @@ fun AboutScreen(
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text(
-                            "About Ripple Files",
+                            "About $appName",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            "Ripple Files is a modern, powerful, and beautifully designed file manager built for Android. " +
+                            "$appName is a modern, powerful, and beautifully designed file manager built for Android. " +
                             "It gives you complete control over your files with an intuitive interface that makes browsing, organizing, " +
                             "and managing files effortless.\n\n" +
                             "Key features include smart file categorization, built-in media viewers for images, music, and documents, " +
                             "Google Drive cloud integration, a storage cleaner to free up space, a secure recycle bin with auto-delete, " +
                             "batch file renaming, zip extraction, and extensive theming options with dynamic colors.\n\n" +
-                            "Designed with Material You design language, Ripple Files adapts to your device's theme and offers " +
+                            "Designed with Material You design language, $appName adapts to your device's theme and offers " +
                             "a premium, fluid experience — making file management not just functional, but enjoyable.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
@@ -2161,6 +2162,7 @@ fun MainContent(
                                 onCloseAbout()
                             }
                             ExpressiveAboutScreen(
+                                appName = state.customAppName.ifBlank { "Ripple Files" },
                                 onClose = onCloseAbout
                             )
                         } else if (currentTargetLocation == "home") {
@@ -3323,6 +3325,7 @@ fun MainContent(
             val prompt = state.incomingSharePrompt
             com.ripple.filemanager.ui.expressive.SaveToRippleSheet(
                 prompt = prompt,
+                appName = state.customAppName.ifBlank { "Ripple Files" },
                 onSave = { destinationPath ->
                     onAction(com.ripple.filemanager.AppAction.SaveIncomingShare(destinationPath))
                 },

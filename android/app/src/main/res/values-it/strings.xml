@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10s</string>
     <string name="auto_close_30s">30s</string>
     <string name="close_player">Chiudi lettore</string>
+
+    <string name="settings_app_name">Nome dell\'app</string>
+    <string name="settings_launcher_icon_label">Etichetta icona del launcher</string>
+    <string name="settings_pin_shortcut">Aggiungi alla schermata iniziale con questo nome</string>
+    <string name="settings_pin_shortcut_desc">Aggiunge una seconda icona alla schermata iniziale con questo nome</string>
+    <string name="launcher_icon_updated_toast">Icona del launcher aggiornata — potrebbe essere necessario tornare alla schermata iniziale per vedere la modifica.</string>
+    <string name="pin_shortcut_not_supported">L\'aggiunta di scorciatoie non è supportata dal launcher</string>
 </resources>

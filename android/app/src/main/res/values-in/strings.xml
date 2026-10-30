@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10 dtk</string>
     <string name="auto_close_30s">30 dtk</string>
     <string name="close_player">Tutup pemutar</string>
+
+    <string name="settings_app_name">Nama aplikasi</string>
+    <string name="settings_launcher_icon_label">Label ikon peluncur</string>
+    <string name="settings_pin_shortcut">Sematkan ke layar utama dengan nama ini</string>
+    <string name="settings_pin_shortcut_desc">Menambahkan ikon kedua ke layar utama Anda dengan nama ini</string>
+    <string name="launcher_icon_updated_toast">Ikon peluncur diperbarui — Anda mungkin perlu kembali ke layar utama untuk melihat perubahan.</string>
+    <string name="pin_shortcut_not_supported">Penyematan pintasan tidak didukung oleh peluncur Anda</string>
 </resources>

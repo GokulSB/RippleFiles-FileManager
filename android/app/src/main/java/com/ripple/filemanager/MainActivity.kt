@@ -316,6 +316,8 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetCornerRoundness -> viewModel.setCornerRoundness(action.roundness)
                         is AppAction.SetGridColumns -> viewModel.setGridColumns(action.columns)
                         is AppAction.SetListMode -> viewModel.setListMode(action.isList)
+                        is AppAction.SetCustomAppName -> viewModel.setCustomAppName(action.name)
+                        is AppAction.SetLauncherPreset -> viewModel.setLauncherPreset(action.preset)
                         is AppAction.SetCleanerCategory -> viewModel.setCleanerCategory(action.category)
                         is AppAction.SelectAllCleanerFiles -> viewModel.selectAllCleanerFiles(action.ids)
                         is AppAction.ClearCleanerSelection -> viewModel.clearCleanerSelection()

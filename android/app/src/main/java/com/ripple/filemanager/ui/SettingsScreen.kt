@@ -58,6 +58,12 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import com.ripple.filemanager.data.AppLanguage
 import com.ripple.filemanager.data.AppLanguages
+import android.content.Intent
+import androidx.compose.material.icons.filled.Clear
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
+import com.ripple.filemanager.data.LauncherPreset
 
 @Composable
 fun SettingsScreen(
@@ -378,11 +384,140 @@ private fun ExpressiveAccordionSection(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit) {
     val colors = ExpressiveTheme.colors
+    val context = LocalContext.current
+    var showLauncherPresetSheet by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        // App Name & Launcher Branding
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = stringResource(R.string.settings_app_name),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.text
+            )
+
+            // Freeform text field for in-app display name
+            OutlinedTextField(
+                value = state.customAppName,
+                onValueChange = { onAction(AppAction.SetCustomAppName(it)) },
+                placeholder = { Text("Ripple Files", color = colors.muted) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                trailingIcon = if (state.customAppName.isNotEmpty() && state.customAppName != "Ripple Files") {
+                    {
+                        IconButton(onClick = { onAction(AppAction.SetCustomAppName("Ripple Files")) }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Reset", tint = colors.muted, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                } else null,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = colors.insetCard,
+                    unfocusedContainerColor = colors.insetCard,
+                    focusedBorderColor = colors.accent,
+                    unfocusedBorderColor = colors.line.copy(alpha = colors.lineAlpha),
+                    focusedTextColor = colors.text,
+                    unfocusedTextColor = colors.text
+                )
+            )
+
+            // Pin to home screen button / row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.insetCard)
+                    .clickable {
+                        val currentName = state.customAppName.ifBlank { "Ripple Files" }
+                        if (ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
+                            val shortcut = ShortcutInfoCompat.Builder(context, "custom_name_shortcut")
+                                .setShortLabel(currentName)
+                                .setLongLabel(currentName)
+                                .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher))
+                                .setIntent(Intent(context, com.ripple.filemanager.MainActivity::class.java).setAction(Intent.ACTION_MAIN))
+                                .build()
+                            ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)
+                        } else {
+                            val msg = context.getString(R.string.pin_shortcut_not_supported)
+                            onAction(AppAction.ShowToast(msg))
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_pin_shortcut),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.text
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.settings_pin_shortcut_desc),
+                        fontSize = 12.sp,
+                        color = colors.muted
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                CookieIcon(
+                    icon = Icons.Outlined.PushPin,
+                    bgColor = colors.accent,
+                    size = 36.dp,
+                    lobes = 8
+                )
+            }
+
+            // Launcher icon label preset row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.insetCard)
+                    .clickable {
+                        showLauncherPresetSheet = true
+                    }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_launcher_icon_label),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.text
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(state.launcherPreset.labelRes),
+                        fontSize = 12.sp,
+                        color = colors.muted
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Select launcher icon label",
+                    tint = colors.muted,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(colors.line.copy(alpha = colors.lineAlpha))
+        )
+
         // Theme mode (System / Light / Dark)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.theme_mode_label), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.text)
@@ -719,6 +854,74 @@ private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit)
                 checked = state.showHiddenFiles,
                 onCheckedChange = { onAction(AppAction.SetShowHiddenFiles(it)) }
             )
+        }
+    }
+
+    if (showLauncherPresetSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showLauncherPresetSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle = null,
+            containerColor = colors.container,
+            shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
+        ) {
+            ExpressiveSheetContent(title = stringResource(R.string.settings_launcher_icon_label)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    LauncherPreset.values().forEach { preset ->
+                        val isSelected = state.launcherPreset == preset
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (isSelected) colors.card.copy(alpha = 0.85f) else Color.Transparent)
+                                .clickable {
+                                    if (!isSelected) {
+                                        onAction(AppAction.SetLauncherPreset(preset))
+                                        val toastMsg = context.getString(R.string.launcher_icon_updated_toast)
+                                        onAction(AppAction.ShowToast(toastMsg))
+                                        Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
+                                    }
+                                    showLauncherPresetSheet = false
+                                }
+                                .padding(horizontal = 14.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = stringResource(preset.labelRes),
+                                fontSize = 15.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.text
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .border(
+                                        width = 2.dp,
+                                        color = if (isSelected) colors.accent else colors.muted.copy(alpha = 0.5f),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(colors.accent)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

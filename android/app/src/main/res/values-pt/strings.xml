@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10s</string>
     <string name="auto_close_30s">30s</string>
     <string name="close_player">Fechar reprodutor</string>
+
+    <string name="settings_app_name">Nome do aplicativo</string>
+    <string name="settings_launcher_icon_label">Rótulo do ícone do inicializador</string>
+    <string name="settings_pin_shortcut">Fixar na tela inicial com este nome</string>
+    <string name="settings_pin_shortcut_desc">Adiciona um segundo ícone à sua tela inicial com este nome</string>
+    <string name="launcher_icon_updated_toast">Ícone do inicializador atualizado — talvez seja necessário retornar à tela inicial para ver a alteração.</string>
+    <string name="pin_shortcut_not_supported">A fixação de atalhos não é suportada pelo seu inicializador</string>
 </resources>

@@ -490,7 +490,7 @@ fun ExpressiveSendScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Make sure LocalSend or Ripple Files is open on the same Wi-Fi",
+                                    text = "Make sure LocalSend or ${state.customAppName.ifBlank { "Ripple Files" }} is open on the same Wi-Fi",
                                     fontFamily = LocalAppFont.current,
                                     fontSize = 11.sp,
                                     color = colors.muted.copy(alpha = 0.7f),

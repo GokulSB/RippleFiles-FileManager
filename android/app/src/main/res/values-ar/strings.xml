@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10 ثوانٍ</string>
     <string name="auto_close_30s">30 ثانية</string>
     <string name="close_player">إغلاق المشغل</string>
+
+    <string name="settings_app_name">اسم التطبيق</string>
+    <string name="settings_launcher_icon_label">تسمية أيقونة المشغل</string>
+    <string name="settings_pin_shortcut">تثبيت على الشاشة الرئيسية بهذا الاسم</string>
+    <string name="settings_pin_shortcut_desc">يضيف أيقونة ثانية إلى شاشتك الرئيسية بهذا الاسم</string>
+    <string name="launcher_icon_updated_toast">تم تحديث أيقونة المشغل — قد تحتاج إلى العودة للشاشة الرئيسية لملاحظة التغيير.</string>
+    <string name="pin_shortcut_not_supported">تثبيت الاختصارات غير مدعوم في المشغل الخاص بك</string>
 </resources>

@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10 сек</string>
     <string name="auto_close_30s">30 сек</string>
     <string name="close_player">Закрыть плеер</string>
+
+    <string name="settings_app_name">Название приложения</string>
+    <string name="settings_launcher_icon_label">Название ярлыка на экране</string>
+    <string name="settings_pin_shortcut">Закрепить на главном экране с этим именем</string>
+    <string name="settings_pin_shortcut_desc">Добавляет второй значок на главный экран с этим именем</string>
+    <string name="launcher_icon_updated_toast">Значок приложения обновлен — возможно, потребуется вернуться на главный экран, чтобы увидеть изменения.</string>
+    <string name="pin_shortcut_not_supported">Закрепление ярлыков не поддерживается вашим лаунчером</string>
 </resources>

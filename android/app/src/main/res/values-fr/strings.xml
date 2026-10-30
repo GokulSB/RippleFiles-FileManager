@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10 s</string>
     <string name="auto_close_30s">30 s</string>
     <string name="close_player">Fermer le lecteur</string>
+
+    <string name="settings_app_name">Nom de l\'application</string>
+    <string name="settings_launcher_icon_label">Nom de l\'icône du lanceur</string>
+    <string name="settings_pin_shortcut">Épingler à l\'écran d\'accueil avec ce nom</string>
+    <string name="settings_pin_shortcut_desc">Ajoute une deuxième icône à votre écran d\'accueil avec ce nom</string>
+    <string name="launcher_icon_updated_toast">Icône du lanceur mise à jour — vous devrez peut-être revenir à l\'écran d\'accueil pour voir le changement.</string>
+    <string name="pin_shortcut_not_supported">L\'épinglage de raccourcis n\'est pas pris en charge par votre lanceur</string>
 </resources>

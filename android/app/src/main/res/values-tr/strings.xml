@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10 sn</string>
     <string name="auto_close_30s">30 sn</string>
     <string name="close_player">Oynatıcıyı kapat</string>
+
+    <string name="settings_app_name">Uygulama adı</string>
+    <string name="settings_launcher_icon_label">Başlatıcı simge etiketi</string>
+    <string name="settings_pin_shortcut">Bu adla ana ekrana sabitle</string>
+    <string name="settings_pin_shortcut_desc">Bu adla ana ekranınıza ikinci bir simge ekler</string>
+    <string name="launcher_icon_updated_toast">Başlatıcı simgesi güncellendi — değişikliği görmek için ana ekrana dönmeniz gerekebilir.</string>
+    <string name="pin_shortcut_not_supported">Kısayol sabitleme başlatıcınız tarafından desteklenmiyor</string>
 </resources>

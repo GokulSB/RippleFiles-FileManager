@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10 सेकंड</string>
     <string name="auto_close_30s">30 सेकंड</string>
     <string name="close_player">प्लेयर बंद करें</string>
+
+    <string name="settings_app_name">ऐप का नाम</string>
+    <string name="settings_launcher_icon_label">लॉन्चर आइकन का नाम</string>
+    <string name="settings_pin_shortcut">इस नाम के साथ होम स्क्रीन पर पिन करें</string>
+    <string name="settings_pin_shortcut_desc">इस नाम के साथ आपकी होम स्क्रीन पर दूसरा आइकन जोड़ता है</string>
+    <string name="launcher_icon_updated_toast">लॉन्चर आइकन अपडेट किया गया — परिवर्तन देखने के लिए आपको होम स्क्रीन पर वापस जाना पड़ सकता है।</string>
+    <string name="pin_shortcut_not_supported">आपके लॉन्चर द्वारा शॉर्टकट पिन करना समर्थित नहीं है</string>
 </resources>

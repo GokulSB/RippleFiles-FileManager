@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun ExpressiveAboutScreen(
+    appName: String = "Ripple Files",
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -69,7 +70,7 @@ fun ExpressiveAboutScreen(
                         )
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "Ripple Files",
+                            text = appName,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = colors.text
@@ -101,7 +102,7 @@ fun ExpressiveAboutScreen(
             SectionContainer {
                 InnerCard {
                     Text(
-                        text = "Ripple Files is a modern, expressive file manager built for Android. It combines intuitive file navigation, smart categorization, built-in media viewers, cloud storage integration, and customizable themes.",
+                        text = "$appName is a modern, expressive file manager built for Android. It combines intuitive file navigation, smart categorization, built-in media viewers, cloud storage integration, and customizable themes.",
                         fontSize = 14.sp,
                         color = colors.text,
                         lineHeight = 22.sp

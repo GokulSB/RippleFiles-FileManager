@@ -42,6 +42,7 @@ import java.io.File
 @Composable
 fun SaveToRippleSheet(
     prompt: IncomingSharePrompt,
+    appName: String = "Ripple Files",
     onSave: (destinationPath: String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -145,7 +146,7 @@ fun SaveToRippleSheet(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Save to Ripple Files",
+                        text = "Save to $appName",
                         fontFamily = LocalAppFont.current,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Medium,

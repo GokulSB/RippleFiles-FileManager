@@ -335,4 +335,11 @@
     <string name="auto_close_10s">10 Sek.</string>
     <string name="auto_close_30s">30 Sek.</string>
     <string name="close_player">Player schließen</string>
+
+    <string name="settings_app_name">App-Name</string>
+    <string name="settings_launcher_icon_label">Launcher-Symbolbeschriftung</string>
+    <string name="settings_pin_shortcut">Mit diesem Namen zum Startbildschirm hinzufügen</string>
+    <string name="settings_pin_shortcut_desc">Fügt ein zweites Symbol mit diesem Namen zu Ihrem Startbildschirm hinzu</string>
+    <string name="launcher_icon_updated_toast">Launcher-Symbol aktualisiert – kehren Sie möglicherweise zum Startbildschirm zurück, um die Änderung zu sehen.</string>
+    <string name="pin_shortcut_not_supported">Das Anheften von Verknüpfungen wird von Ihrem Launcher nicht unterstützt</string>
 </resources>

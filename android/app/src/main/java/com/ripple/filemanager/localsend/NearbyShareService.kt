@@ -212,8 +212,10 @@ class NearbyShareService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
         )
 
+        val appName = getSharedPreferences("sift_prefs", MODE_PRIVATE)
+            .getString("custom_app_name", "Ripple Files")?.takeIf { it.isNotBlank() } ?: "Ripple Files"
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Ripple Nearby Share")
+            .setContentTitle("$appName Nearby Share")
             .setContentText(status)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(isOngoing)

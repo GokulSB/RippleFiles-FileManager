@@ -152,6 +152,8 @@ sealed class AppAction {
     data class SetCornerRoundness(val roundness: Float) : AppAction()
     data class SetGridColumns(val columns: Int) : AppAction()
     data class SetListMode(val isList: Boolean) : AppAction()
+    data class SetCustomAppName(val name: String) : AppAction()
+    data class SetLauncherPreset(val preset: com.ripple.filemanager.data.LauncherPreset) : AppAction()
 
     // Cleaner Screen
     data class SetCleanerCategory(val category: String?) : AppAction()
