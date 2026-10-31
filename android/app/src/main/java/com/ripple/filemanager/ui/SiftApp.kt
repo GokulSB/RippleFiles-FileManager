@@ -146,6 +146,7 @@ fun SiftApp(
                 is AppAction.OpenFileViewer,
                 is AppAction.PlayAudio -> haptics.fileOpen()
                 is AppAction.SetShowSettingsScreen,
+                is AppAction.SetShowVaultScreen,
                 is AppAction.ToggleHapticsMaster,
                 is AppAction.ToggleHapticsOption,
                 is AppAction.SetRecycleBinSettings -> haptics.settingsToggle()
@@ -292,9 +293,10 @@ fun SiftApp(
                 state.showSettingsScreen -> "settings"
                 state.showTrashScreen -> "trash"
                 state.showCleanerScreen -> "cleaner"
+                state.showVaultScreen -> "vault"
                 else -> state.location
             }
-            val isModalScreen = currentScreen in setOf("cleaner", "trash", "settings", "about")
+            val isModalScreen = currentScreen in setOf("cleaner", "trash", "settings", "about", "vault")
 
             if (isWideScreen) {
                 Row(modifier = Modifier.fillMaxSize()) {
@@ -1828,9 +1830,10 @@ fun MainContent(
         state.showSettingsScreen -> "settings"
         state.showTrashScreen -> "trash"
         state.showCleanerScreen -> "cleaner"
+        state.showVaultScreen -> "vault"
         else -> state.location
     }
-    val isModalScreen = targetLocation in setOf("cleaner", "trash", "settings", "about")
+    val isModalScreen = targetLocation in setOf("cleaner", "trash", "settings", "about", "vault")
 
     androidx.activity.compose.PredictiveBackHandler(
         enabled = !isModalScreen && (if (state.dualPaneMode != com.ripple.filemanager.DualPaneMode.OFF) canDualPaneGoBack else (state.selectedFiles.isEmpty() && state.query.isEmpty() && state.location != "home"))
@@ -1921,6 +1924,7 @@ fun MainContent(
                 state.showSettingsScreen -> "settings"
                 state.showTrashScreen -> "trash"
                 state.showCleanerScreen -> "cleaner"
+                state.showVaultScreen -> "vault"
                 state.location == "home" -> "home"
                 state.location == "send" -> "send"
                 state.location.startsWith("category/") -> state.location
@@ -2018,11 +2022,11 @@ fun MainContent(
                         loc == "home" -> "home"
                         loc == "send" -> "send"
                         loc.startsWith("category/") -> "category"
-                        loc == "cleaner" || loc == "trash" || loc == "settings" || loc == "about" -> "modal"
+                        loc == "cleaner" || loc == "trash" || loc == "settings" || loc == "about" || loc == "vault" -> "modal"
                         else -> "browse"
                     }
                     val tabOrder = mapOf("home" to 0, "browse" to 1, "send" to 2)
-                    val modalOrder = mapOf("cleaner" to 0, "trash" to 1, "settings" to 2, "about" to 3)
+                    val modalOrder = mapOf("cleaner" to 0, "trash" to 1, "settings" to 2, "about" to 3, "vault" to 4)
 
                     AnimatedContent(
                         targetState = screenKey,
@@ -2194,6 +2198,15 @@ fun MainContent(
                             ExpressiveAboutScreen(
                                 appName = state.customAppName.ifBlank { "Ripple Files" },
                                 onClose = onCloseAbout
+                            )
+                        } else if (currentTargetLocation == "vault") {
+                            BackHandler(enabled = true) {
+                                onAction(AppAction.SetShowVaultScreen(false))
+                            }
+                            com.ripple.filemanager.vault.VaultScreen(
+                                state = state,
+                                onAction = onAction,
+                                onClose = { onAction(AppAction.SetShowVaultScreen(false)) }
                             )
                         } else if (currentTargetLocation == "home") {
                             ExpressiveHomeScreen(

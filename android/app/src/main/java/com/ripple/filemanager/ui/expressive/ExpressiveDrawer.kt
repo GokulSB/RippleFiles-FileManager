@@ -205,7 +205,18 @@ fun ExpressiveDrawerContent(
                 }
             }
 
-            // Cards: Storage cleaner, Settings, About
+            // Cards: Vault, Storage cleaner, Settings, About
+            DrawerActionCard(
+                title = "Vault",
+                subtitle = "Secure offline storage",
+                icon = Icons.Outlined.Security,
+                category = "apps",
+                onClick = {
+                    onAction(AppAction.SetShowVaultScreen(true))
+                    onCloseDrawer()
+                }
+            )
+
             DrawerActionCard(
                 title = stringResource(R.string.storage_cleaner_nav),
                 subtitle = "Free up device space",

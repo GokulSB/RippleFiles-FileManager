@@ -212,6 +212,7 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetTrashScreenVisible -> viewModel.setTrashScreenVisible(action.visible)
                         is AppAction.SetCleanerScreenVisible -> viewModel.setCleanerScreenVisible(action.visible)
                         is AppAction.SetShowSettingsScreen -> viewModel.setShowSettingsScreen(action.show)
+                        is AppAction.SetShowVaultScreen -> viewModel.setShowVaultScreen(action.show)
                         is AppAction.ClearRecoverableAuthIntent -> viewModel.clearRecoverableAuthIntent()
                         is AppAction.SetShowThemeSheet -> viewModel.setShowThemeSheet(action.show)
                         is AppAction.SetShowBatchRenameDialog -> viewModel.setShowBatchRenameDialog(action.show)

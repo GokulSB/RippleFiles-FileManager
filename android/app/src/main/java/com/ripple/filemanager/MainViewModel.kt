@@ -202,6 +202,7 @@ data class AppState(
     val themeLightnessOffset: Float = 0f,
     val showThemeSheet: Boolean = false,
     val showSettingsScreen: Boolean = false,
+    val showVaultScreen: Boolean = false,
     val useDynamicSystemTheme: Boolean = false,
     val showHiddenFiles: Boolean = false,
     val hasSeenHideWarning: Boolean = false,
@@ -2173,6 +2174,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
       fun setShowSettingsScreen(show: Boolean) {
         _state.update { it.copy(showSettingsScreen = show) }
+    }
+    fun setShowVaultScreen(show: Boolean) {
+        _state.update { it.copy(showVaultScreen = show) }
     }
     fun setShowThemeSheet(show: Boolean) {
         _state.update { it.copy(showThemeSheet = show) }
