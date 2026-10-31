@@ -1691,6 +1691,15 @@ fun MainContent(
     var viewingArchive by remember { mutableStateOf<FileItem?>(null) }
     var showArchiveOptionsFor by remember { mutableStateOf<FileItem?>(null) }
     var fileForSafExtraction by remember { mutableStateOf<FileItem?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    var showArchiveCreateSheet by remember { mutableStateOf(false) }
+    var filesToArchive by remember { mutableStateOf<List<FileItem>>(emptyList()) }
+    var isArchivingInProgress by remember { mutableStateOf(false) }
+    var archiveProgressPercent by remember { mutableStateOf(0) }
+    var archiveProgressCurrentFile by remember { mutableStateOf("") }
+    var archiveCancelFlag by remember { mutableStateOf(false) }
+    var createdArchiveResult by remember { mutableStateOf<File?>(null) }
+    var targetArchiveName by remember { mutableStateOf("") }
     
     val archiveViewModel: com.ripple.filemanager.archive.ArchiveViewModel = viewModel()
     val archiveProgress by archiveViewModel.archiveProgress.collectAsState()
@@ -2619,6 +2628,13 @@ fun MainContent(
                                     haptics.tap()
                                     onAction(AppAction.SelectNone)
                                 },
+                                onArchive = {
+                                    haptics.tap()
+                                    if (selectedFileItems.isNotEmpty()) {
+                                        filesToArchive = selectedFileItems
+                                        showArchiveCreateSheet = true
+                                    }
+                                },
                                 onBatchRename = {
                                     haptics.tap()
                                     onAction(AppAction.SetShowBatchRenameDialog(true))
@@ -2729,6 +2745,13 @@ fun MainContent(
                                 selectedCount = state.selectedFiles.size,
                                 onClearSelection = { onAction(AppAction.ClearSelection) },
                                 onCopy = { onAction(AppAction.SetClipboard("copy")) },
+                                onArchive = {
+                                    haptics.tap()
+                                    if (selectedFileItems.isNotEmpty()) {
+                                        filesToArchive = selectedFileItems
+                                        showArchiveCreateSheet = true
+                                    }
+                                },
                                 onMove = { onAction(AppAction.SetClipboard("cut")) },
                                 onShare = {
                                     haptics.tap()
@@ -3162,6 +3185,144 @@ fun MainContent(
                 archiveName = "Extraction Error",
                 reason = progressState.reason,
                 onDismiss = { archiveViewModel.resetState() }
+            )
+        }
+
+        // Archive Creation Bottom Sheet
+        if (showArchiveCreateSheet && filesToArchive.isNotEmpty()) {
+            val defaultArchiveName = remember(filesToArchive) {
+                val first = filesToArchive.first()
+                val baseName = if (first.type == "directory") first.name else first.name.substringBeforeLast('.')
+                if (filesToArchive.size == 1) {
+                    "${baseName}.zip"
+                } else {
+                    "${baseName}_archive.zip"
+                }
+            }
+            ArchiveCreateBottomSheet(
+                selectedFiles = filesToArchive,
+                defaultName = defaultArchiveName,
+                onDismissRequest = {
+                    showArchiveCreateSheet = false
+                },
+                onConfirm = { config ->
+                    showArchiveCreateSheet = false
+                    isArchivingInProgress = true
+                    archiveProgressPercent = 0
+                    archiveProgressCurrentFile = ""
+                    archiveCancelFlag = false
+                    targetArchiveName = config.name
+
+                    coroutineScope.launch {
+                        try {
+                            val firstFile = filesToArchive.firstOrNull()?.path?.let { File(it) }
+                            val parentDir = firstFile?.parentFile ?: File(state.location)
+                            val finalFileName = if (config.name.lowercase().endsWith(".zip") || config.name.lowercase().endsWith(".rar")) {
+                                config.name
+                            } else {
+                                "${config.name}.${config.format.extension}"
+                            }
+                            val destFile = File(parentDir, finalFileName)
+                            val sourceFiles = filesToArchive.mapNotNull { item ->
+                                val f = File(item.path)
+                                if (f.exists()) f else null
+                            }
+
+                            val resultFile = com.ripple.filemanager.archive.ArchiveCreateManager.createArchive(
+                                sourceFiles = sourceFiles,
+                                destinationFile = destFile,
+                                config = config,
+                                onProgress = { pct, curFile ->
+                                    archiveProgressPercent = pct
+                                    archiveProgressCurrentFile = curFile
+                                },
+                                isCancelled = { archiveCancelFlag }
+                            )
+
+                            android.media.MediaScannerConnection.scanFile(
+                                context,
+                                arrayOf(resultFile.absolutePath),
+                                null,
+                                null
+                            )
+
+                            onAction(AppAction.SetLocation(state.location))
+                            isArchivingInProgress = false
+                            createdArchiveResult = resultFile
+                        } catch (e: Exception) {
+                            isArchivingInProgress = false
+                            if (e !is kotlin.coroutines.cancellation.CancellationException) {
+                                e.printStackTrace()
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Archive failed: ${e.localizedMessage ?: e.message}",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                }
+            )
+        }
+
+        // Archive Creation Progress Dialog
+        if (isArchivingInProgress) {
+            ArchiveProgressDialog(
+                archiveName = targetArchiveName,
+                currentFileName = archiveProgressCurrentFile,
+                percent = archiveProgressPercent,
+                onCancel = {
+                    archiveCancelFlag = true
+                }
+            )
+        }
+
+        // Archive Creation Completed Dialog
+        if (createdArchiveResult != null) {
+            val createdFile = createdArchiveResult!!
+            ArchiveCompletedDialog(
+                archiveFile = createdFile,
+                onOpenArchive = {
+                    val isRar = createdFile.name.lowercase().endsWith(".rar")
+                    val archiveItem = FileItem(
+                        id = createdFile.absolutePath.hashCode(),
+                        path = createdFile.absolutePath,
+                        name = createdFile.name,
+                        type = if (isRar) "rar" else "zip",
+                        kind = "Archive",
+                        size = formatSize(createdFile.length()),
+                        sizeBytes = createdFile.length(),
+                        changed = "",
+                        owner = "Me",
+                        lastModified = createdFile.lastModified()
+                    )
+                    createdArchiveResult = null
+                    onAction(AppAction.ClearSelection)
+                    showArchiveOptionsFor = archiveItem
+                },
+                onShare = {
+                    try {
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            createdFile
+                        )
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "*/*"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Share Archive"))
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    createdArchiveResult = null
+                    onAction(AppAction.ClearSelection)
+                },
+                onClose = {
+                    createdArchiveResult = null
+                    onAction(AppAction.ClearSelection)
+                }
             )
         }
         

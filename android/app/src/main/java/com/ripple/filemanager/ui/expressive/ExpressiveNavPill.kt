@@ -58,6 +58,7 @@ fun ExpressiveNavShell(
     onSelectAll: (() -> Unit)? = null,
     onSelectNone: (() -> Unit)? = null,
     onBatchRename: (() -> Unit)? = null,
+    onArchive: (() -> Unit)? = null,
     isFabExpanded: Boolean = false,
     onToggleHide: (() -> Unit)? = null,
     isAllHidden: Boolean = false
@@ -69,6 +70,7 @@ fun ExpressiveNavShell(
             onSelectAll = onSelectAll ?: {},
             onSelectNone = onSelectNone ?: {},
             onBatchRename = onBatchRename ?: {},
+            onArchive = onArchive,
             onShare = onShare,
             onCopy = onCopy,
             onCut = onMove,

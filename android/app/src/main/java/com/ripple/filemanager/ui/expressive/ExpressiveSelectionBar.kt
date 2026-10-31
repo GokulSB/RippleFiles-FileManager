@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -65,6 +66,7 @@ fun ExpressiveSelectionBar(
     onSelectAll: () -> Unit,
     onSelectNone: () -> Unit,
     onBatchRename: () -> Unit,
+    onArchive: (() -> Unit)? = null,
     onShare: () -> Unit,
     onCopy: () -> Unit,
     onCut: () -> Unit,
@@ -238,6 +240,15 @@ fun ExpressiveSelectionBar(
                 label = stringResource(R.string.cut_action),
                 onClick = onCut
             )
+
+            // Archive
+            if (onArchive != null) {
+                SelectionActionCard(
+                    icon = Icons.Outlined.FolderZip,
+                    label = "Archive",
+                    onClick = onArchive
+                )
+            }
 
             // Optional Paste (when clipboard has active items)
             if (onPaste != null) {

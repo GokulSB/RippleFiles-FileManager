@@ -73,14 +73,27 @@
 # ============================================================================
 # Cryptography & BouncyCastle (TLS, KeyStore, Certificates)
 # ============================================================================
--keep class org.bouncycastle.** { *; }
+-keep class org.bouncycastle.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
+-keepclassmembers class org.bouncycastle.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
 -dontwarn org.bouncycastle.**
 -dontwarn androidx.security.crypto.**
 
 # ============================================================================
 # LocalSend & Networking (NanoHTTPD, OkHttp3, Okio)
 # ============================================================================
--keep class fi.iki.elonen.** { *; }
+-keep class fi.iki.elonen.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
 -dontwarn fi.iki.elonen.**
 -dontwarn okhttp3.**
 -dontwarn okio.**
@@ -90,14 +103,28 @@
 # ============================================================================
 
 # SMBJ -- keep ALL hierynomus packages (transport, protocol, SMB2 packet handlers)
--keep class com.hierynomus.** { *; }
--keepclassmembers class com.hierynomus.** { *; }
+-keep class com.hierynomus.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
+-keepclassmembers class com.hierynomus.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
 -dontwarn com.hierynomus.**
 
 # SMBJ protocol commons -- Factory pattern used via reflection at connection time
--keep class * implements com.hierynomus.protocol.commons.Factory { *; }
+-keep class * implements com.hierynomus.protocol.commons.Factory {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
 -keepclassmembers class * implements com.hierynomus.protocol.commons.Factory {
-    public <init>(...);
+    <init>(...);
+    <fields>;
+    <methods>;
 }
 
 # Mbassador event bus (net.engio.mbassy) -- SMBJ uses this internally for
@@ -105,28 +132,64 @@
 # SubscriptionContext handlers via reflection; R8 strips their constructors
 # without these rules, causing the 'did not specify the necessary constructor
 # i(SubscriptionContext)' crash seen in release builds.
--keep class net.engio.mbassy.** { *; }
--keepclassmembers class net.engio.mbassy.** { *; }
+-keep class net.engio.mbassy.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
+-keepclassmembers class net.engio.mbassy.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
+-keep class * implements net.engio.mbassy.dispatch.IHandlerInvocation {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
+-keep class * implements net.engio.mbassy.listener.IMessageFilter {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
 -keepclassmembers class * {
     @net.engio.mbassy.listener.Handler <methods>;
 }
 -keepclassmembers class * {
     public <init>(net.engio.mbassy.bus.config.IBusConfiguration);
     public <init>(net.engio.mbassy.bus.common.PubSubSupport, net.engio.mbassy.listener.MessageListener, net.engio.mbassy.subscription.SubscriptionContext);
+    public <init>(net.engio.mbassy.subscription.SubscriptionContext);
+    public <init>(net.engio.mbassy.subscription.SubscriptionContext, net.engio.mbassy.dispatch.IHandlerInvocation);
 }
 -dontwarn net.engio.mbassy.**
 
 # SSHJ
--keep class net.schmizz.sshj.** { *; }
--keep class com.hierynomus.sshj.** { *; }
+-keep class net.schmizz.sshj.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
+-keep class com.hierynomus.sshj.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
 -dontwarn net.schmizz.sshj.**
 
 # FTP
--keep class org.apache.commons.net.** { *; }
+-keep class org.apache.commons.net.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
 -dontwarn org.apache.commons.net.**
 
 # WebDAV (Sardine)
--keep class com.thegrizzlylabs.sardineandroid.** { *; }
+-keep class com.thegrizzlylabs.sardineandroid.** {
+    <init>(...);
+    <fields>;
+    <methods>;
+}
 -dontwarn com.thegrizzlylabs.sardineandroid.**
 -keep class org.apache.http.** { *; }
 -dontwarn org.apache.http.**
