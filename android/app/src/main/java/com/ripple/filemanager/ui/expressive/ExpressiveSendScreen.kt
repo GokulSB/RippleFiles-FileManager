@@ -622,7 +622,7 @@ fun ExpressiveSendScreen(
 
     if (showFilePicker) {
         FilePickerDialog(
-            title = "CHOOSE FILES TO SEND",
+            title = "Choose Files to Send",
             confirmText = "Select Files",
             cornerRoundness = state.cornerRoundness,
             onDismiss = { showFilePicker = false },

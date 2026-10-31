@@ -178,7 +178,7 @@ fun VaultScreen(
 
         if (showFilePicker) {
             FilePickerDialog(
-                title = "ADD FILES TO VAULT",
+                title = "Add Files to Vault",
                 confirmText = "Add to Vault",
                 cornerRoundness = state.cornerRoundness,
                 onDismiss = { showFilePicker = false },
