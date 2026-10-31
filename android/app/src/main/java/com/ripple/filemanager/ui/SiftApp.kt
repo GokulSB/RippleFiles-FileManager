@@ -573,8 +573,21 @@ fun SiftApp(
                             }
                         )
                     } else {
-                        val isPdf = state.viewingFile!!.name.endsWith(".pdf", true)
-                        if (isPdf) {
+                        val isDocument = state.viewingFile!!.name.endsWith(".pdf", true) ||
+                                         state.viewingFile!!.name.endsWith(".docx", true) ||
+                                         state.viewingFile!!.name.endsWith(".doc", true) ||
+                                         state.viewingFile!!.name.endsWith(".txt", true) ||
+                                         state.viewingFile!!.name.endsWith(".json", true) ||
+                                         state.viewingFile!!.name.endsWith(".md", true) ||
+                                         state.viewingFile!!.name.endsWith(".xml", true) ||
+                                         state.viewingFile!!.name.endsWith(".html", true) ||
+                                         state.viewingFile!!.name.endsWith(".htm", true) ||
+                                         state.viewingFile!!.name.endsWith(".csv", true) ||
+                                         state.viewingFile!!.name.endsWith(".log", true) ||
+                                         state.viewingFile!!.type == "doc" ||
+                                         state.viewingFile!!.type == "document" ||
+                                         listOf(".kt", ".java", ".py", ".js", ".ts", ".css", ".sh", ".yaml", ".yml", ".properties", ".conf", ".ini").any { state.viewingFile!!.name.endsWith(it, true) }
+                        if (isDocument) {
                             DocumentViewerScreen(
                                 fileItem = state.viewingFile!!,
                                 onClose = { onAction(AppAction.CloseFileViewer) },
@@ -1549,13 +1562,21 @@ fun handleFileOpen(
     if (file.path.startsWith("/")) {
         onAction(AppAction.LogRecentAction(file.path, "Opened"))
     }
-    if (file.name.endsWith(".pdf", ignoreCase = true) || file.type == "image" || file.type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html", ".htm").any { file.name.endsWith(it, ignoreCase = true) }) {
+    val isDoc = file.name.endsWith(".pdf", ignoreCase = true) ||
+                file.name.endsWith(".docx", ignoreCase = true) ||
+                file.name.endsWith(".doc", ignoreCase = true) ||
+                file.type == "doc" ||
+                file.type == "document" ||
+                listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html", ".htm", ".css", ".js", ".ts", ".yaml", ".yml", ".ini", ".conf", ".properties", ".sh").any { file.name.endsWith(it, ignoreCase = true) }
+    if (isDoc || file.type == "image") {
         if (file.type == "image" && state.viewerImage == "Device default") {
             if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
             openFileInExternalApp(context, file, "image/*")
         } else if (file.type != "image" && state.viewerTextPdf == "Device default") {
             val defaultMime = when {
                 file.name.endsWith(".pdf", ignoreCase = true) -> "application/pdf"
+                file.name.endsWith(".docx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                file.name.endsWith(".doc", ignoreCase = true) -> "application/msword"
                 file.name.endsWith(".html", ignoreCase = true) || file.name.endsWith(".htm", ignoreCase = true) -> "text/html"
                 file.name.endsWith(".xml", ignoreCase = true) -> "text/xml"
                 file.name.endsWith(".json", ignoreCase = true) -> "application/json"

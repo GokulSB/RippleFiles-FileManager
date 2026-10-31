@@ -444,7 +444,7 @@ fun FileGridCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
         }
     }
 
-    val isMediaOrDoc = file.type == "image" || file.type == "video" || file.type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { file.name.endsWith(it, ignoreCase = true) }
+    val isMediaOrDoc = file.type == "image" || file.type == "video" || file.type == "doc" || file.type == "document" || file.name.endsWith(".docx", true) || file.name.endsWith(".doc", true) || file.name.endsWith(".pdf", true) || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { file.name.endsWith(it, ignoreCase = true) }
 
     // SKYLINE LEDGER RESKIN: Use hard-edged tiles for folders (and other non-media)
     if (!isMediaOrDoc) {
@@ -662,7 +662,7 @@ fun FileListCard(file: FileItem, isSelected: Boolean, imageLoader: coil.ImageLoa
         }
     }
 
-    val isMediaOrDoc = file.type == "image" || file.type == "video" || file.type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { file.name.endsWith(it, ignoreCase = true) }
+    val isMediaOrDoc = file.type == "image" || file.type == "video" || file.type == "doc" || file.type == "document" || file.name.endsWith(".docx", true) || file.name.endsWith(".doc", true) || file.name.endsWith(".pdf", true) || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { file.name.endsWith(it, ignoreCase = true) }
 
     // SKYLINE LEDGER RESKIN: Use hard-edged rows for folders (and other non-media)
     if (!isMediaOrDoc) {
@@ -838,7 +838,7 @@ fun FileShapeIcon(type: String, name: String = "", size: Int, path: String = "",
             .clip(shapeData.shape),
         contentAlignment = Alignment.Center
     ) {
-        val isMediaOrDoc = type == "image" || type == "video" || type == "doc" || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { name.endsWith(it, ignoreCase = true) }
+        val isMediaOrDoc = type == "image" || type == "video" || type == "doc" || type == "document" || name.endsWith(".docx", true) || name.endsWith(".doc", true) || name.endsWith(".pdf", true) || listOf(".txt", ".json", ".md", ".csv", ".xml", ".log", ".kt", ".java", ".py", ".html").any { name.endsWith(it, ignoreCase = true) }
         
         if (isMediaOrDoc && path.isNotEmpty()) {
             val context = androidx.compose.ui.platform.LocalContext.current

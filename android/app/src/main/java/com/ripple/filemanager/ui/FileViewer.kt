@@ -58,8 +58,8 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: F
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                    titleContentColor = com.ripple.filemanager.ui.expressive.ExpressiveTheme.colors.text,
+                    navigationIconContentColor = com.ripple.filemanager.ui.expressive.ExpressiveTheme.colors.text
                 )
             )
         }
@@ -274,7 +274,7 @@ fun TextViewer(file: File, isDocx: Boolean = false) {
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = com.ripple.filemanager.ui.expressive.ExpressiveTheme.colors.text
             )
         }
     }
