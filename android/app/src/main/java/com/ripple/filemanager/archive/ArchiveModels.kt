@@ -18,7 +18,9 @@ sealed class ArchiveProgress {
 }
 
 interface ArchiveHandler {
-    suspend fun listEntries(source: Uri): List<ArchiveEntryInfo>
+    suspend fun isEncrypted(source: Uri): Boolean = false
+    suspend fun listEntries(source: Uri): List<ArchiveEntryInfo> = listEntries(source, null)
+    suspend fun listEntries(source: Uri, password: String?): List<ArchiveEntryInfo>
     suspend fun testPassword(source: Uri, password: String): Boolean
     fun extract(source: Uri, destDir: Uri, password: String? = null): Flow<ArchiveProgress>
     suspend fun create(sources: List<Uri>, destArchive: Uri): Flow<ArchiveProgress>

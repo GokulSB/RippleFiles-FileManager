@@ -1691,6 +1691,7 @@ fun MainContent(
     var viewingArchive by remember { mutableStateOf<FileItem?>(null) }
     var showArchiveOptionsFor by remember { mutableStateOf<FileItem?>(null) }
     var fileForSafExtraction by remember { mutableStateOf<FileItem?>(null) }
+    var pendingArchivePassword by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
     var showArchiveCreateSheet by remember { mutableStateOf(false) }
     var filesToArchive by remember { mutableStateOf<List<FileItem>>(emptyList()) }
@@ -1710,7 +1711,9 @@ fun MainContent(
         if (uri != null && fileForSafExtraction != null) {
             val file = fileForSafExtraction!!
             val sourceUri = if (file.path.startsWith("content://")) android.net.Uri.parse(file.path) else android.net.Uri.fromFile(File(file.path))
-            archiveViewModel.extract(sourceUri, uri)
+            val pwd = pendingArchivePassword
+            pendingArchivePassword = null
+            archiveViewModel.extract(sourceUri, uri, pwd)
             showArchiveOptionsFor = null
             fileForSafExtraction = null
         }
@@ -3114,7 +3117,8 @@ fun MainContent(
             com.ripple.filemanager.ui.ArchiveViewerDialog(
                 archiveFile = viewingArchive!!,
                 onDismiss = { viewingArchive = null },
-                onExtractRequest = {
+                onExtractRequest = { pwd ->
+                    pendingArchivePassword = pwd
                     fileForSafExtraction = viewingArchive
                     safExtractLauncher.launch(null)
                     viewingArchive = null

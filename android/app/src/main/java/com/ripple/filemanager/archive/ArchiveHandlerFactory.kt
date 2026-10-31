@@ -10,18 +10,19 @@ class UnsupportedArchiveFormatException(message: String) : Exception(message)
 
 object ArchiveHandlerFactory {
     suspend fun create(context: Context, source: Uri): ArchiveHandler = withContext(Dispatchers.IO) {
+        val path = (source.path ?: source.toString()).lowercase()
         val magicBytes = ByteArray(8)
         var bytesRead = 0
-        context.contentResolver.openInputStream(source)?.use { input ->
-            bytesRead = input.read(magicBytes)
-        } ?: throw Exception("Could not read source archive")
-
-        if (bytesRead < 4) {
-            throw UnsupportedArchiveFormatException("File is too small to be a valid archive")
+        try {
+            context.contentResolver.openInputStream(source)?.use { input ->
+                bytesRead = input.read(magicBytes)
+            }
+        } catch (e: Exception) {
+            // Fall back to path extension
         }
 
         // ZIP magic bytes: PK\x03\x04
-        if (magicBytes[0] == 'P'.code.toByte() && magicBytes[1] == 'K'.code.toByte() &&
+        if (bytesRead >= 4 && magicBytes[0] == 'P'.code.toByte() && magicBytes[1] == 'K'.code.toByte() &&
             magicBytes[2] == 0x03.toByte() && magicBytes[3] == 0x04.toByte()) {
             return@withContext ZipArchiveHandler(context)
         }
@@ -47,6 +48,14 @@ object ArchiveHandlerFactory {
             if (isRar5) {
                 return@withContext RarArchiveHandler(context)
             }
+        }
+
+        // Extension-based fallback
+        if (path.endsWith(".zip") || path.endsWith(".jar") || path.endsWith(".apk")) {
+            return@withContext ZipArchiveHandler(context)
+        }
+        if (path.endsWith(".rar")) {
+            return@withContext RarArchiveHandler(context)
         }
 
         throw UnsupportedArchiveFormatException("Unsupported archive format. Only ZIP and RAR are supported.")

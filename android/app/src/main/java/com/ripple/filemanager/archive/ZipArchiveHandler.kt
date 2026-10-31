@@ -30,10 +30,27 @@ class ZipArchiveHandler(private val context: Context) : ArchiveHandler {
         }
     }
 
-    override suspend fun listEntries(source: Uri): List<ArchiveEntryInfo> = withContext(Dispatchers.IO) {
+    override suspend fun isEncrypted(source: Uri): Boolean = withContext(Dispatchers.IO) {
         val file = getSourceFile(source)
         try {
             val zipFile = ZipFile(file)
+            if (!zipFile.isValidZipFile) return@withContext false
+            zipFile.isEncrypted || zipFile.fileHeaders.any { it.isEncrypted }
+        } catch (e: Exception) {
+            false
+        } finally {
+            if (source.scheme != "file" && source.scheme != null) {
+                file.delete()
+            }
+        }
+    }
+
+    override suspend fun listEntries(source: Uri): List<ArchiveEntryInfo> = listEntries(source, null)
+
+    override suspend fun listEntries(source: Uri, password: String?): List<ArchiveEntryInfo> = withContext(Dispatchers.IO) {
+        val file = getSourceFile(source)
+        try {
+            val zipFile = if (password != null) ZipFile(file, password.toCharArray()) else ZipFile(file)
             if (!zipFile.isValidZipFile) {
                 throw Exception("Invalid ZIP file")
             }
@@ -42,7 +59,7 @@ class ZipArchiveHandler(private val context: Context) : ArchiveHandler {
                     name = header.fileName,
                     sizeBytes = header.uncompressedSize,
                     isDirectory = header.isDirectory,
-                    isEncrypted = header.isEncrypted
+                    isEncrypted = header.isEncrypted || zipFile.isEncrypted
                 )
             }
         } finally {
@@ -105,13 +122,29 @@ class ZipArchiveHandler(private val context: Context) : ArchiveHandler {
             if (progressMonitor.result == ProgressMonitor.Result.SUCCESS) {
                 emit(ArchiveProgress.Complete(destPath))
             } else if (progressMonitor.result == ProgressMonitor.Result.ERROR) {
-                emit(ArchiveProgress.Failed(progressMonitor.exception?.message ?: "Extraction failed"))
+                val msg = progressMonitor.exception?.message ?: ""
+                val isPwdErr = msg.contains("password", ignoreCase = true) ||
+                        msg.contains("decrypter", ignoreCase = true) ||
+                        msg.contains("wrong password", ignoreCase = true)
+                if (isPwdErr) {
+                    emit(ArchiveProgress.NeedsPassword(attemptFailed = password != null))
+                } else {
+                    emit(ArchiveProgress.Failed(msg.ifEmpty { "Extraction failed" }))
+                }
             } else if (progressMonitor.result == ProgressMonitor.Result.CANCELLED) {
                 emit(ArchiveProgress.Failed("Extraction cancelled"))
             }
 
         } catch (e: Exception) {
-            emit(ArchiveProgress.Failed(e.message ?: "Unknown error"))
+            val msg = e.message ?: ""
+            val isPwdErr = msg.contains("password", ignoreCase = true) ||
+                    msg.contains("decrypter", ignoreCase = true) ||
+                    msg.contains("wrong password", ignoreCase = true)
+            if (isPwdErr) {
+                emit(ArchiveProgress.NeedsPassword(attemptFailed = password != null))
+            } else {
+                emit(ArchiveProgress.Failed(msg.ifEmpty { "Unknown error" }))
+            }
         } finally {
             if (source.scheme != "file" && source.scheme != null) {
                 file.delete()

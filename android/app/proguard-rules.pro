@@ -103,55 +103,26 @@
 # ============================================================================
 
 # SMBJ -- keep ALL hierynomus packages (transport, protocol, SMB2 packet handlers)
--keep class com.hierynomus.** {
-    <init>(...);
-    <fields>;
-    <methods>;
-}
--keepclassmembers class com.hierynomus.** {
-    <init>(...);
-    <fields>;
-    <methods>;
-}
+-keep class com.hierynomus.** { *; }
+-keep interface com.hierynomus.** { *; }
+-keepclassmembers class com.hierynomus.** { *; }
 -dontwarn com.hierynomus.**
 
 # SMBJ protocol commons -- Factory pattern used via reflection at connection time
--keep class * implements com.hierynomus.protocol.commons.Factory {
-    <init>(...);
-    <fields>;
-    <methods>;
-}
--keepclassmembers class * implements com.hierynomus.protocol.commons.Factory {
-    <init>(...);
-    <fields>;
-    <methods>;
-}
+-keep class * implements com.hierynomus.protocol.commons.Factory { *; }
+-keepclassmembers class * implements com.hierynomus.protocol.commons.Factory { *; }
 
 # Mbassador event bus (net.engio.mbassy) -- SMBJ uses this internally for
 # SMB2 packet/transport event dispatch. Mbassador discovers and instantiates
 # SubscriptionContext handlers via reflection; R8 strips their constructors
 # without these rules, causing the 'did not specify the necessary constructor
 # i(SubscriptionContext)' crash seen in release builds.
--keep class net.engio.mbassy.** {
-    <init>(...);
-    <fields>;
-    <methods>;
-}
--keepclassmembers class net.engio.mbassy.** {
-    <init>(...);
-    <fields>;
-    <methods>;
-}
--keep class * implements net.engio.mbassy.dispatch.IHandlerInvocation {
-    <init>(...);
-    <fields>;
-    <methods>;
-}
--keep class * implements net.engio.mbassy.listener.IMessageFilter {
-    <init>(...);
-    <fields>;
-    <methods>;
-}
+-keep class net.engio.mbassy.** { *; }
+-keep interface net.engio.mbassy.** { *; }
+-keepclassmembers class net.engio.mbassy.** { *; }
+-keep class * implements net.engio.mbassy.dispatch.IHandlerInvocation { *; }
+-keep class * extends net.engio.mbassy.dispatch.HandlerInvocation { *; }
+-keep class * implements net.engio.mbassy.listener.IMessageFilter { *; }
 -keepclassmembers class * {
     @net.engio.mbassy.listener.Handler <methods>;
 }

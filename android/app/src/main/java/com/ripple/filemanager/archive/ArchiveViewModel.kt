@@ -107,17 +107,27 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun extract(source: Uri, dest: Uri) {
+    fun extract(source: Uri, dest: Uri, initialPassword: String? = null) {
         currentSource = source
         currentDest = dest
         _archiveProgress.value = null
         
         viewModelScope.launch {
             try {
+                if (initialPassword != null) {
+                    enqueueWorker(source, dest, initialPassword)
+                    return@launch
+                }
+
                 val handler = ArchiveHandlerFactory.create(getApplication(), source)
+                val isEncrypted = handler.isEncrypted(source)
+                if (isEncrypted) {
+                    _archiveProgress.value = ArchiveProgress.NeedsPassword(attemptFailed = false)
+                    return@launch
+                }
+
                 val entries = handler.listEntries(source)
-                
-                if (entries.isNotEmpty() && entries.first().isEncrypted) {
+                if (entries.any { it.isEncrypted }) {
                     _archiveProgress.value = ArchiveProgress.NeedsPassword(attemptFailed = false)
                     return@launch
                 }

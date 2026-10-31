@@ -32,7 +32,22 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
         return source.scheme != "file" && source.scheme != null
     }
 
-    override suspend fun listEntries(source: Uri): List<ArchiveEntryInfo> = withContext(Dispatchers.IO) {
+    override suspend fun isEncrypted(source: Uri): Boolean = withContext(Dispatchers.IO) {
+        val file = getSourceFile(source)
+        try {
+            Unrar5j.isEncrypted(file.absolutePath)
+        } catch (e: Exception) {
+            false
+        } finally {
+            if (isTempFile(source, file)) {
+                file.delete()
+            }
+        }
+    }
+
+    override suspend fun listEntries(source: Uri): List<ArchiveEntryInfo> = listEntries(source, null)
+
+    override suspend fun listEntries(source: Uri, password: String?): List<ArchiveEntryInfo> = withContext(Dispatchers.IO) {
         val file = getSourceFile(source)
         try {
             val isEncrypted = try { Unrar5j.isEncrypted(file.absolutePath) } catch (e: Exception) { false }
@@ -42,10 +57,10 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
             tempDir.mkdirs()
             
             try {
-                val result = Unrar5j.extract(file.absolutePath, tempDir.absolutePath, null)
+                val result = Unrar5j.extract(file.absolutePath, tempDir.absolutePath, password)
                 
                 // If encrypted and no password provided, return a single encrypted marker entry
-                if (result.passwordStatus == 2 || (isEncrypted && result.successCount == 0)) {
+                if (result.passwordStatus == 2 || (isEncrypted && password == null && result.successCount == 0)) {
                     return@withContext listOf(
                         ArchiveEntryInfo(
                             name = "(encrypted archive)",
@@ -110,7 +125,7 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
             val result = Unrar5j.extract(file.absolutePath, destPath, password)
 
             if (result.passwordStatus == 2) {
-                emit(ArchiveProgress.Failed("Incorrect password"))
+                emit(ArchiveProgress.NeedsPassword(attemptFailed = password != null))
             } else if (result.errorCount > 0 && result.successCount == 0) {
                 val errorMsg = if (result.failedFiles.isNotEmpty()) {
                     "Failed to extract: ${result.failedFiles.joinToString(", ")}"
