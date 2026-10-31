@@ -14,7 +14,13 @@ object ArchiveHandlerFactory {
         val magicBytes = ByteArray(8)
         var bytesRead = 0
         try {
-            context.contentResolver.openInputStream(source)?.use { input ->
+            val stream: InputStream? = if (source.scheme == "file" || source.scheme == null) {
+                val f = java.io.File(source.path ?: source.toString())
+                if (f.exists()) java.io.FileInputStream(f) else context.contentResolver.openInputStream(source)
+            } else {
+                context.contentResolver.openInputStream(source)
+            }
+            stream?.use { input ->
                 bytesRead = input.read(magicBytes)
             }
         } catch (e: Exception) {

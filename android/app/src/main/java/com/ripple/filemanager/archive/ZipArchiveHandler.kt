@@ -103,6 +103,10 @@ class ZipArchiveHandler(private val context: Context) : ArchiveHandler {
             }
             
             val destPath = destDir.path ?: throw Exception("Invalid destination")
+            val destFolder = File(destPath)
+            if (!destFolder.exists()) {
+                destFolder.mkdirs()
+            }
             zipFile.isRunInThread = true
             
             val progressMonitor = zipFile.progressMonitor
@@ -133,6 +137,13 @@ class ZipArchiveHandler(private val context: Context) : ArchiveHandler {
                 }
             } else if (progressMonitor.result == ProgressMonitor.Result.CANCELLED) {
                 emit(ArchiveProgress.Failed("Extraction cancelled"))
+            } else {
+                val files = destFolder.listFiles()
+                if (files != null && files.isNotEmpty()) {
+                    emit(ArchiveProgress.Complete(destPath))
+                } else {
+                    emit(ArchiveProgress.Failed("No files extracted"))
+                }
             }
 
         } catch (e: Exception) {

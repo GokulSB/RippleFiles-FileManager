@@ -35,9 +35,24 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
     override suspend fun isEncrypted(source: Uri): Boolean = withContext(Dispatchers.IO) {
         val file = getSourceFile(source)
         try {
-            Unrar5j.isEncrypted(file.absolutePath)
+            if (Unrar5j.isEncrypted(file.absolutePath)) return@withContext true
+            val tempDir = File(context.cacheDir, "rar_check_enc_${System.currentTimeMillis()}")
+            tempDir.mkdirs()
+            try {
+                val result = Unrar5j.extract(file.absolutePath, tempDir.absolutePath, null)
+                val needsPwd = result.passwordStatus == 2 ||
+                        result.errors.any {
+                            it.isEncryptedBlock ||
+                            (it.errorMessage ?: "").contains("password", ignoreCase = true) ||
+                            (it.exception?.message ?: "").contains("password", ignoreCase = true)
+                        } || (result.failedFiles.isNotEmpty() && result.successCount == 0)
+                needsPwd
+            } finally {
+                tempDir.deleteRecursively()
+            }
         } catch (e: Exception) {
-            false
+            val msg = e.message ?: ""
+            msg.contains("password", ignoreCase = true) || msg.contains("encrypt", ignoreCase = true)
         } finally {
             if (isTempFile(source, file)) {
                 file.delete()
@@ -58,9 +73,15 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
             
             try {
                 val result = Unrar5j.extract(file.absolutePath, tempDir.absolutePath, password)
+                val needsPwd = result.passwordStatus == 2 ||
+                        result.errors.any {
+                            it.isEncryptedBlock ||
+                            (it.errorMessage ?: "").contains("password", ignoreCase = true) ||
+                            (it.exception?.message ?: "").contains("password", ignoreCase = true)
+                        } || (isEncrypted && password == null && result.successCount == 0)
                 
                 // If encrypted and no password provided, return a single encrypted marker entry
-                if (result.passwordStatus == 2 || (isEncrypted && password == null && result.successCount == 0)) {
+                if (needsPwd && password == null) {
                     return@withContext listOf(
                         ArchiveEntryInfo(
                             name = "(encrypted archive)",
@@ -79,7 +100,7 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
                             ArchiveEntryInfo(
                                 name = relativePath,
                                 sizeBytes = if (extracted.isFile) extracted.length() else 0L,
-                                isDirectory = extracted.isDirectory,
+                                java.io.File(extracted.path).isDirectory,
                                 isEncrypted = isEncrypted
                             )
                         )
@@ -102,7 +123,13 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
         tempDir.mkdirs()
         try {
             val result = Unrar5j.extract(file.absolutePath, tempDir.absolutePath, password)
-            result.passwordStatus != 2 && result.errorCount == 0
+            val hasPwdError = result.passwordStatus == 2 ||
+                    result.errors.any {
+                        it.isEncryptedBlock ||
+                        (it.errorMessage ?: "").contains("password", ignoreCase = true) ||
+                        (it.exception?.message ?: "").contains("password", ignoreCase = true)
+                    }
+            !hasPwdError && result.errorCount == 0
         } catch (e: Exception) {
             false
         } finally {
@@ -124,7 +151,14 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
 
             val result = Unrar5j.extract(file.absolutePath, destPath, password)
 
-            if (result.passwordStatus == 2) {
+            val isPasswordRequired = result.passwordStatus == 2 ||
+                    result.errors.any {
+                        it.isEncryptedBlock ||
+                        (it.errorMessage ?: "").contains("password", ignoreCase = true) ||
+                        (it.exception?.message ?: "").contains("password", ignoreCase = true)
+                    }
+
+            if (isPasswordRequired) {
                 emit(ArchiveProgress.NeedsPassword(attemptFailed = password != null))
             } else if (result.errorCount > 0 && result.successCount == 0) {
                 val errorMsg = if (result.failedFiles.isNotEmpty()) {
@@ -133,13 +167,20 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
                     "Extraction failed with ${result.errorCount} errors"
                 }
                 emit(ArchiveProgress.Failed(errorMsg))
+            } else if (result.totalFiles == 0 && result.successCount == 0 && (destFolder.listFiles()?.isEmpty() != false)) {
+                emit(ArchiveProgress.Failed("Invalid RAR archive or unsupported format"))
             } else {
-                // Emit final running state before complete
-                emit(ArchiveProgress.Running(result.successCount, result.totalFiles, "Done"))
+                val total = if (result.totalFiles > 0) result.totalFiles else result.successCount
+                emit(ArchiveProgress.Running(result.successCount, total, "Done"))
                 emit(ArchiveProgress.Complete(destPath))
             }
         } catch (e: Exception) {
-            emit(ArchiveProgress.Failed(e.message ?: "Unknown RAR extraction error"))
+            val msg = e.message ?: ""
+            if (msg.contains("password", ignoreCase = true) || msg.contains("encrypt", ignoreCase = true)) {
+                emit(ArchiveProgress.NeedsPassword(attemptFailed = password != null))
+            } else {
+                emit(ArchiveProgress.Failed(msg.ifEmpty { "Unknown RAR extraction error" }))
+            }
         } finally {
             if (isTempFile(source, file)) {
                 file.delete()

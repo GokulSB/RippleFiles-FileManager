@@ -67,7 +67,9 @@ class ArchiveExtractWorker(
         // Given the prompt constraints, we will extract to a local temp dir if it's SAF,
         // then copy to SAF. This avoids "special-case per entry" in the handlers.
         val targetDestDir = if (isSaf) {
-            Uri.fromFile(File(context.cacheDir, "extract_${System.currentTimeMillis()}"))
+            val localExtract = File(context.cacheDir, "extract_${System.currentTimeMillis()}")
+            localExtract.mkdirs()
+            Uri.fromFile(localExtract)
         } else {
             destUri
         }
@@ -98,14 +100,27 @@ class ArchiveExtractWorker(
                     is ArchiveProgress.Complete -> {
                         var outputPath = progress.outputDir
                         if (isSaf) {
-                            // Copy from temp local dir to SAF dest
                             val tempDir = File(progress.outputDir)
                             val docTree = DocumentFile.fromTreeUri(context, destUri)
                             if (docTree != null) {
-                                copyToSaf(tempDir, docTree)
+                                val folderName = archiveName.substringBeforeLast(".").ifEmpty { "Extracted" }
+                                val targetDirDoc = docTree.findFile(folderName) ?: docTree.createDirectory(folderName) ?: docTree
+                                tempDir.listFiles()?.forEach { child ->
+                                    copyToSaf(child, targetDirDoc)
+                                }
                             }
                             tempDir.deleteRecursively()
                             outputPath = destUri.toString()
+                        } else {
+                            try {
+                                val outFolder = File(progress.outputDir)
+                                val allFiles = outFolder.walkTopDown().filter { it.isFile }.map { it.absolutePath }.toList().toTypedArray()
+                                if (allFiles.isNotEmpty()) {
+                                    android.media.MediaScannerConnection.scanFile(context, allFiles, null, null)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
                         }
                         
                         showCompletionNotification(archiveName, outputPath)
@@ -132,10 +147,7 @@ class ArchiveExtractWorker(
             // Clean up partially written entries if cancelled
             if (isStopped) {
                 if (isSaf) {
-                    File(targetDestDir.path!!).deleteRecursively()
-                } else {
-                    // Try to clean up local dir
-                    File(destUri.path!!).deleteRecursively()
+                    try { targetDestDir.path?.let { File(it).deleteRecursively() } } catch (_: Exception) {}
                 }
             }
         }
@@ -143,12 +155,12 @@ class ArchiveExtractWorker(
 
     private fun copyToSaf(sourceFile: File, destDoc: DocumentFile) {
         if (sourceFile.isDirectory) {
-            val dir = destDoc.createDirectory(sourceFile.name) ?: return
+            val dir = destDoc.findFile(sourceFile.name) ?: destDoc.createDirectory(sourceFile.name) ?: return
             sourceFile.listFiles()?.forEach { child ->
                 copyToSaf(child, dir)
             }
         } else {
-            val fileDoc = destDoc.createFile("*/*", sourceFile.name) ?: return
+            val fileDoc = destDoc.findFile(sourceFile.name) ?: destDoc.createFile("*/*", sourceFile.name) ?: return
             context.contentResolver.openOutputStream(fileDoc.uri)?.use { out ->
                 sourceFile.inputStream().use { input ->
                     input.copyTo(out)

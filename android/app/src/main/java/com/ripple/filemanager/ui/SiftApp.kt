@@ -1718,7 +1718,7 @@ fun MainContent(
             val sourceUri = if (file.path.startsWith("content://")) android.net.Uri.parse(file.path) else android.net.Uri.fromFile(File(file.path))
             val pwd = pendingArchivePassword
             pendingArchivePassword = null
-            archiveViewModel.extract(sourceUri, uri, pwd)
+            archiveViewModel.extract(sourceUri, uri, pwd, archiveName = file.name)
             showArchiveOptionsFor = null
             fileForSafExtraction = null
         }
@@ -3165,8 +3165,19 @@ fun MainContent(
                         fileForSafExtraction = file
                         safExtractLauncher.launch(null)
                     } else {
-                        val destUri = android.net.Uri.fromFile(File(file.path).parentFile)
-                        archiveViewModel.extract(sourceUri, destUri)
+                        val parentDir = File(file.path).parentFile ?: File(state.location)
+                        val baseName = file.name.substringBeforeLast(".").ifEmpty { "Extracted" }
+                        var targetExtractDir = File(parentDir, baseName)
+                        if (targetExtractDir.exists()) {
+                            var counter = 1
+                            while (targetExtractDir.exists() && (targetExtractDir.list()?.isNotEmpty() == true)) {
+                                targetExtractDir = File(parentDir, "$baseName ($counter)")
+                                counter++
+                            }
+                        }
+                        targetExtractDir.mkdirs()
+                        val destUri = android.net.Uri.fromFile(targetExtractDir)
+                        archiveViewModel.extract(sourceUri, destUri, archiveName = file.name)
                     }
                     showArchiveOptionsFor = null
                 },

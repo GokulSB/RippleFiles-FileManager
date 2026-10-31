@@ -107,10 +107,14 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun extract(source: Uri, dest: Uri, initialPassword: String? = null) {
+    fun extract(source: Uri, dest: Uri, initialPassword: String? = null, archiveName: String? = null) {
         currentSource = source
         currentDest = dest
         _archiveProgress.value = null
+        val resolvedName = archiveName
+            ?: source.lastPathSegment?.substringAfterLast('/')
+            ?: "Archive"
+        _currentArchiveName.value = resolvedName
         
         viewModelScope.launch {
             try {
@@ -134,7 +138,12 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
                 
                 enqueueWorker(source, dest, null)
             } catch (e: Exception) {
-                _archiveProgress.value = ArchiveProgress.Failed(e.message ?: "Failed to prepare extraction")
+                val msg = e.message ?: ""
+                if (msg.contains("password", ignoreCase = true) || msg.contains("encrypt", ignoreCase = true) || msg.contains("decrypter", ignoreCase = true)) {
+                    _archiveProgress.value = ArchiveProgress.NeedsPassword(attemptFailed = false)
+                } else {
+                    _archiveProgress.value = ArchiveProgress.Failed(msg.ifEmpty { "Failed to prepare extraction" })
+                }
             }
         }
     }
@@ -193,10 +202,15 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun enqueueWorker(source: Uri, dest: Uri, password: String?) {
+        val archiveName = _currentArchiveName.value
+            ?: source.lastPathSegment?.substringAfterLast('/')
+            ?: "Archive"
+
         val inputData = Data.Builder()
             .putString("source", source.toString())
             .putString("dest", dest.toString())
             .putString("password", password)
+            .putString("archiveName", archiveName)
             .build()
 
         val workRequest = OneTimeWorkRequestBuilder<ArchiveExtractWorker>()
