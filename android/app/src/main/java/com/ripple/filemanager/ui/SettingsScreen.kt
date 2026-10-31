@@ -1028,6 +1028,31 @@ private fun SettingsSecurityContent(state: AppState, onAction: (AppAction) -> Un
                 }
             )
         }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(colors.line.copy(alpha = colors.lineAlpha))
+        )
+
+        // Always show Vault switch row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Always show Vault", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
+                Text("Show Vault in navigation bar and drawer. When hidden, long press the '+' button to reveal it temporarily.", fontSize = 12.sp, color = colors.muted)
+            }
+            ExpressiveSwitch(
+                checked = state.isVaultAlwaysShown,
+                onCheckedChange = {
+                    onAction(AppAction.SetVaultAlwaysShown(it))
+                }
+            )
+        }
     }
 }
 

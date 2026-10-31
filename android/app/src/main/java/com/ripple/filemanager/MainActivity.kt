@@ -137,6 +137,9 @@ class MainActivity : FragmentActivity() {
 
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        try {
+            registerReceiver(screenOffReceiver, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_OFF))
+        } catch (_: Exception) {}
         if (savedInstanceState == null) {
             viewModel.onAppLaunch()
         }
@@ -213,6 +216,8 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetCleanerScreenVisible -> viewModel.setCleanerScreenVisible(action.visible)
                         is AppAction.SetShowSettingsScreen -> viewModel.setShowSettingsScreen(action.show)
                         is AppAction.SetShowVaultScreen -> viewModel.setShowVaultScreen(action.show)
+                        is AppAction.SetVaultAlwaysShown -> viewModel.setVaultAlwaysShown(action.alwaysShown)
+                        is AppAction.SetVaultTemporarilyUnhidden -> viewModel.setVaultTemporarilyUnhidden(action.unhidden)
                         is AppAction.ClearRecoverableAuthIntent -> viewModel.clearRecoverableAuthIntent()
                         is AppAction.SetShowThemeSheet -> viewModel.setShowThemeSheet(action.show)
                         is AppAction.SetShowBatchRenameDialog -> viewModel.setShowBatchRenameDialog(action.show)
@@ -463,5 +468,20 @@ class MainActivity : FragmentActivity() {
                 requestPermissionLauncher.launch(needed.toTypedArray())
             }
         }
+    }
+
+    private val screenOffReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == android.content.Intent.ACTION_SCREEN_OFF) {
+                viewModel.onPhoneLocked()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(screenOffReceiver)
+        } catch (_: Exception) {}
     }
 }

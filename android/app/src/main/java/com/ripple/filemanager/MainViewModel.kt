@@ -203,6 +203,8 @@ data class AppState(
     val showThemeSheet: Boolean = false,
     val showSettingsScreen: Boolean = false,
     val showVaultScreen: Boolean = false,
+    val isVaultAlwaysShown: Boolean = true,
+    val isVaultTemporarilyUnhidden: Boolean = false,
     val useDynamicSystemTheme: Boolean = false,
     val showHiddenFiles: Boolean = false,
     val hasSeenHideWarning: Boolean = false,
@@ -322,7 +324,9 @@ data class AppState(
     val nearbyAskBeforeReceiving: Boolean = true,
     val receivedFilesPrompt: ReceivedFilesPrompt? = null,
     val incomingSharePrompt: com.ripple.filemanager.data.share.IncomingSharePrompt? = null
-)
+) {
+    val isVaultVisible: Boolean get() = isVaultAlwaysShown || isVaultTemporarilyUnhidden
+}
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(AppState())
@@ -418,10 +422,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val savedMiniPlayerAutoClose = prefs.getInt("mini_player_auto_close_seconds", 0)
         val savedCustomAppName = prefs.getString("custom_app_name", "Ripple Files")?.takeIf { it.isNotBlank() } ?: "Ripple Files"
         val savedLauncherPreset = com.ripple.filemanager.data.LauncherPreset.fromId(prefs.getString("launcher_preset", com.ripple.filemanager.data.LauncherPreset.DEFAULT.id))
+        val savedVaultAlwaysShown = prefs.getBoolean("vault_always_shown", true)
 
         _state.update { it.copy(
             hasShizuku = false, 
             isLoading = true,
+            isVaultAlwaysShown = savedVaultAlwaysShown,
             themeMode = try { ThemeMode.valueOf(savedTheme ?: "SYSTEM") } catch(e: Exception) { ThemeMode.SYSTEM },
             darkSurfaceStyle = try { DarkSurfaceStyle.valueOf(savedDarkSurfaceStyle) } catch(e: Exception) { DarkSurfaceStyle.STANDARD },
             currentLanguage = savedLanguage,
@@ -2177,6 +2183,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun setShowVaultScreen(show: Boolean) {
         _state.update { it.copy(showVaultScreen = show) }
+    }
+    fun setVaultAlwaysShown(alwaysShown: Boolean) {
+        prefs.edit().putBoolean("vault_always_shown", alwaysShown).apply()
+        repository.setVaultAlwaysShown(alwaysShown)
+        _state.update { it.copy(isVaultAlwaysShown = alwaysShown) }
+    }
+    fun setVaultTemporarilyUnhidden(unhidden: Boolean) {
+        _state.update { it.copy(isVaultTemporarilyUnhidden = unhidden) }
+    }
+    fun onPhoneLocked() {
+        _state.update {
+            it.copy(
+                isVaultTemporarilyUnhidden = false,
+                showVaultScreen = false
+            )
+        }
     }
     fun setShowThemeSheet(show: Boolean) {
         _state.update { it.copy(showThemeSheet = show) }

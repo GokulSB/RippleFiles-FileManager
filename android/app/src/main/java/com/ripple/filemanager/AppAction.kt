@@ -21,6 +21,8 @@ sealed class AppAction {
     data class SetCleanerScreenVisible(val visible: Boolean) : AppAction()
     data class SetShowSettingsScreen(val show: Boolean) : AppAction()
     data class SetShowVaultScreen(val show: Boolean) : AppAction()
+    data class SetVaultAlwaysShown(val alwaysShown: Boolean) : AppAction()
+    data class SetVaultTemporarilyUnhidden(val unhidden: Boolean) : AppAction()
     object ClearRecoverableAuthIntent : AppAction()
     data class SetShowThemeSheet(val show: Boolean) : AppAction()
     data class SetShowBatchRenameDialog(val show: Boolean) : AppAction()

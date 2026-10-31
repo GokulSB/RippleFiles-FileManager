@@ -2728,20 +2728,28 @@ fun MainContent(
                         },
                         rippleNavContent = {
                             val activeTab = when {
+                                state.showVaultScreen -> ExpressiveTab.VAULT
                                 state.location == "send" -> ExpressiveTab.SEND
                                 state.location == "home" -> ExpressiveTab.HOME
                                 else -> ExpressiveTab.BROWSE
                             }
                             ExpressiveNavShell(
                                 activeTab = activeTab,
+                                isVaultVisible = state.isVaultVisible,
                                 onTabSelected = { tab ->
                                     haptics.tap()
                                     when (tab) {
                                         ExpressiveTab.HOME -> {
+                                            if (state.showVaultScreen) {
+                                                onAction(AppAction.SetShowVaultScreen(false))
+                                            }
                                             com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched("home")
                                             onAction(AppAction.SelectNavTab(com.ripple.filemanager.NavTab.HOME))
                                         }
                                         ExpressiveTab.BROWSE -> {
+                                            if (state.showVaultScreen) {
+                                                onAction(AppAction.SetShowVaultScreen(false))
+                                            }
                                             val defaultBrowse = android.os.Environment.getExternalStorageDirectory().absolutePath
                                             val targetStorageId = com.ripple.filemanager.getStorageIdForLocation(state.location, state.sdCardPath)
                                             val browseTarget = state.storageStates[targetStorageId]?.lastLocation
@@ -2749,7 +2757,13 @@ fun MainContent(
                                             com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched(browseTarget)
                                             onAction(AppAction.SetLocation(browseTarget))
                                         }
+                                        ExpressiveTab.VAULT -> {
+                                            onAction(AppAction.SetShowVaultScreen(true))
+                                        }
                                         ExpressiveTab.SEND -> {
+                                            if (state.showVaultScreen) {
+                                                onAction(AppAction.SetShowVaultScreen(false))
+                                            }
                                             com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched("send")
                                             if (state.isSelectionMode && state.selectedFiles.isNotEmpty()) {
                                                 val selectedItems = state.selectedFiles.mapNotNull { id -> state.files.find { it.id == id } }
@@ -2763,6 +2777,11 @@ fun MainContent(
                                 onFabClick = {
                                     haptics.tap()
                                     pillNavExpanded = true
+                                },
+                                onFabLongClick = {
+                                    haptics.fab()
+                                    onAction(AppAction.SetVaultTemporarilyUnhidden(true))
+                                    onAction(AppAction.ShowToast("Vault revealed"))
                                 },
                                 isSelectionMode = state.isSelectionMode,
                                 selectedCount = state.selectedFiles.size,

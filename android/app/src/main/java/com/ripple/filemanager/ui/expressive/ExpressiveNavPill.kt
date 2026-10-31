@@ -5,6 +5,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -35,6 +36,7 @@ import com.ripple.filemanager.ui.theme.LocalAppFont
 enum class ExpressiveTab(val id: String, val label: String, val icon: ImageVector) {
     HOME("home", "Home", Icons.Outlined.Home),
     BROWSE("browse", "Browse", Icons.Outlined.Folder),
+    VAULT("vault", "Vault", Icons.Outlined.Lock),
     SEND("send", "Send", Icons.AutoMirrored.Outlined.Send)
 }
 
@@ -42,6 +44,7 @@ enum class ExpressiveTab(val id: String, val label: String, val icon: ImageVecto
  * Floating navigation pill with cookie FAB to the right.
  * Morphs into multi-select action bar when selectionMode is active.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ExpressiveNavShell(
     activeTab: ExpressiveTab,
@@ -61,7 +64,9 @@ fun ExpressiveNavShell(
     onArchive: (() -> Unit)? = null,
     isFabExpanded: Boolean = false,
     onToggleHide: (() -> Unit)? = null,
-    isAllHidden: Boolean = false
+    isAllHidden: Boolean = false,
+    isVaultVisible: Boolean = false,
+    onFabLongClick: (() -> Unit)? = null
 ) {
     if (isSelectionMode) {
         ExpressiveSelectionBar(
@@ -87,17 +92,25 @@ fun ExpressiveNavShell(
             selectedTab = activeTab
         }
 
+        val visibleTabs = remember(isVaultVisible) {
+            if (isVaultVisible) {
+                listOf(ExpressiveTab.HOME, ExpressiveTab.BROWSE, ExpressiveTab.VAULT, ExpressiveTab.SEND)
+            } else {
+                listOf(ExpressiveTab.HOME, ExpressiveTab.BROWSE, ExpressiveTab.SEND)
+            }
+        }
+
         Box(
             modifier = modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth(0.75f),
+                    .fillMaxWidth(if (isVaultVisible) 0.88f else 0.75f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                // Floating pill with Home, Browse, Send
+                // Floating pill with Home, Browse, (Vault), Send
                 Row(
                     modifier = Modifier
                         .weight(1f)
@@ -115,7 +128,7 @@ fun ExpressiveNavShell(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    ExpressiveTab.values().forEach { tab ->
+                    visibleTabs.forEach { tab ->
                         val isActive = tab == selectedTab
                         ExpressiveNavTabItem(
                             tab = tab,
@@ -154,10 +167,11 @@ fun ExpressiveNavShell(
                     )
                     .clip(fabShape)
                     .background(colors.accent)
-                    .clickable(
+                    .combinedClickable(
                         interactionSource = fabInteractionSource,
                         indication = null,
-                        onClick = onFabClick
+                        onClick = onFabClick,
+                        onLongClick = onFabLongClick
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -200,6 +214,7 @@ private fun ExpressiveNavTabItem(
     val tabLabel = when (tab) {
         ExpressiveTab.HOME -> stringResource(R.string.nav_home)
         ExpressiveTab.BROWSE -> stringResource(R.string.nav_browse)
+        ExpressiveTab.VAULT -> "Vault"
         ExpressiveTab.SEND -> stringResource(R.string.nav_send)
     }
 

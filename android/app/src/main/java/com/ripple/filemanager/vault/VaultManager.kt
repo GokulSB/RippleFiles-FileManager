@@ -1,10 +1,12 @@
 package com.ripple.filemanager.vault
 
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Environment
 import android.provider.OpenableColumns
 import com.ripple.filemanager.FileItem
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -136,9 +138,48 @@ object VaultManager {
         return count
     }
 
+    private fun getMetadataFile(context: Context): File {
+        return File(context.filesDir, "vault_metadata.json")
+    }
+
+    private fun loadMetadata(context: Context): MutableMap<String, JSONObject> {
+        val file = getMetadataFile(context)
+        val map = mutableMapOf<String, JSONObject>()
+        if (!file.exists()) return map
+        try {
+            val content = file.readText()
+            if (content.isNotBlank()) {
+                val json = JSONObject(content)
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    map[key] = json.getJSONObject(key)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return map
+    }
+
+    private fun saveMetadata(context: Context, map: Map<String, JSONObject>) {
+        try {
+            val json = JSONObject()
+            for ((k, v) in map) {
+                json.put(k, v)
+            }
+            getMetadataFile(context).writeText(json.toString())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun importFilesFromPaths(context: Context, filePaths: List<String>): Int {
         var count = 0
         val vaultDir = getVaultDirectory(context)
+        val metadata = loadMetadata(context)
+        val scannedPaths = mutableListOf<String>()
+
         for (path in filePaths) {
             try {
                 val srcFile = File(path)
@@ -158,12 +199,127 @@ object VaultManager {
                         input.copyTo(output)
                     }
                 }
+
+                val entry = JSONObject().apply {
+                    put("originalPath", srcFile.absolutePath)
+                    put("originalName", fileName)
+                    put("timestamp", System.currentTimeMillis())
+                }
+                metadata[destFile.name] = entry
+
+                val originalPath = srcFile.absolutePath
+                val deleted = srcFile.delete()
+                if (deleted) {
+                    scannedPaths.add(originalPath)
+                }
                 count++
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
+
+        if (metadata.isNotEmpty()) {
+            saveMetadata(context, metadata)
+        }
+
+        if (scannedPaths.isNotEmpty()) {
+            try {
+                MediaScannerConnection.scanFile(
+                    context,
+                    scannedPaths.toTypedArray(),
+                    null,
+                    null
+                )
+            } catch (_: Exception) {}
+        }
+
         return count
+    }
+
+    fun restoreFile(context: Context, fileItem: FileItem): Boolean {
+        return try {
+            val vaultFile = File(fileItem.path)
+            if (!vaultFile.exists()) return false
+
+            val metadata = loadMetadata(context)
+            val fileMeta = metadata[vaultFile.name]
+            val originalPath = fileMeta?.optString("originalPath")
+            val originalName = fileMeta?.optString("originalName") ?: vaultFile.name
+
+            val targetFile: File
+            if (!originalPath.isNullOrBlank()) {
+                val candidate = File(originalPath)
+                val parentDir = candidate.parentFile
+                if (parentDir != null && !parentDir.exists()) {
+                    parentDir.mkdirs()
+                }
+                if (parentDir != null && parentDir.exists()) {
+                    var dest = candidate
+                    var counter = 1
+                    while (dest.exists()) {
+                        val base = originalName.substringBeforeLast('.')
+                        val ext = if (originalName.contains('.')) ".${originalName.substringAfterLast('.')}" else ""
+                        dest = File(parentDir, "${base}_$counter$ext")
+                        counter++
+                    }
+                    targetFile = dest
+                } else {
+                    val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    if (!downloads.exists()) downloads.mkdirs()
+                    var dest = File(downloads, originalName)
+                    var counter = 1
+                    while (dest.exists()) {
+                        val base = originalName.substringBeforeLast('.')
+                        val ext = if (originalName.contains('.')) ".${originalName.substringAfterLast('.')}" else ""
+                        dest = File(downloads, "${base}_$counter$ext")
+                        counter++
+                    }
+                    targetFile = dest
+                }
+            } else {
+                val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!downloads.exists()) downloads.mkdirs()
+                var dest = File(downloads, originalName)
+                var counter = 1
+                while (dest.exists()) {
+                    val base = originalName.substringBeforeLast('.')
+                    val ext = if (originalName.contains('.')) ".${originalName.substringAfterLast('.')}" else ""
+                    dest = File(downloads, "${base}_$counter$ext")
+                    counter++
+                }
+                targetFile = dest
+            }
+
+            vaultFile.copyTo(targetFile, overwrite = false)
+            vaultFile.delete()
+
+            metadata.remove(vaultFile.name)
+            saveMetadata(context, metadata)
+
+            try {
+                MediaScannerConnection.scanFile(
+                    context,
+                    arrayOf(targetFile.absolutePath),
+                    null,
+                    null
+                )
+            } catch (_: Exception) {}
+
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    fun restoreFiles(context: Context, fileItems: List<FileItem>): Int {
+        var restoredCount = 0
+        for (item in fileItems) {
+            if (restoreFile(context, item)) {
+                restoredCount++
+            }
+        }
+        return restoredCount
     }
 
     fun exportFile(context: Context, fileItem: FileItem): Boolean {
@@ -192,6 +348,23 @@ object VaultManager {
         return try {
             val f = File(fileItem.path)
             if (f.exists()) f.delete() else false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun deleteFile(context: Context, fileItem: FileItem): Boolean {
+        return try {
+            val f = File(fileItem.path)
+            val deleted = if (f.exists()) f.delete() else false
+            if (deleted) {
+                val metadata = loadMetadata(context)
+                if (metadata.containsKey(f.name)) {
+                    metadata.remove(f.name)
+                    saveMetadata(context, metadata)
+                }
+            }
+            deleted
         } catch (e: Exception) {
             false
         }

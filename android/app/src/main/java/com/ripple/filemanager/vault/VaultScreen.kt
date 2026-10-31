@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -36,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -54,10 +57,7 @@ import com.ripple.filemanager.FileItem
 import com.ripple.filemanager.haptics.LocalHaptics
 import com.ripple.filemanager.ui.FilePickerDialog
 import com.ripple.filemanager.ui.appGradientBackground
-import com.ripple.filemanager.ui.expressive.CookieIcon
-import com.ripple.filemanager.ui.expressive.CookieIconButton
-import com.ripple.filemanager.ui.expressive.ExpressiveFileThumbnail
-import com.ripple.filemanager.ui.expressive.ExpressiveTheme
+import com.ripple.filemanager.ui.expressive.*
 import com.ripple.filemanager.ui.theme.LocalAppFont
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -193,6 +193,7 @@ fun VaultScreen(
                                 vaultRefreshTrigger++
                                 haptics.tap()
                                 Toast.makeText(context, "Added $count file(s) to Vault", Toast.LENGTH_SHORT).show()
+                                onAction(AppAction.Reload)
                             }
                         }
                     }
@@ -1328,6 +1329,13 @@ private fun VaultUnlockScreen(
 // ══════════════════════════════════════════════════════════════════════════════
 // VAULT BROWSER SCREEN (UNLOCKED STATE)
 // ══════════════════════════════════════════════════════════════════════════════
+private data class VaultCategoryItem(
+    val key: String,
+    val title: String,
+    val icon: ImageVector,
+    val pastelKey: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VaultBrowserScreen(
@@ -1341,9 +1349,11 @@ private fun VaultBrowserScreen(
     val context = LocalContext.current
     val colors = ExpressiveTheme.colors
     val haptics = LocalHaptics.current
+    val coroutineScope = rememberCoroutineScope()
 
     var vaultFiles by remember { mutableStateOf(VaultManager.getVaultFiles(context)) }
     var selectedFileForMenu by remember { mutableStateOf<FileItem?>(null) }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(refreshTrigger) {
         vaultFiles = VaultManager.getVaultFiles(context)
@@ -1351,6 +1361,57 @@ private fun VaultBrowserScreen(
 
     fun refreshFiles() {
         vaultFiles = VaultManager.getVaultFiles(context)
+    }
+
+    val categories = remember {
+        listOf(
+            VaultCategoryItem("image", "Images", Icons.Outlined.Image, "images"),
+            VaultCategoryItem("video", "Videos", Icons.Outlined.Videocam, "videos"),
+            VaultCategoryItem("audio", "Audio", Icons.Outlined.MusicNote, "audio"),
+            VaultCategoryItem("doc", "Docs", Icons.Outlined.Description, "docs"),
+            VaultCategoryItem("apk", "Apps", Icons.Outlined.Android, "apps"),
+            VaultCategoryItem("archive", "Archives", Icons.Outlined.FolderZip, "archives"),
+            VaultCategoryItem("other", "Other", Icons.AutoMirrored.Outlined.InsertDriveFile, "large"),
+            VaultCategoryItem("all", "All Files", Icons.Outlined.GridView, "downloads")
+        )
+    }
+
+    fun matchesCategory(file: FileItem, key: String): Boolean {
+        return when (key) {
+            "image" -> file.type == "image"
+            "video" -> file.type == "video"
+            "audio" -> file.type == "audio"
+            "doc" -> file.type == "doc"
+            "apk" -> file.type == "apk"
+            "archive" -> file.type == "archive"
+            "other" -> file.type !in setOf("image", "video", "audio", "doc", "apk", "archive")
+            "all" -> true
+            else -> true
+        }
+    }
+
+    fun getCategorySubtitle(key: String): String {
+        val matches = vaultFiles.filter { matchesCategory(it, key) }
+        if (matches.isEmpty()) return "0 items"
+        val bytes = matches.sumOf { it.sizeBytes }
+        return if (bytes > 0L) {
+            android.text.format.Formatter.formatFileSize(context, bytes)
+        } else {
+            "${matches.size} items"
+        }
+    }
+
+    val displayFiles = remember(vaultFiles, selectedCategory) {
+        if (selectedCategory == null || selectedCategory == "all") {
+            vaultFiles
+        } else {
+            vaultFiles.filter { matchesCategory(it, selectedCategory!!) }
+        }
+    }
+
+    val totalBytes = remember(vaultFiles) { vaultFiles.sumOf { it.sizeBytes } }
+    val formattedTotalSize = remember(totalBytes) {
+        android.text.format.Formatter.formatFileSize(context, totalBytes)
     }
 
     Scaffold(
@@ -1433,100 +1494,288 @@ private fun VaultBrowserScreen(
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            if (isImporting) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = colors.accent)
-                }
-            } else if (vaultFiles.isEmpty()) {
-                // Empty state
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    CookieIcon(
-                        icon = Icons.Outlined.Security,
-                        bgColor = colors.card,
-                        iconTint = colors.accent,
-                        size = 72.dp,
-                        lobes = 10
-                    )
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Text(
-                        text = "Your Vault is Empty",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = LocalAppFont.current,
-                        color = colors.text,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Import private photos, videos, documents, or notes here. Files inside Vault are encrypted and hidden from gallery and other apps.",
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        fontFamily = LocalAppFont.current,
-                        color = colors.muted,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = {
-                            haptics.tap()
-                            onAddFilesClick()
-                        },
-                        shape = RoundedCornerShape(22.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.accent,
-                            contentColor = colors.ink
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Add,
-                            contentDescription = null,
-                            tint = colors.ink,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Add Files to Vault",
-                            fontWeight = FontWeight.SemiBold,
-                            fontFamily = LocalAppFont.current
-                        )
-                    }
-                }
-            } else {
-                // Files list
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(vaultFiles, key = { it.path }) { file ->
-                        VaultFileItemRow(
-                            file = file,
-                            onClick = {
-                                haptics.tap()
-                                onAction(AppAction.ViewFile(file))
-                            },
-                            onMenuClick = {
-                                haptics.tap()
-                                selectedFileForMenu = file
+        if (isImporting) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = colors.accent)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentPadding = PaddingValues(bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // 1. Overview Storage Card
+                item {
+                    SectionContainer(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CookieIcon(
+                                icon = Icons.Outlined.Security,
+                                bgColor = colors.accent,
+                                iconTint = colors.ink,
+                                size = 52.dp,
+                                lobes = 10
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Encrypted Vault",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = LocalAppFont.current,
+                                    color = colors.text
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Offline isolated storage • Invisible to other apps",
+                                    fontSize = 12.sp,
+                                    fontFamily = LocalAppFont.current,
+                                    color = colors.muted
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Surface(
+                                        color = colors.card,
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text(
+                                            text = "$formattedTotalSize used",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            fontFamily = LocalAppFont.current,
+                                            color = colors.text,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                    Surface(
+                                        color = colors.card,
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text(
+                                            text = "${vaultFiles.size} protected",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            fontFamily = LocalAppFont.current,
+                                            color = colors.text,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
                             }
+                        }
+                    }
+                }
+
+                // 2. Categories Grid (similar to ExpressiveHomeScreen)
+                item {
+                    SectionContainer(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Categories",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = LocalAppFont.current,
+                                    color = colors.text
+                                )
+                                if (selectedCategory != null) {
+                                    Text(
+                                        text = "Clear filter",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        fontFamily = LocalAppFont.current,
+                                        color = colors.accent,
+                                        modifier = Modifier.clickable {
+                                            haptics.tap()
+                                            selectedCategory = null
+                                        }
+                                    )
+                                }
+                            }
+
+                            // Row 1 (4 items)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                categories.take(4).forEach { cat ->
+                                    VaultCategoryCookieTile(
+                                        item = cat,
+                                        subtitle = getCategorySubtitle(cat.key),
+                                        isSelected = selectedCategory == cat.key,
+                                        onClick = {
+                                            haptics.tap()
+                                            selectedCategory = if (selectedCategory == cat.key) null else cat.key
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            // Row 2 (4 items)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                categories.drop(4).take(4).forEach { cat ->
+                                    VaultCategoryCookieTile(
+                                        item = cat,
+                                        subtitle = getCategorySubtitle(cat.key),
+                                        isSelected = if (cat.key == "all") selectedCategory == null else selectedCategory == cat.key,
+                                        onClick = {
+                                            haptics.tap()
+                                            selectedCategory = if (cat.key == "all" || selectedCategory == cat.key) null else cat.key
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Section Title for Recent Files
+                item {
+                    val categoryTitle = categories.find { it.key == selectedCategory }?.title
+                    val sectionTitle = if (categoryTitle != null && selectedCategory != "all") {
+                        "$categoryTitle in Vault"
+                    } else {
+                        "Recent Files"
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = sectionTitle,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = LocalAppFont.current,
+                            color = colors.text
+                        )
+                        Text(
+                            text = "${displayFiles.size} items",
+                            fontSize = 12.sp,
+                            fontFamily = LocalAppFont.current,
+                            color = colors.muted
                         )
                     }
+                }
+
+                // 4. File items or Empty State
+                if (vaultFiles.isEmpty()) {
                     item {
-                        Spacer(modifier = Modifier.height(80.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CookieIcon(
+                                icon = Icons.Outlined.Security,
+                                bgColor = colors.card,
+                                iconTint = colors.accent,
+                                size = 64.dp,
+                                lobes = 10
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Your Vault is Empty",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.text,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Import private photos, videos, or documents here. Files are hidden from internal storage and other apps.",
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.muted,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Button(
+                                onClick = {
+                                    haptics.tap()
+                                    onAddFilesClick()
+                                },
+                                shape = RoundedCornerShape(22.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colors.accent,
+                                    contentColor = colors.ink
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Add,
+                                    contentDescription = null,
+                                    tint = colors.ink,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Add Files to Vault",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontFamily = LocalAppFont.current
+                                )
+                            }
+                        }
+                    }
+                } else if (displayFiles.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No files found in this category",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.muted
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            TextButton(onClick = { selectedCategory = null }) {
+                                Text("Show all files", color = colors.accent, fontFamily = LocalAppFont.current)
+                            }
+                        }
+                    }
+                } else {
+                    items(displayFiles, key = { it.path }) { file ->
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            VaultFileItemRow(
+                                file = file,
+                                onClick = {
+                                    haptics.tap()
+                                    onAction(AppAction.ViewFile(file))
+                                },
+                                onMenuClick = {
+                                    haptics.tap()
+                                    selectedFileForMenu = file
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -1577,6 +1826,26 @@ private fun VaultBrowserScreen(
                 )
 
                 VaultActionTile(
+                    icon = Icons.Outlined.SettingsBackupRestore,
+                    title = "Restore to Internal Storage",
+                    onClick = {
+                        selectedFileForMenu = null
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val success = VaultManager.restoreFile(context, targetFile)
+                            withContext(Dispatchers.Main) {
+                                if (success) {
+                                    refreshFiles()
+                                    onAction(AppAction.Reload)
+                                    Toast.makeText(context, "Restored ${targetFile.name} to internal storage", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Failed to restore file", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                )
+
+                VaultActionTile(
                     icon = Icons.Outlined.FileDownload,
                     title = "Export to Downloads",
                     onClick = {
@@ -1616,12 +1885,82 @@ private fun VaultBrowserScreen(
                     iconTint = colors.accent,
                     onClick = {
                         selectedFileForMenu = null
-                        VaultManager.deleteFile(targetFile)
+                        VaultManager.deleteFile(context, targetFile)
                         refreshFiles()
                         Toast.makeText(context, "Deleted from Vault", Toast.LENGTH_SHORT).show()
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun VaultCategoryCookieTile(
+    item: VaultCategoryItem,
+    subtitle: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExpressiveTheme.colors
+    val pastel = ExpressiveTokens.categoryPastel(item.pastelKey)
+    val roundness = LocalCornerRoundness.current
+    val tileRadius = (22f * (roundness * 2).coerceIn(0f, 2f)).dp
+    val tileShape = RoundedCornerShape(tileRadius)
+
+    val isDark = colors.bg.luminance() < 0.5f
+    val tintAlpha = if (isDark) 0.08f else 0.06f
+    val tileBg = remember(pastel, colors.card, tintAlpha) {
+        pastel.copy(alpha = tintAlpha).compositeOver(colors.card)
+    }
+
+    val borderColor = if (isSelected) colors.accent else colors.line.copy(alpha = colors.lineAlpha * 0.4f)
+    val borderWidth = if (isSelected) 2.dp else 1.dp
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clip(tileShape)
+            .background(tileBg)
+            .border(borderWidth, borderColor, tileShape)
+            .pressScale(0.95f)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(vertical = 10.dp, horizontal = 2.dp)
+    ) {
+        CookieIcon(
+            icon = item.icon,
+            bgColor = pastel,
+            size = 46.dp,
+            lobes = cookieLobesForName(item.pastelKey)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = item.title,
+            fontSize = 11.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            fontFamily = LocalAppFont.current,
+            color = if (isSelected) colors.accent else colors.text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+        if (subtitle.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Normal,
+                fontFamily = LocalAppFont.current,
+                color = colors.muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

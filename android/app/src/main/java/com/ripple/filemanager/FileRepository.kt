@@ -436,6 +436,8 @@ class FileRepository(private val context: Context) {
     fun setGlobalPasswordHash(hash: String?) = prefs.edit().putString("lock_password_hash", hash).apply()
     fun isBiometricEnabled(): Boolean = prefs.getBoolean("lock_biometric_enabled", false)
     fun setBiometricEnabled(enabled: Boolean) = prefs.edit().putBoolean("lock_biometric_enabled", enabled).apply()
+    fun isVaultAlwaysShown(): Boolean = prefs.getBoolean("vault_always_shown", true)
+    fun setVaultAlwaysShown(alwaysShown: Boolean) = prefs.edit().putBoolean("vault_always_shown", alwaysShown).apply()
     
     fun hashPassword(password: String): String {
         val bytes = java.security.MessageDigest.getInstance("SHA-256").digest(password.toByteArray())
