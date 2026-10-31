@@ -1087,16 +1087,28 @@ internal fun BrowseListRow(
         Spacer(modifier = Modifier.width(14.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = file.name,
-                fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current,
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.text,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = file.name,
+                    fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.text,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (file.isLocked) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = "Locked",
+                        tint = colors.accent,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
             val meta = if (file.type == "folder") {
                 rememberFolderMeta(file)
             } else {
@@ -1198,16 +1210,28 @@ internal fun BrowseGridCard(
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
-                    text = file.name,
-                    fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current,
-                    fontSize = titleFontSize,
-                    lineHeight = if (columns >= 4) 14.sp else if (columns == 3) 16.sp else 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.text,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = file.name,
+                        fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current,
+                        fontSize = titleFontSize,
+                        lineHeight = if (columns >= 4) 14.sp else if (columns == 3) 16.sp else 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.text,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (file.isLocked) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = "Locked",
+                            tint = colors.accent,
+                            modifier = Modifier.size(if (columns >= 4) 10.dp else 12.dp)
+                        )
+                    }
+                }
 
                 val metaText = if (file.type == "folder") {
                     rememberFolderMeta(file)

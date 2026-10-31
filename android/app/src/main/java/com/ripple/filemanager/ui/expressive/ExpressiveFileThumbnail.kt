@@ -1,6 +1,7 @@
 package com.ripple.filemanager.ui.expressive
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -92,75 +93,87 @@ fun ExpressiveFileThumbnail(
     }
     val fallbackIcon = remember(file.type, ext) { fileIconForFile(file.type, ext) }
 
-    if (isSelected) {
-        Box(
-            modifier = modifier
-                .size(size)
-                .clip(activeShape)
-                .background(colors.accent),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Check,
-                contentDescription = "Selected",
-                tint = colors.ink,
-                modifier = Modifier.size(size * 0.48f)
-            )
-        }
-    } else if (hasThumbnail(file)) {
-        var loadFailed by remember(file.path, file.thumbnailLink) { mutableStateOf(false) }
-        Box(
-            modifier = modifier
-                .size(size)
-                .clip(activeShape)
-                .background(pastel.copy(alpha = 0.25f)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (!loadFailed) {
-                val context = LocalContext.current
-                val isVideo = file.type == "video" || ext in setOf("mp4", "mkv", "mov", "webm", "avi", "3gp", "ts", "m4v")
-                val model = remember(file.path, file.thumbnailLink) {
-                    when {
-                        file.thumbnailLink != null -> file.thumbnailLink
-                        file.path.isNotEmpty() -> File(file.path)
-                        else -> null
-                    }
-                }
-                if (model != null) {
-                    val request = remember(model) {
-                        ImageRequest.Builder(context)
-                            .data(model)
-                            .apply {
-                                if (isVideo) {
-                                    videoFrameMillis(1000L)
-                                }
-                            }
-                            .listener(
-                                onError = { _, _ -> loadFailed = true }
-                            )
-                            .build()
-                    }
-                    AsyncImage(
-                        model = request,
-                        contentDescription = file.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    if (isVideo) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(size * 0.44f)
-                                .background(Color.Black.copy(alpha = 0.55f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(size * 0.28f)
-                            )
+    Box(
+        modifier = modifier.size(size),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(activeShape)
+                    .background(colors.accent),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Check,
+                    contentDescription = "Selected",
+                    tint = colors.ink,
+                    modifier = Modifier.size(size * 0.48f)
+                )
+            }
+        } else if (hasThumbnail(file)) {
+            var loadFailed by remember(file.path, file.thumbnailLink) { mutableStateOf(false) }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(activeShape)
+                    .background(pastel.copy(alpha = 0.25f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!loadFailed) {
+                    val context = LocalContext.current
+                    val isVideo = file.type == "video" || ext in setOf("mp4", "mkv", "mov", "webm", "avi", "3gp", "ts", "m4v")
+                    val model = remember(file.path, file.thumbnailLink) {
+                        when {
+                            file.thumbnailLink != null -> file.thumbnailLink
+                            file.path.isNotEmpty() -> File(file.path)
+                            else -> null
                         }
+                    }
+                    if (model != null) {
+                        val request = remember(model) {
+                            ImageRequest.Builder(context)
+                                .data(model)
+                                .apply {
+                                    if (isVideo) {
+                                        videoFrameMillis(1000L)
+                                    }
+                                }
+                                .listener(
+                                    onError = { _, _ -> loadFailed = true }
+                                )
+                                .build()
+                        }
+                        AsyncImage(
+                            model = request,
+                            contentDescription = file.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        if (isVideo) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .size(size * 0.44f)
+                                    .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(size * 0.28f)
+                                )
+                            }
+                        }
+                    } else {
+                        Icon(
+                            imageVector = fallbackIcon,
+                            contentDescription = null,
+                            tint = ExpressiveTokens.OnPastel,
+                            modifier = Modifier.size(size * 0.48f)
+                        )
                     }
                 } else {
                     Icon(
@@ -170,22 +183,35 @@ fun ExpressiveFileThumbnail(
                         modifier = Modifier.size(size * 0.48f)
                     )
                 }
-            } else {
+            }
+        } else {
+            CookieIcon(
+                icon = fallbackIcon,
+                bgColor = pastel,
+                iconTint = ExpressiveTokens.OnPastel,
+                size = size,
+                shape = activeShape
+            )
+        }
+
+        if (file.isLocked) {
+            val badgeSize = (size * 0.42f).coerceIn(16.dp, 24.dp)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(badgeSize)
+                    .clip(CircleShape)
+                    .background(colors.card)
+                    .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
-                    imageVector = fallbackIcon,
-                    contentDescription = null,
-                    tint = ExpressiveTokens.OnPastel,
-                    modifier = Modifier.size(size * 0.48f)
+                    imageVector = Icons.Outlined.Lock,
+                    contentDescription = "Locked",
+                    tint = colors.accent,
+                    modifier = Modifier.size(badgeSize * 0.62f)
                 )
             }
         }
-    } else {
-        CookieIcon(
-            icon = fallbackIcon,
-            bgColor = pastel,
-            iconTint = ExpressiveTokens.OnPastel,
-            size = size,
-            shape = activeShape
-        )
     }
 }

@@ -92,6 +92,7 @@ import com.google.api.services.drive.DriveScopes
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.AnnotatedString
@@ -235,6 +236,8 @@ fun SiftApp(
 
         if (state.authRequestReason != null && state.authRequestPath != null) {
             AuthDialog(
+                reason = state.authRequestReason,
+                itemName = state.authRequestFolderName ?: state.authRequestPath?.substringAfterLast('/'),
                 errorMessage = state.authErrorMessage,
                 onDismiss = { onAction(AppAction.CancelAuth) },
                 onConfirm = { password -> 
@@ -1743,7 +1746,11 @@ fun MainContent(
 
     LaunchedEffect(state.unlockedFileToOpen) {
         state.unlockedFileToOpen?.let { file ->
-            handleFileOpen(file, context, state, focusManager, onAction)
+            if (file.type == "folder") {
+                onAction(AppAction.SetLocation(file.path, file.name))
+            } else {
+                handleFileOpen(file, context, state, focusManager, onAction)
+            }
             onAction(AppAction.ClearUnlockedFileToOpen)
         }
     }
@@ -3435,7 +3442,57 @@ fun MainContent(
                     fileToDelete = targetFile
                     infoDialogFile = null
                     showDeleteConfirm = true
-                }
+                },
+                onToggleLock = {
+                    haptics.tap()
+                    val fileToLock = targetFile
+                    infoDialogFile = null
+                    val reason = if (fileToLock.isLocked) com.ripple.filemanager.AuthReason.UNLOCK_FILE else com.ripple.filemanager.AuthReason.LOCK_FILE
+                    onAction(com.ripple.filemanager.AppAction.RequestAuth(reason, fileToLock.path, fileId = fileToLock.id, folderName = fileToLock.name))
+                },
+                onOpenWith = if (targetFile.type != "folder") {
+                    {
+                        haptics.tap()
+                        infoDialogFile = null
+                        try {
+                            val uri = if (targetFile.path.startsWith("content://")) {
+                                android.net.Uri.parse(targetFile.path)
+                            } else {
+                                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(targetFile.path))
+                            }
+                            val ext = targetFile.name.substringAfterLast('.', "").lowercase(java.util.Locale.getDefault())
+                            val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: when (ext) {
+                                "pdf" -> "application/pdf"
+                                "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                "doc" -> "application/msword"
+                                "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                "xls" -> "application/vnd.ms-excel"
+                                "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                                "ppt" -> "application/vnd.ms-powerpoint"
+                                "txt", "log", "md", "csv", "xml", "json", "kt", "java", "py", "sh" -> "text/plain"
+                                "apk" -> "application/vnd.android.package-archive"
+                                "zip" -> "application/zip"
+                                "rar" -> "application/x-rar-compressed"
+                                "7z" -> "application/x-7z-compressed"
+                                "tar" -> "application/x-tar"
+                                "gz" -> "application/gzip"
+                                "mp3", "m4a", "wav", "flac", "ogg", "aac" -> "audio/*"
+                                "mp4", "mkv", "webm", "avi", "mov", "3gp" -> "video/*"
+                                "jpg", "jpeg", "png", "webp", "gif", "svg", "bmp" -> "image/*"
+                                else -> "*/*"
+                            }
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, mime)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            val chooser = Intent.createChooser(intent, "Open with")
+                            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(chooser)
+                        } catch (e: Exception) {
+                            onAction(AppAction.ShowToast("No app available to open this file"))
+                        }
+                    }
+                } else null
             )
         }
 
@@ -4232,35 +4289,37 @@ fun StorageCard(
 
 @Composable
 fun AuthDialog(
+    reason: com.ripple.filemanager.AuthReason? = null,
+    itemName: String? = null,
     errorMessage: String?,
     onDismiss: () -> Unit,
     onConfirm: (password: String?) -> Unit,
     onShowToast: ((String) -> Unit)? = null
 ) {
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
+    val colors = com.ripple.filemanager.ui.expressive.ExpressiveTheme.colors
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
-    val prefs = context.getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE)
+    val prefs = remember { context.getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE) }
     val biometricEnabled = prefs.getBoolean("lock_biometric_enabled", false)
-    var biometricFailures by remember { mutableStateOf(0) }
+    val hasCustomPassword = prefs.getString("lock_password_hash", null) != null
     var showPasswordField by remember { mutableStateOf(!biometricEnabled) }
-    
-    // Auto trigger biometric if enabled
-    LaunchedEffect(Unit) {
+    val biometricFailures = remember { mutableStateOf(0) }
+
+    fun triggerBiometrics() {
         if (biometricEnabled && context is androidx.fragment.app.FragmentActivity) {
-            var biometricPrompt: androidx.biometric.BiometricPrompt? = null
             val executor = androidx.core.content.ContextCompat.getMainExecutor(context)
             val callback = object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    // Auth directly without password
+                    haptics.tap()
                     onConfirm(null)
                 }
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
-                    biometricFailures++
-                    if (biometricFailures >= 3) {
-                        biometricPrompt?.cancelAuthentication()
+                    biometricFailures.value++
+                    if (biometricFailures.value >= 3) {
                         val msg = context.getString(R.string.fingerprint_failed_fallback)
                         if (onShowToast != null) {
                             onShowToast(msg)
@@ -4275,58 +4334,190 @@ fun AuthDialog(
                     showPasswordField = true
                 }
             }
-            biometricPrompt = androidx.biometric.BiometricPrompt(context, executor, callback)
+            val biometricPrompt = androidx.biometric.BiometricPrompt(context, executor, callback)
             val promptInfo = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
                 .setTitle("Authenticate")
-                .setSubtitle("Use your device credential to verify access")
-                .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                .setSubtitle(when (reason) {
+                    com.ripple.filemanager.AuthReason.LOCK_FILE -> "Verify identity to lock item"
+                    com.ripple.filemanager.AuthReason.UNLOCK_FILE -> "Verify identity to unlock item"
+                    else -> "Verify identity to open locked item"
+                })
+                .setAllowedAuthenticators(
+                    androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                )
                 .build()
             biometricPrompt.authenticate(promptInfo)
+        } else {
+            showPasswordField = true
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (biometricEnabled) {
+            triggerBiometrics()
+        } else {
+            showPasswordField = true
         }
     }
 
     if (showPasswordField) {
-        com.ripple.filemanager.ui.GradientAlertDialog(
+        val titleText = when (reason) {
+            com.ripple.filemanager.AuthReason.LOCK_FILE -> "Lock Item"
+            com.ripple.filemanager.AuthReason.UNLOCK_FILE -> "Unlock Item"
+            com.ripple.filemanager.AuthReason.OPEN_FILE -> "Unlock to Open"
+            else -> "Authenticate"
+        }
+        val icon = when (reason) {
+            com.ripple.filemanager.AuthReason.UNLOCK_FILE -> Icons.Outlined.LockOpen
+            else -> Icons.Outlined.Lock
+        }
+
+        AlertDialog(
             onDismissRequest = onDismiss,
-            containerColor = com.ripple.filemanager.ui.theme.SkylineColors.Surface,
-            shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, 0.5f),
+            containerColor = colors.container,
+            shape = RoundedCornerShape(28.dp),
             title = {
-                com.ripple.filemanager.ui.MonoLabel(
-                    text = "AUTHENTICATE",
-                    color = com.ripple.filemanager.ui.theme.SkylineColors.Amber,
-                    fontSize = 14
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    com.ripple.filemanager.ui.expressive.CookieIcon(
+                        icon = icon,
+                        bgColor = colors.card,
+                        iconTint = colors.accent,
+                        size = 38.dp,
+                        lobes = 8
+                    )
+                    Column {
+                        Text(
+                            text = titleText,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current,
+                            color = colors.text
+                        )
+                        if (!itemName.isNullOrEmpty()) {
+                            Text(
+                                text = itemName,
+                                fontSize = 12.sp,
+                                fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current,
+                                color = colors.muted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = if (biometricEnabled) {
+                            "Enter your file manager password or use fingerprint authentication."
+                        } else {
+                            "Enter your file manager password."
+                        },
+                        fontSize = 13.sp,
+                        fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current,
+                        color = colors.muted
+                    )
+
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text(stringResource(R.string.enter_global_password)) },
+                        label = {
+                            Text(
+                                if (hasCustomPassword) stringResource(R.string.enter_global_password)
+                                else "Password (default: 0000)",
+                                fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current
+                            )
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        shape = com.ripple.filemanager.ui.getDynamicCornerShape(12f, 0.5f)
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = colors.card,
+                            unfocusedContainerColor = colors.card,
+                            focusedBorderColor = colors.accent,
+                            unfocusedBorderColor = colors.line.copy(alpha = colors.lineAlpha),
+                            focusedTextColor = colors.text,
+                            unfocusedTextColor = colors.text
+                        ),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                    tint = colors.muted
+                                )
+                            }
+                        }
                     )
+
                     if (errorMessage != null) {
-                        Text(text = errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current
+                        )
+                    }
+
+                    if (biometricEnabled && context is androidx.fragment.app.FragmentActivity) {
+                        TextButton(
+                            onClick = { triggerBiometrics() },
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Fingerprint,
+                                contentDescription = null,
+                                tint = colors.accent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Use Fingerprint",
+                                color = colors.accent,
+                                fontSize = 13.sp,
+                                fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current
+                            )
+                        }
                     }
                 }
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = { 
+                Button(
+                    onClick = {
                         if (password.isNotEmpty()) {
+                            haptics.tap()
                             onConfirm(password)
                         }
-                    }
+                    },
+                    enabled = password.isNotEmpty(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.accent,
+                        contentColor = colors.ink,
+                        disabledContainerColor = colors.accent.copy(alpha = 0.4f),
+                        disabledContentColor = colors.ink.copy(alpha = 0.4f)
+                    )
                 ) {
-                    Text(stringResource(R.string.verify_action), color = com.ripple.filemanager.ui.theme.SkylineColors.Amber)
+                    Text(
+                        text = if (reason == com.ripple.filemanager.AuthReason.LOCK_FILE) "Lock" else "Unlock",
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current
+                    )
                 }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.cancel), color = com.ripple.filemanager.ui.theme.SkylineColors.TextDim)
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        color = colors.muted,
+                        fontFamily = com.ripple.filemanager.ui.theme.LocalAppFont.current
+                    )
                 }
             }
         )

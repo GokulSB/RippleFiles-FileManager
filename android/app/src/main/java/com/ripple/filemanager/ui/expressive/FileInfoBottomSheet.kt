@@ -8,9 +8,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -43,7 +46,9 @@ fun FileInfoBottomSheet(
     onShare: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
-    onToggleHide: () -> Unit = {}
+    onToggleHide: () -> Unit = {},
+    onToggleLock: () -> Unit = {},
+    onOpenWith: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = ExpressiveTheme.colors
@@ -104,44 +109,98 @@ fun FileInfoBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Primary actions row (Share / Rename / Hide or Unhide / Delete)
-            // Each rendered as cookie-icon-over-label tile (cookie shape ~48dp, label below 13-14sp)
-            Row(
+            // Primary actions grid (Open with / Share / Rename / Lock or Unlock / Hide or Unhide / Delete)
+            val isHidden = file.name.startsWith(".")
+            val actions = buildList {
+                if (onOpenWith != null) {
+                    add(
+                        SheetActionItem(
+                            title = "Open with",
+                            icon = Icons.AutoMirrored.Outlined.OpenInNew,
+                            iconTint = colors.text,
+                            labelColor = colors.text,
+                            onClick = onOpenWith
+                        )
+                    )
+                }
+                add(
+                    SheetActionItem(
+                        title = "Share",
+                        icon = Icons.Outlined.Share,
+                        iconTint = colors.text,
+                        labelColor = colors.text,
+                        onClick = onShare
+                    )
+                )
+                add(
+                    SheetActionItem(
+                        title = "Rename",
+                        icon = Icons.Outlined.Edit,
+                        iconTint = colors.text,
+                        labelColor = colors.text,
+                        onClick = onRename
+                    )
+                )
+                add(
+                    SheetActionItem(
+                        title = if (file.isLocked) "Unlock" else "Lock",
+                        icon = if (file.isLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock,
+                        iconTint = if (file.isLocked) colors.accent else colors.text,
+                        labelColor = if (file.isLocked) colors.accent else colors.text,
+                        onClick = onToggleLock
+                    )
+                )
+                add(
+                    SheetActionItem(
+                        title = if (isHidden) "Unhide" else "Hide",
+                        icon = if (isHidden) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                        iconTint = colors.text,
+                        labelColor = colors.text,
+                        onClick = onToggleHide
+                    )
+                )
+                add(
+                    SheetActionItem(
+                        title = "Delete",
+                        icon = Icons.Outlined.Delete,
+                        iconTint = colors.accent,
+                        labelColor = colors.accent,
+                        onClick = onDelete
+                    )
+                )
+            }
+
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ActionTileItem(
-                    title = "Share",
-                    icon = Icons.Outlined.Share,
-                    iconTint = colors.text,
-                    labelColor = colors.text,
-                    onClick = onShare
-                )
-                ActionTileItem(
-                    title = "Rename",
-                    icon = Icons.Outlined.Edit,
-                    iconTint = colors.text,
-                    labelColor = colors.text,
-                    onClick = onRename
-                )
-                val isHidden = file.name.startsWith(".")
-                ActionTileItem(
-                    title = if (isHidden) "Unhide" else "Hide",
-                    icon = if (isHidden) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
-                    iconTint = colors.text,
-                    labelColor = colors.text,
-                    onClick = onToggleHide
-                )
-                ActionTileItem(
-                    title = "Delete",
-                    icon = Icons.Outlined.Delete,
-                    iconTint = colors.accent,
-                    labelColor = colors.accent,
-                    onClick = onDelete
-                )
+                actions.chunked(3).forEach { rowActions ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        rowActions.forEach { act ->
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ActionTileItem(
+                                    title = act.title,
+                                    icon = act.icon,
+                                    iconTint = act.iconTint,
+                                    labelColor = act.labelColor,
+                                    onClick = act.onClick
+                                )
+                            }
+                        }
+                        repeat(3 - rowActions.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
             }
 
             // Section divider line
@@ -260,6 +319,14 @@ fun FileInfoBottomSheet(
     }
 }
 
+private data class SheetActionItem(
+    val title: String,
+    val icon: ImageVector,
+    val iconTint: Color,
+    val labelColor: Color,
+    val onClick: () -> Unit
+)
+
 @Composable
 private fun ActionTileItem(
     title: String,
@@ -279,22 +346,25 @@ private fun ActionTileItem(
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 4.dp, vertical = 6.dp)
     ) {
         CookieIcon(
             icon = icon,
             bgColor = colors.card,
             iconTint = iconTint,
-            size = 48.dp,
+            size = 46.dp,
             lobes = 8
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = title,
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             fontFamily = LocalAppFont.current,
-            color = labelColor
+            color = labelColor,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

@@ -2870,11 +2870,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _snackbarMessage.emit("Item unlocked successfully")
                 }
                 AuthReason.OPEN_FILE -> {
-                    if (fileId != null) {
-                        val file = _state.value.files.find { it.id == fileId }
+                    val file = if (fileId != null) _state.value.files.find { it.id == fileId } else null
+                    val isFolder = (file?.type == "folder") || try { java.io.File(path).isDirectory } catch (_: Exception) { false }
+                    if (isFolder) {
+                        setLocation(path, folderName ?: file?.name ?: try { java.io.File(path).name } catch (_: Exception) { "" })
+                    } else if (file != null) {
                         _state.update { it.copy(unlockedFileToOpen = file) }
-                    } else if (folderName != null) {
-                        setLocation(path, folderName)
+                    } else {
+                        val f = java.io.File(path)
+                        if (f.exists()) {
+                            val constructed = com.ripple.filemanager.FileItem(
+                                id = path.hashCode(),
+                                path = path,
+                                name = folderName ?: f.name,
+                                type = if (f.isDirectory) "folder" else "file",
+                                kind = if (f.isDirectory) "folder" else "file",
+                                size = if (f.isDirectory) "" else android.text.format.Formatter.formatFileSize(getApplication(), f.length()),
+                                changed = "",
+                                owner = ""
+                            )
+                            if (f.isDirectory) {
+                                setLocation(path, constructed.name)
+                            } else {
+                                _state.update { it.copy(unlockedFileToOpen = constructed) }
+                            }
+                        } else if (folderName != null) {
+                            setLocation(path, folderName)
+                        }
                     }
                 }
             }

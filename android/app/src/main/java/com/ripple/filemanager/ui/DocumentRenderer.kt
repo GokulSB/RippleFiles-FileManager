@@ -30,6 +30,8 @@ sealed class DocumentSource {
     data class Markdown(val file: File) : DocumentSource()
 }
 
+class PasswordRequiredException(message: String = "Password required to view this PDF") : Exception(message)
+
 interface DocumentRenderer : AutoCloseable {
     val pageCount: Int
     suspend fun renderPage(pageIndex: Int, width: Int): Bitmap?
@@ -41,30 +43,64 @@ class NativePdfRenderer(
 ) : DocumentRenderer {
     private var fileDescriptor: ParcelFileDescriptor? = null
     private var pdfRenderer: PdfRenderer? = null
+    var isPasswordProtected: Boolean = false
+        private set
 
     init {
-        try {
-            fileDescriptor = try {
-                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-            } catch (e: Exception) {
-                context?.let { ctx ->
-                    if (file.path.startsWith("content://")) {
-                        ctx.contentResolver.openFileDescriptor(Uri.parse(file.path), "r")
-                    } else {
-                        val uri = androidx.core.content.FileProvider.getUriForFile(
-                            ctx,
-                            "${ctx.packageName}.fileprovider",
-                            file
-                        )
-                        ctx.contentResolver.openFileDescriptor(uri, "r")
-                    }
-                } ?: throw e
-            }
-            if (fileDescriptor != null) {
-                pdfRenderer = PdfRenderer(fileDescriptor!!)
-            }
+        fileDescriptor = try {
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
         } catch (e: Exception) {
-            e.printStackTrace()
+            context?.let { ctx ->
+                if (file.path.startsWith("content://")) {
+                    ctx.contentResolver.openFileDescriptor(Uri.parse(file.path), "r")
+                } else {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        ctx,
+                        "${ctx.packageName}.fileprovider",
+                        file
+                    )
+                    ctx.contentResolver.openFileDescriptor(uri, "r")
+                }
+            } ?: throw e
+        }
+
+        if (fileDescriptor != null) {
+            try {
+                pdfRenderer = PdfRenderer(fileDescriptor!!)
+            } catch (se: SecurityException) {
+                isPasswordProtected = true
+                try { fileDescriptor?.close() } catch (_: Exception) {}
+                fileDescriptor = null
+                throw PasswordRequiredException(se.message ?: "Password required")
+            } catch (e: Exception) {
+                val isEncryptedMsg = e.message?.contains("password", ignoreCase = true) == true ||
+                    e.message?.contains("encrypted", ignoreCase = true) == true ||
+                    e.message?.contains("cannot create document", ignoreCase = true) == true
+                if (isEncryptedMsg) {
+                    isPasswordProtected = true
+                    try { fileDescriptor?.close() } catch (_: Exception) {}
+                    fileDescriptor = null
+                    throw PasswordRequiredException(e.message ?: "Password required")
+                }
+                var isEncrypted = false
+                try {
+                    val testDoc = com.tom_roush.pdfbox.pdmodel.PDDocument.load(file)
+                    isEncrypted = testDoc.isEncrypted
+                    testDoc.close()
+                } catch (pe: com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException) {
+                    isEncrypted = true
+                } catch (ignored: Exception) {}
+
+                if (isEncrypted) {
+                    isPasswordProtected = true
+                    try { fileDescriptor?.close() } catch (_: Exception) {}
+                    fileDescriptor = null
+                    throw PasswordRequiredException()
+                }
+                try { fileDescriptor?.close() } catch (_: Exception) {}
+                fileDescriptor = null
+                throw e
+            }
         }
     }
 

@@ -46,6 +46,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,6 +86,10 @@ fun DocumentViewerScreen(
     var pageCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showPasswordPrompt by remember { mutableStateOf(false) }
+    var passwordPromptError by remember { mutableStateOf<String?>(null) }
+    var isDecryptingPdf by remember { mutableStateOf(false) }
+    var decryptedTempPdfFile by remember { mutableStateOf<File?>(null) }
 
     val file = remember(fileItem.path) { File(fileItem.path) }
     val ext = remember(fileItem.name) { fileItem.name.substringAfterLast('.', "").lowercase() }
@@ -94,12 +100,15 @@ fun DocumentViewerScreen(
     DisposableEffect(fileItem.path) {
         onDispose {
             renderer?.close()
+            try { decryptedTempPdfFile?.delete() } catch (_: Exception) {}
         }
     }
 
     LaunchedEffect(fileItem.path) {
         isLoading = true
         errorMessage = null
+        showPasswordPrompt = false
+        passwordPromptError = null
         withContext(Dispatchers.IO) {
             try {
                 val newRenderer: DocumentRenderer = if (isPdf) {
@@ -125,10 +134,22 @@ fun DocumentViewerScreen(
                     pageCount = newRenderer.pageCount
                     isLoading = false
                 }
+            } catch (e: PasswordRequiredException) {
+                withContext(Dispatchers.Main) {
+                    isLoading = false
+                    showPasswordPrompt = true
+                    errorMessage = null
+                }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    errorMessage = e.message ?: "Failed to read document"
-                    isLoading = false
+                    if (e.message?.contains("password", ignoreCase = true) == true) {
+                        isLoading = false
+                        showPasswordPrompt = true
+                        errorMessage = null
+                    } else {
+                        errorMessage = e.message ?: "Failed to read document"
+                        isLoading = false
+                    }
                 }
             }
         }
@@ -178,6 +199,49 @@ fun DocumentViewerScreen(
                             color = colors.muted,
                             fontFamily = LocalAppFont.current
                         )
+                    }
+                }
+            }
+            showPasswordPrompt || (errorMessage == null && pageCount == 0 && isPdf) -> {
+                Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        CookieIcon(
+                            icon = Icons.Outlined.Lock,
+                            bgColor = colors.card,
+                            iconTint = colors.accent,
+                            size = 56.dp,
+                            lobes = 8
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "PDF is password protected",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = LocalAppFont.current,
+                            color = colors.text
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "This document requires a password to open.",
+                            fontSize = 13.sp,
+                            fontFamily = LocalAppFont.current,
+                            color = colors.muted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { showPasswordPrompt = true },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.accent,
+                                contentColor = colors.ink
+                            )
+                        ) {
+                            Text("Enter Password", fontWeight = FontWeight.SemiBold, fontFamily = LocalAppFont.current)
+                        }
                     }
                 }
             }
@@ -267,6 +331,189 @@ fun DocumentViewerScreen(
                 )
             }
         }
+    }
+
+    if (showPasswordPrompt) {
+        var pdfPassword by remember { mutableStateOf("") }
+        var passwordVisible by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDecryptingPdf) {
+                    showPasswordPrompt = false
+                    if (pageCount == 0) {
+                        onClose()
+                    }
+                }
+            },
+            containerColor = colors.container,
+            shape = RoundedCornerShape(28.dp),
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CookieIcon(
+                        icon = Icons.Outlined.Lock,
+                        bgColor = colors.card,
+                        iconTint = colors.accent,
+                        size = 38.dp,
+                        lobes = 8
+                    )
+                    Text(
+                        text = "Password Protected PDF",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = LocalAppFont.current,
+                        color = colors.text
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "This PDF file is encrypted. Enter the document password to unlock and read it.",
+                        fontSize = 13.sp,
+                        fontFamily = LocalAppFont.current,
+                        color = colors.muted
+                    )
+
+                    OutlinedTextField(
+                        value = pdfPassword,
+                        onValueChange = {
+                            pdfPassword = it
+                            passwordPromptError = null
+                        },
+                        label = { Text("Password", fontFamily = LocalAppFont.current) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = colors.card,
+                            unfocusedContainerColor = colors.card,
+                            focusedBorderColor = colors.accent,
+                            unfocusedBorderColor = colors.line.copy(alpha = colors.lineAlpha),
+                            focusedTextColor = colors.text,
+                            unfocusedTextColor = colors.text
+                        ),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                    tint = colors.muted
+                                )
+                            }
+                        }
+                    )
+
+                    if (passwordPromptError != null) {
+                        Text(
+                            text = passwordPromptError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontFamily = LocalAppFont.current
+                        )
+                    }
+
+                    if (isDecryptingPdf) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = colors.accent,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Decrypting PDF...",
+                                fontSize = 12.sp,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.muted
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (pdfPassword.isNotEmpty() && !isDecryptingPdf) {
+                            isDecryptingPdf = true
+                            passwordPromptError = null
+                            coroutineScope.launch(Dispatchers.IO) {
+                                try {
+                                    val doc = com.tom_roush.pdfbox.pdmodel.PDDocument.load(file, pdfPassword)
+                                    doc.setAllSecurityToBeRemoved(true)
+                                    val tempFile = File(context.cacheDir, "pdf_decrypted_${System.currentTimeMillis()}.pdf")
+                                    doc.save(tempFile)
+                                    doc.close()
+
+                                    val decryptedRenderer = NativePdfRenderer(tempFile, context)
+                                    if (decryptedRenderer.pageCount == 0) {
+                                        throw Exception("Decrypted document could not be opened.")
+                                    }
+
+                                    withContext(Dispatchers.Main) {
+                                        try { decryptedTempPdfFile?.delete() } catch (_: Exception) {}
+                                        decryptedTempPdfFile = tempFile
+                                        renderer?.close()
+                                        renderer = decryptedRenderer
+                                        pageCount = decryptedRenderer.pageCount
+                                        isDecryptingPdf = false
+                                        showPasswordPrompt = false
+                                        passwordPromptError = null
+                                    }
+                                } catch (pe: com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException) {
+                                    withContext(Dispatchers.Main) {
+                                        isDecryptingPdf = false
+                                        passwordPromptError = "Incorrect password. Please try again."
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        isDecryptingPdf = false
+                                        val msg = e.message ?: ""
+                                        if (msg.contains("password", ignoreCase = true)) {
+                                            passwordPromptError = "Incorrect password. Please try again."
+                                        } else {
+                                            passwordPromptError = "Error decrypting PDF: ${e.localizedMessage ?: "Unknown error"}"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    enabled = pdfPassword.isNotEmpty() && !isDecryptingPdf,
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.accent,
+                        contentColor = colors.ink,
+                        disabledContainerColor = colors.accent.copy(alpha = 0.4f),
+                        disabledContentColor = colors.ink.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Text("Unlock", fontWeight = FontWeight.SemiBold, fontFamily = LocalAppFont.current)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        if (!isDecryptingPdf) {
+                            showPasswordPrompt = false
+                            if (pageCount == 0) {
+                                onClose()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Cancel", color = colors.muted, fontFamily = LocalAppFont.current)
+                }
+            }
+        )
     }
 }
 
