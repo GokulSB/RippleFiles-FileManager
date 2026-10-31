@@ -1,5 +1,6 @@
 package com.ripple.filemanager.vault
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -51,6 +52,7 @@ import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
 import com.ripple.filemanager.FileItem
 import com.ripple.filemanager.haptics.LocalHaptics
+import com.ripple.filemanager.ui.FilePickerDialog
 import com.ripple.filemanager.ui.appGradientBackground
 import com.ripple.filemanager.ui.expressive.CookieIcon
 import com.ripple.filemanager.ui.expressive.CookieIconButton
@@ -70,8 +72,66 @@ fun VaultScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val haptics = LocalHaptics.current
+
     var isVaultSetup by remember { mutableStateOf(VaultManager.isVaultSetup(context)) }
     var isVaultUnlocked by rememberSaveable { mutableStateOf(false) }
+
+    var isImporting by remember { mutableStateOf(false) }
+    var showFilePicker by remember { mutableStateOf(false) }
+    var vaultRefreshTrigger by remember { mutableIntStateOf(0) }
+
+    // Top-level unconditionally registered ActivityResult launcher for safe fallback system file picking
+    val systemPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val data = result.data!!
+            val uris = mutableListOf<Uri>()
+            data.clipData?.let { clip ->
+                for (i in 0 until clip.itemCount) {
+                    clip.getItemAt(i)?.uri?.let { uris.add(it) }
+                }
+            }
+            if (uris.isEmpty()) {
+                data.data?.let { uris.add(it) }
+            }
+            if (uris.isNotEmpty()) {
+                isImporting = true
+                coroutineScope.launch(Dispatchers.IO) {
+                    val count = VaultManager.importFiles(context, uris)
+                    withContext(Dispatchers.Main) {
+                        isImporting = false
+                        vaultRefreshTrigger++
+                        haptics.tap()
+                        Toast.makeText(context, "Added $count file(s) to Vault", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    val launchSafeSystemPicker: () -> Unit = {
+        try {
+            val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                type = "*/*"
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
+            systemPickerLauncher.launch(openDoc)
+        } catch (e: Exception) {
+            try {
+                val getContent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = "*/*"
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                }
+                systemPickerLauncher.launch(Intent.createChooser(getContent, "Select Files"))
+            } catch (ex: Exception) {
+                Toast.makeText(context, "No file picker available", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     BackHandler {
         if (isVaultUnlocked) {
@@ -108,9 +168,39 @@ fun VaultScreen(
                         isVaultUnlocked = false
                         onClose()
                     },
-                    onAction = onAction
+                    onAction = onAction,
+                    isImporting = isImporting,
+                    onAddFilesClick = { showFilePicker = true },
+                    refreshTrigger = vaultRefreshTrigger
                 )
             }
+        }
+
+        if (showFilePicker) {
+            FilePickerDialog(
+                title = "ADD FILES TO VAULT",
+                confirmText = "Add to Vault",
+                cornerRoundness = state.cornerRoundness,
+                onDismiss = { showFilePicker = false },
+                onFilesSelected = { selectedFiles ->
+                    showFilePicker = false
+                    if (selectedFiles.isNotEmpty()) {
+                        isImporting = true
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val count = VaultManager.importFilesFromPaths(context, selectedFiles.map { it.path })
+                            withContext(Dispatchers.Main) {
+                                isImporting = false
+                                vaultRefreshTrigger++
+                                haptics.tap()
+                                Toast.makeText(context, "Added $count file(s) to Vault", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                },
+                onOpenSystemPicker = {
+                    launchSafeSystemPicker()
+                }
+            )
         }
     }
 }
@@ -1243,37 +1333,24 @@ private fun VaultUnlockScreen(
 private fun VaultBrowserScreen(
     onLock: () -> Unit,
     onClose: () -> Unit,
-    onAction: (AppAction) -> Unit
+    onAction: (AppAction) -> Unit,
+    isImporting: Boolean,
+    onAddFilesClick: () -> Unit,
+    refreshTrigger: Int
 ) {
     val context = LocalContext.current
     val colors = ExpressiveTheme.colors
     val haptics = LocalHaptics.current
-    val coroutineScope = rememberCoroutineScope()
 
     var vaultFiles by remember { mutableStateOf(VaultManager.getVaultFiles(context)) }
     var selectedFileForMenu by remember { mutableStateOf<FileItem?>(null) }
-    var isImporting by remember { mutableStateOf(false) }
 
-    fun refreshFiles() {
+    LaunchedEffect(refreshTrigger) {
         vaultFiles = VaultManager.getVaultFiles(context)
     }
 
-    // Picker launcher to import files into Vault
-    val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            isImporting = true
-            coroutineScope.launch(Dispatchers.IO) {
-                val count = VaultManager.importFiles(context, uris)
-                withContext(Dispatchers.Main) {
-                    isImporting = false
-                    refreshFiles()
-                    haptics.tap()
-                    Toast.makeText(context, "Added $count file(s) to Vault", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
+    fun refreshFiles() {
+        vaultFiles = VaultManager.getVaultFiles(context)
     }
 
     Scaffold(
@@ -1334,7 +1411,7 @@ private fun VaultBrowserScreen(
             ExtendedFloatingActionButton(
                 onClick = {
                     haptics.tap()
-                    importLauncher.launch(arrayOf("*/*"))
+                    onAddFilesClick()
                 },
                 containerColor = colors.accent,
                 contentColor = colors.ink,
@@ -1406,7 +1483,7 @@ private fun VaultBrowserScreen(
                     Button(
                         onClick = {
                             haptics.tap()
-                            importLauncher.launch(arrayOf("*/*"))
+                            onAddFilesClick()
                         },
                         shape = RoundedCornerShape(22.dp),
                         colors = ButtonDefaults.buttonColors(

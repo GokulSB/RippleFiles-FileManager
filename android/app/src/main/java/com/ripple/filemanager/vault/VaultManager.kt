@@ -136,6 +136,36 @@ object VaultManager {
         return count
     }
 
+    fun importFilesFromPaths(context: Context, filePaths: List<String>): Int {
+        var count = 0
+        val vaultDir = getVaultDirectory(context)
+        for (path in filePaths) {
+            try {
+                val srcFile = File(path)
+                if (!srcFile.exists() || srcFile.isDirectory) continue
+                val fileName = srcFile.name
+                var destFile = File(vaultDir, fileName)
+                var counter = 1
+                while (destFile.exists()) {
+                    val base = fileName.substringBeforeLast('.')
+                    val ext = if (fileName.contains('.')) ".${fileName.substringAfterLast('.')}" else ""
+                    destFile = File(vaultDir, "${base}_$counter$ext")
+                    counter++
+                }
+
+                srcFile.inputStream().use { input ->
+                    FileOutputStream(destFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                count++
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        return count
+    }
+
     fun exportFile(context: Context, fileItem: FileItem): Boolean {
         return try {
             val source = File(fileItem.path)

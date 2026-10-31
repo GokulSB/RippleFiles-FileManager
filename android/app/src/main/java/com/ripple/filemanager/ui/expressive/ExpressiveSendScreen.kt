@@ -1,11 +1,16 @@
 package com.ripple.filemanager.ui.expressive
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.format.Formatter
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.ripple.filemanager.ui.FilePickerDialog
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -75,8 +80,9 @@ fun ExpressiveSendScreen(
 
     val localAlias = state.nearbyDeviceName.ifEmpty { "${Build.MANUFACTURER} ${Build.MODEL}" }
 
-    // File Picker for staging files
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+    var showFilePicker by remember { mutableStateOf(false) }
+
+    fun stageUris(uris: List<Uri>) {
         if (uris.isNotEmpty()) {
             scope.launch(Dispatchers.IO) {
                 val stagingDir = File(context.cacheDir, "send_staging").apply { mkdirs() }
@@ -124,6 +130,48 @@ fun ExpressiveSendScreen(
                         onAction(AppAction.NearbyShareAction.StageFiles(staged))
                     }
                 }
+            }
+        }
+    }
+
+    // Top-level unconditionally registered launcher for safe fallback system file picking
+    val systemPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val data = result.data!!
+            val uris = mutableListOf<Uri>()
+            data.clipData?.let { clip ->
+                for (i in 0 until clip.itemCount) {
+                    clip.getItemAt(i)?.uri?.let { uris.add(it) }
+                }
+            }
+            if (uris.isEmpty()) {
+                data.data?.let { uris.add(it) }
+            }
+            if (uris.isNotEmpty()) {
+                stageUris(uris)
+            }
+        }
+    }
+
+    val launchSafeSystemPicker: () -> Unit = {
+        try {
+            val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                type = "*/*"
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
+            systemPickerLauncher.launch(openDoc)
+        } catch (e: Exception) {
+            try {
+                val getContent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = "*/*"
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                }
+                systemPickerLauncher.launch(Intent.createChooser(getContent, "Select Files"))
+            } catch (ex: Exception) {
+                Toast.makeText(context, "No file picker available", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -276,7 +324,7 @@ fun ExpressiveSendScreen(
                             peers = state.nearbyPeers,
                             onPeerClick = { peer ->
                                 if (state.stagedNearbyFiles.isEmpty()) {
-                                    filePicker.launch("*/*")
+                                    showFilePicker = true
                                 } else {
                                     onAction(AppAction.NearbyShareAction.SendToPeer(peer))
                                 }
@@ -309,7 +357,7 @@ fun ExpressiveSendScreen(
                                     color = colors.text
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    TextButton(onClick = { filePicker.launch("*/*") }) {
+                                    TextButton(onClick = { showFilePicker = true }) {
                                         Text(stringResource(R.string.add_action), color = colors.accent, fontSize = 12.sp)
                                     }
                                     TextButton(onClick = { onAction(AppAction.NearbyShareAction.ClearStagedFiles) }) {
@@ -395,7 +443,7 @@ fun ExpressiveSendScreen(
                             }
 
                             Button(
-                                onClick = { filePicker.launch("*/*") },
+                                onClick = { showFilePicker = true },
                                 shape = CircleShape,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = colors.accent,
@@ -509,7 +557,7 @@ fun ExpressiveSendScreen(
                                     .background(colors.card)
                                     .clickable {
                                         if (state.stagedNearbyFiles.isEmpty()) {
-                                            filePicker.launch("*/*")
+                                            showFilePicker = true
                                         } else {
                                             onAction(AppAction.NearbyShareAction.SendToPeer(peer))
                                         }
@@ -545,7 +593,7 @@ fun ExpressiveSendScreen(
                                 Button(
                                     onClick = {
                                         if (state.stagedNearbyFiles.isEmpty()) {
-                                            filePicker.launch("*/*")
+                                            showFilePicker = true
                                         } else {
                                             onAction(AppAction.NearbyShareAction.SendToPeer(peer))
                                         }
@@ -570,6 +618,24 @@ fun ExpressiveSendScreen(
                 }
             }
         }
+    }
+
+    if (showFilePicker) {
+        FilePickerDialog(
+            title = "CHOOSE FILES TO SEND",
+            confirmText = "Select Files",
+            cornerRoundness = state.cornerRoundness,
+            onDismiss = { showFilePicker = false },
+            onFilesSelected = { selectedFiles ->
+                showFilePicker = false
+                if (selectedFiles.isNotEmpty()) {
+                    onAction(AppAction.NearbyShareAction.StageFiles(selectedFiles))
+                }
+            },
+            onOpenSystemPicker = {
+                launchSafeSystemPicker()
+            }
+        )
     }
 }
 
