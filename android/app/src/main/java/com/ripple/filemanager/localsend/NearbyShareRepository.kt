@@ -152,21 +152,23 @@ object NearbyShareRepository {
             return
         }
 
-        val localFiles = staged.map { File(it.path) }.filter { it.exists() }
-        if (localFiles.isEmpty()) {
-            scope.launch { _events.emit(NearbyShareEvent.Error("Selected files could not be found")) }
-            return
-        }
+        scope.launch(Dispatchers.IO) {
+            val localFiles = staged.map { File(it.path) }.filter { it.exists() }
+            if (localFiles.isEmpty()) {
+                _events.emit(NearbyShareEvent.Error("Selected files could not be found"))
+                return@launch
+            }
 
-        // Ensure service / discovery is initialized
-        val client = getClient(context)
-        client.startSend(peer, localFiles, scope) { success, errorMsg ->
-            scope.launch {
-                if (success) {
-                    _events.emit(NearbyShareEvent.Success("Files sent successfully to ${peer.alias}"))
-                    clearStagedFiles()
-                } else if (errorMsg != null) {
-                    _events.emit(NearbyShareEvent.Error(errorMsg))
+            // Ensure service / discovery is initialized
+            val client = getClient(context)
+            client.startSend(peer, localFiles, scope) { success, errorMsg ->
+                scope.launch {
+                    if (success) {
+                        _events.emit(NearbyShareEvent.Success("Files sent successfully to ${peer.alias}"))
+                        clearStagedFiles()
+                    } else if (errorMsg != null) {
+                        _events.emit(NearbyShareEvent.Error(errorMsg))
+                    }
                 }
             }
         }
@@ -251,32 +253,27 @@ object NearbyShareRepository {
 
     // Callbacks from LocalSendServer
     fun onIncomingRequest(request: IncomingTransferRequest) {
-        scope.launch {
-            _incomingRequest.value = request
-        }
+        _incomingRequest.value = request
     }
 
     fun onIncomingProgress(sessionId: String, fileId: String, bytesRead: Long, totalBytes: Long) {
-        scope.launch {
-            val current = _activeTransfer.value
-            if (current != null && current.sessionId == sessionId) {
-                _activeTransfer.value = current.copy(
-                    bytesTransferred = bytesRead,
-                    status = TransferStatus.IN_PROGRESS
-                )
-            }
+        _activeTransfer.update { cur ->
+            if (cur != null && cur.sessionId == sessionId)
+                cur.copy(bytesTransferred = bytesRead, status = TransferStatus.IN_PROGRESS)
+            else cur
         }
     }
 
     fun onIncomingComplete(sessionId: String, peer: DeviceDto, savedFiles: List<File>) {
-        scope.launch {
-            val current = _activeTransfer.value
+        _activeTransfer.update { current ->
             if (current != null && current.sessionId == sessionId) {
-                _activeTransfer.value = current.copy(
+                current.copy(
                     status = TransferStatus.COMPLETED,
                     bytesTransferred = current.totalBytes
                 )
-            }
+            } else current
+        }
+        scope.launch {
             _events.emit(NearbyShareEvent.Success("Received ${savedFiles.size} file(s) from ${peer.alias}"))
             if (savedFiles.isNotEmpty()) {
                 _events.emit(NearbyShareEvent.FilesReceived(peer.alias, savedFiles))
@@ -285,11 +282,10 @@ object NearbyShareRepository {
     }
 
     fun onIncomingCancelled(sessionId: String) {
-        scope.launch {
-            val current = _activeTransfer.value
+        _activeTransfer.update { current ->
             if (current != null && current.sessionId == sessionId) {
-                _activeTransfer.value = current.copy(status = TransferStatus.CANCELLED)
-            }
+                current.copy(status = TransferStatus.CANCELLED)
+            } else current
         }
     }
 }

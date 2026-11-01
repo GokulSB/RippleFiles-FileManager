@@ -9,12 +9,21 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.ripple.filemanager.MainActivity
 import com.ripple.filemanager.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
 
@@ -29,6 +38,7 @@ class NearbyShareService : Service() {
         private const val TAG = "NearbyShareService"
         const val CHANNEL_ID = "nearby_share_channel"
         const val NOTIFICATION_ID = 2001
+        private const val IDLE_TIMEOUT_MS = 15 * 60 * 1000L // 15 minutes idle timeout
 
         const val ACTION_START = "com.ripple.filemanager.localsend.ACTION_START"
         const val ACTION_STOP = "com.ripple.filemanager.localsend.ACTION_STOP"
@@ -50,19 +60,19 @@ class NearbyShareService : Service() {
 
         fun stop(context: Context) {
             try {
-                val intent = Intent(context, NearbyShareService::class.java).apply {
-                    action = ACTION_STOP
-                }
-                context.startService(intent)
+                // Don't start a service just to stop it
+                context.stopService(Intent(context, NearbyShareService::class.java))
             } catch (e: Exception) {
-                try {
-                    context.stopService(Intent(context, NearbyShareService::class.java))
-                } catch (e2: Exception) {
-                    Log.e(TAG, "Failed to stop NearbyShareService", e2)
-                }
+                Log.e(TAG, "Failed to stop NearbyShareService", e)
             }
         }
     }
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val handler = Handler(Looper.getMainLooper())
+    private val idleStop = Runnable { stopSelf() }
+    private var foregroundOk = false
+    private var lastNotifyMs = 0L
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var discovery: LocalSendDiscovery? = null
@@ -78,6 +88,12 @@ class NearbyShareService : Service() {
         super.onCreate()
         createNotificationChannel()
 
+        foregroundOk = startInForeground() // first thing, before any other work
+        if (!foregroundOk) {
+            stopSelf()
+            return
+        }
+
         // Acquire partial wake lock
         try {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -86,36 +102,78 @@ class NearbyShareService : Service() {
                 "RippleFiles:NearbyShareWakeLock"
             ).apply {
                 setReferenceCounted(false)
-                acquire(12 * 60 * 60 * 1000L) // 12 hours max
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to acquire wake lock", e)
+            Log.e(TAG, "Failed to create wake lock", e)
         }
 
-        startInForeground()
-        initializeEngine()
+        scheduleIdleStop()
+        serviceScope.launch(Dispatchers.IO) { initializeEngine() } // off the main thread
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (!foregroundOk || intent == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        when (intent.action) {
             ACTION_STOP -> {
                 isEngineRunning = false
                 NearbyShareRepository.setReceiving(false)
                 stopSelf()
-                return START_NOT_STICKY
             }
-            ACTION_START, null -> {
+            ACTION_START -> {
+                scheduleIdleStop()
                 if (server != null && server?.boundPort == 53317) {
                     Log.i(TAG, "Rebinding server from legacy port 53317 to ${LocalSendServer.DEFAULT_HTTP_PORT}")
-                    server?.stopServer()
-                    discovery?.stop()
-                    initializeEngine()
+                    serviceScope.launch(Dispatchers.IO) {
+                        server?.stopServer()
+                        discovery?.stop()
+                        initializeEngine()
+                    }
                 } else if (isEngineRunning) {
                     NearbyShareRepository.setReceiving(true)
                 }
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    private fun startInForeground(): Boolean = try {
+        val notification = buildNotification("Ready to send and receive files", isOngoing = false)
+        val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        } else {
+            0
+        }
+        ServiceCompat.startForeground(
+            this,
+            NOTIFICATION_ID,
+            notification,
+            fgsType
+        )
+        true
+    } catch (e: Exception) { // ForegroundServiceStartNotAllowedException, SecurityException
+        Log.w(TAG, "Can't enter foreground", e)
+        false
+    }
+
+    // Android 15+: required for time-limited types. Must stop within a few seconds.
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "FGS timeout, type=$fgsType")
+        NearbyShareRepository.emitError("Nearby Share stopped (system time limit)")
+        stopSelf()
+    }
+
+    // Call on every transfer event (request, complete, cancel). Also bounds the wake lock.
+    private fun scheduleIdleStop() {
+        handler.removeCallbacks(idleStop)
+        handler.postDelayed(idleStop, IDLE_TIMEOUT_MS)
+        try {
+            wakeLock?.acquire(IDLE_TIMEOUT_MS) // non-ref-counted: re-acquire extends it
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to extend wake lock", e)
+        }
     }
 
     private fun initializeEngine() {
@@ -134,19 +192,23 @@ class NearbyShareService : Service() {
             context = applicationContext,
             discovery = disc,
             onIncomingTransferRequest = { request ->
+                scheduleIdleStop()
                 NearbyShareRepository.onIncomingRequest(request)
                 updateNotification("Incoming transfer from ${request.sender.alias}", isOngoing = true)
             },
             onProgressUpdate = { sessionId, fileId, bytesRead, totalBytes ->
+                scheduleIdleStop()
                 NearbyShareRepository.onIncomingProgress(sessionId, fileId, bytesRead, totalBytes)
                 val percent = if (totalBytes > 0) (bytesRead * 100 / totalBytes).toInt() else 0
-                updateNotification("Receiving files ($percent%)", isOngoing = true)
+                updateNotification("Receiving files ($percent%)", isOngoing = true, force = false)
             },
             onTransferComplete = { sessionId, peer, files ->
+                scheduleIdleStop()
                 NearbyShareRepository.onIncomingComplete(sessionId, peer, files)
                 updateNotification("Received ${files.size} file(s) from ${peer.alias}", isOngoing = false)
             },
             onTransferCancelled = { sessionId ->
+                scheduleIdleStop()
                 NearbyShareRepository.onIncomingCancelled(sessionId)
                 updateNotification("Transfer cancelled", isOngoing = false)
             }
@@ -173,22 +235,16 @@ class NearbyShareService : Service() {
         disc.sendAnnouncement(announce = true)
     }
 
-    private fun startInForeground() {
-        val notification = buildNotification("Ready to send and receive files", isOngoing = false)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+    private fun updateNotification(status: String, isOngoing: Boolean, force: Boolean = true) {
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastNotifyMs < 1000) return
+        lastNotifyMs = now
+        try {
+            val notification = buildNotification(status, isOngoing)
+            notificationManager.notify(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to update notification", e)
         }
-    }
-
-    private fun updateNotification(status: String, isOngoing: Boolean) {
-        val notification = buildNotification(status, isOngoing)
-        notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
     private fun buildNotification(status: String, isOngoing: Boolean): Notification {
@@ -241,14 +297,26 @@ class NearbyShareService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        handler.removeCallbacks(idleStop)
+        serviceScope.cancel()
         isEngineRunning = false
-        discovery?.stop()
+
+        val disc = discovery
+        val srv = server
         discovery = null
-        server?.stopServer()
         server = null
         NearbyShareRepository.setDiscovery(null)
         NearbyShareRepository.setServer(null)
         NearbyShareRepository.setReceiving(false)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                disc?.stop()
+                srv?.stopServer()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping server or discovery", e)
+            }
+        }
 
         try {
             if (wakeLock?.isHeld == true) {
