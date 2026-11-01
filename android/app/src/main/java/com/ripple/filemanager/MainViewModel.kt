@@ -160,7 +160,9 @@ data class MegaAccount(
 data class StorageNavState(
     val lastLocation: String,
     val sortMode: SortMode = SortMode.ALPHABETICAL,
-    val filter: String = "all"
+    val filter: String = "all",
+    val folderStack: List<Pair<String, String>> = emptyList(),
+    val folderName: String? = null
 )
 
 fun isCloudPath(path: String): Boolean {
@@ -1217,8 +1219,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         val isNavigableStorage = effectiveLocation.startsWith("/") || effectiveLocation.startsWith("drive") || effectiveLocation.startsWith("mega") || effectiveLocation.startsWith("dropbox") || effectiveLocation.startsWith("smb_") || effectiveLocation.startsWith("ftp_") || effectiveLocation.startsWith("sftp_") || effectiveLocation.startsWith("webdav_") || effectiveLocation.startsWith("nextcloud_") || effectiveLocation == "sd"
         val updatedStorageStates = if (isNavigableStorage) {
-            val existing = current.storageStates[stId] ?: StorageNavState(lastLocation = effectiveLocation, sortMode = current.sortMode, filter = current.filter)
-            current.storageStates.put(stId, existing.copy(lastLocation = effectiveLocation))
+            val existing = current.storageStates[stId] ?: StorageNavState(
+                lastLocation = effectiveLocation,
+                sortMode = current.sortMode,
+                filter = current.filter,
+                folderStack = newStack,
+                folderName = folderName
+            )
+            current.storageStates.put(stId, existing.copy(
+                lastLocation = effectiveLocation,
+                folderStack = newStack,
+                folderName = folderName
+            ))
         } else {
             current.storageStates
         }
@@ -1282,6 +1294,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         val navState = _state.value.storageStates[storageId]
         var targetLocation = navState?.lastLocation ?: defaultLocation
+        if (storageId.startsWith("drive_") && targetLocation == "drive") {
+            val email = storageId.removePrefix("drive_")
+            targetLocation = "drive:$email"
+        } else if (storageId.startsWith("mega_") && targetLocation == "mega") {
+            val email = storageId.removePrefix("mega_")
+            targetLocation = "mega:$email"
+        }
         if (storageId == "sd") {
             val resolvedSd = _state.value.sdCardPath ?: com.ripple.filemanager.data.StorageUtils.getSdCardPath(getApplication())
             if (resolvedSd != null && (targetLocation == "sd" || targetLocation == "sd/" || targetLocation == "sd:")) {
@@ -1290,8 +1309,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         val targetSort = navState?.sortMode ?: SortMode.ALPHABETICAL
         val targetFilter = navState?.filter ?: "all"
-        _state.update { it.copy(sortMode = targetSort, filter = targetFilter) }
-        setLocation(targetLocation)
+        val targetStack = navState?.folderStack ?: emptyList()
+        val targetFolderName = navState?.folderName
+        _state.update { 
+            it.copy(
+                sortMode = targetSort, 
+                filter = targetFilter,
+                driveFolderStack = targetStack,
+                currentFolderName = targetFolderName
+            ) 
+        }
+        setLocation(targetLocation, targetFolderName)
     }
 
     fun setFilter(filter: String) {

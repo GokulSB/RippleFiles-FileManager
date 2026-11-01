@@ -251,13 +251,7 @@ fun ExpressiveHomeScreen(
             state = state,
             currentStorageId = currentStId,
             onDismissRequest = { showStorageSheet = false },
-            onSelectStorage = { location ->
-                val stId = com.ripple.filemanager.getStorageIdForLocation(
-                    location,
-                    state.sdCardPath,
-                    state.googleDriveAccountEmail,
-                    state.megaAccountEmail
-                )
+            onSelectStorage = { stId, location ->
                 onAction(AppAction.SwitchToStorage(stId, location))
                 showStorageSheet = false
             },
@@ -1172,7 +1166,7 @@ fun ExpressiveRecentFileRow(
 fun StorageSwitcherBottomSheet(
     state: AppState,
     onDismissRequest: () -> Unit,
-    onSelectStorage: (String) -> Unit,
+    onSelectStorage: (storageId: String, location: String) -> Unit,
     onAddConnection: () -> Unit,
     currentStorageId: String? = null,
     onLogoutStorage: ((ConnectedStorageItem) -> Unit)? = null
@@ -1205,7 +1199,7 @@ fun StorageSwitcherBottomSheet(
                         icon = storage.icon,
                         category = storage.category,
                         isSelected = isSelected,
-                        onClick = { onSelectStorage(storage.location) },
+                        onClick = { onSelectStorage(storage.id, storage.location) },
                         onDisconnectClick = if (isCloudOrNetwork && onLogoutStorage != null) {
                             { storageToDisconnect = storage }
                         } else null

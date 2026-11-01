@@ -74,6 +74,32 @@ sealed class BrowseStoragePage {
     object ConnectPrompt : BrowseStoragePage()
 }
 
+internal fun isMatchingStorageId(pageStorageId: String, currentStorageId: String): Boolean {
+    if (pageStorageId == currentStorageId) return true
+    
+    // Check Google Drive
+    if (pageStorageId.startsWith("drive") && currentStorageId.startsWith("drive")) {
+        val pageEmail = if (pageStorageId.startsWith("drive_")) pageStorageId.removePrefix("drive_") else null
+        val currentEmail = if (currentStorageId.startsWith("drive_")) currentStorageId.removePrefix("drive_") else null
+        if (pageEmail != null && currentEmail != null) {
+            return pageEmail.equals(currentEmail, ignoreCase = true)
+        }
+        return true
+    }
+    
+    // Check MEGA
+    if (pageStorageId.startsWith("mega") && currentStorageId.startsWith("mega")) {
+        val pageEmail = if (pageStorageId.startsWith("mega_")) pageStorageId.removePrefix("mega_") else null
+        val currentEmail = if (currentStorageId.startsWith("mega_")) currentStorageId.removePrefix("mega_") else null
+        if (pageEmail != null && currentEmail != null) {
+            return pageEmail.equals(currentEmail, ignoreCase = true)
+        }
+        return true
+    }
+    
+    return false
+}
+
 @Composable
 fun ExpressiveBrowseScreen(
     state: AppState,
@@ -133,7 +159,7 @@ fun ExpressiveBrowseScreen(
     }
 
     val initialPageIndex = remember(pages) {
-        val idx = pages.indexOfFirst { it is BrowseStoragePage.Storage && it.item.id == currentStorageId }
+        val idx = pages.indexOfFirst { it is BrowseStoragePage.Storage && isMatchingStorageId(it.item.id, currentStorageId) }
         if (idx >= 0) idx else 0
     }
 
@@ -143,12 +169,12 @@ fun ExpressiveBrowseScreen(
     )
 
     val activeStorageItem = remember(currentStorageId, connectedStorages) {
-        connectedStorages.find { it.id == currentStorageId } ?: connectedStorages.firstOrNull()
+        connectedStorages.find { isMatchingStorageId(it.id, currentStorageId) } ?: connectedStorages.firstOrNull()
     }
 
     // 4. Sync pager with currentStorageId (from dropdown / external navigation)
     LaunchedEffect(currentStorageId) {
-        val targetIndex = pages.indexOfFirst { it is BrowseStoragePage.Storage && it.item.id == currentStorageId }
+        val targetIndex = pages.indexOfFirst { it is BrowseStoragePage.Storage && isMatchingStorageId(it.item.id, currentStorageId) }
         if (targetIndex >= 0 && targetIndex != pagerState.currentPage && !pagerState.isScrollInProgress) {
             pagerState.animateScrollToPage(targetIndex)
         }
@@ -158,9 +184,7 @@ fun ExpressiveBrowseScreen(
     LaunchedEffect(pagerState.currentPage) {
         val page = pages.getOrNull(pagerState.currentPage)
         if (page is BrowseStoragePage.Storage) {
-            val isSameStorage = page.item.id == currentStorageId ||
-                (page.item.id.startsWith("drive") && currentStorageId.startsWith("drive")) ||
-                (page.item.id.startsWith("mega") && currentStorageId.startsWith("mega"))
+            val isSameStorage = isMatchingStorageId(page.item.id, currentStorageId)
             if (!isSameStorage) {
                 onAction(AppAction.SwitchToStorage(page.item.id, page.item.location))
             }
@@ -216,7 +240,14 @@ fun ExpressiveBrowseScreen(
     // Header Subtitle: active storage name with chevron
     val headerSubtitle = when (currentPageObj) {
         is BrowseStoragePage.ConnectPrompt -> "Connect storage"
-        is BrowseStoragePage.Storage -> currentPageObj.item.name
+        is BrowseStoragePage.Storage -> {
+            val item = currentPageObj.item
+            if (item.id != "internal" && item.id != "sd" && item.detail.isNotBlank() && !item.detail.endsWith("free")) {
+                "${item.name} · ${item.detail}"
+            } else {
+                item.name
+            }
+        }
         null -> activeStorageItem?.name ?: "Internal storage"
     }
 
@@ -253,12 +284,26 @@ fun ExpressiveBrowseScreen(
 
         // 3. Breadcrumbs (independent horizontal scroll, placed above pager to avoid conflict)
         if (currentPageObj !is BrowseStoragePage.ConnectPrompt) {
+            val currentStoragePageItem = (currentPageObj as? BrowseStoragePage.Storage)?.item ?: activeStorageItem
+            val breadcrumbStorageName = when {
+                currentStoragePageItem == null -> "Storage"
+                currentStoragePageItem.id.startsWith("drive_") -> {
+                    val email = currentStoragePageItem.id.removePrefix("drive_")
+                    if (state.googleDriveAccounts.size > 1) email else "Google Drive"
+                }
+                currentStoragePageItem.id.startsWith("mega_") -> {
+                    val email = currentStoragePageItem.id.removePrefix("mega_")
+                    if (state.megaAccounts.size > 1) email else "Mega"
+                }
+                else -> currentStoragePageItem.name
+            }
+
             BrowseBreadcrumbs(
                 currentLocation = state.location,
                 rootPath = currentStorageRoot,
                 driveFolderStack = state.driveFolderStack,
                 currentFolderName = state.currentFolderName,
-                storageName = activeStorageItem?.name ?: "Storage",
+                storageName = breadcrumbStorageName,
                 onNavigate = { onAction(AppAction.SetLocation(it)) }
             )
 
@@ -317,6 +362,45 @@ fun ExpressiveBrowseScreen(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
+
+            // 4.5 Storage page indicator dots (when >1 storage available)
+            if (pages.size > 1) {
+                val reduced = ExpressiveMotion.isReducedMotion()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    pages.indices.forEach { index ->
+                        val isActive = index == pagerState.currentPage
+                        val dotWidth by animateDpAsState(
+                            targetValue = if (isActive) 18.dp else 6.dp,
+                            animationSpec = if (reduced) androidx.compose.animation.core.snap() else ExpressiveMotion.DpSpringSpec,
+                            label = "browse_dot_w"
+                        )
+                        val dotColor by androidx.compose.animation.animateColorAsState(
+                            targetValue = if (isActive) colors.accent else colors.muted.copy(alpha = 0.35f),
+                            animationSpec = if (reduced) androidx.compose.animation.core.snap() else ExpressiveMotion.ColorTween,
+                            label = "browse_dot_c"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 3.dp)
+                                .height(5.dp)
+                                .width(dotWidth)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                                .clickable {
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(index)
+                                    }
+                                }
+                        )
+                    }
+                }
+            }
         } else {
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -343,124 +427,202 @@ fun ExpressiveBrowseScreen(
                     )
                 }
                 is BrowseStoragePage.Storage -> {
-                    val isMatchingStorage = page.item.id == currentStorageId ||
-                        (currentStorageId.startsWith("drive") && page.item.id.startsWith("drive")) ||
-                        (currentStorageId.startsWith("mega") && page.item.id.startsWith("mega"))
+                    val isMatchingStorage = isMatchingStorageId(page.item.id, currentStorageId)
                     val isLocal = currentStorageId == "internal" || currentStorageId == "sd"
                     val isDriveAuth = currentStorageId.startsWith("drive") && state.recoverableAuthIntent != null
 
                     SectionContainer(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        if (state.isLoading && isMatchingStorage) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(48.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                com.ripple.filemanager.ui.ExpressiveCircularLoader(
-                                    size = 46.dp,
-                                    color = colors.accent
-                                )
-                            }
-                        } else if (!state.hasStoragePermission && state.files.isEmpty() && isLocal) {
-                            StoragePermissionCard(
-                                onGrantAccess = { onAction(AppAction.RequestStorageAccess) }
-                            )
-                        } else if (state.errorMessage != null && state.files.isEmpty() && isMatchingStorage) {
-                            StorageErrorCard(
-                                message = state.errorMessage,
-                                onRetry = { onAction(AppAction.Reload) },
-                                actionLabel = if (isDriveAuth) stringResource(R.string.grant_permission) else if (isLocal && !state.hasStoragePermission) stringResource(R.string.permission_grant_access) else null,
-                                onGrantAccess = when {
-                                    isDriveAuth -> {
-                                        { onResolveAuthIntent?.invoke() }
-                                    }
-                                    isLocal && !state.hasStoragePermission -> {
-                                        { onAction(AppAction.RequestStorageAccess) }
-                                    }
-                                    else -> null
-                                }
-                            )
-                        } else if ((state.location.contains("Android/data") || state.location.contains("Android/obb")) && !state.hasShizuku) {
-                            ShizukuRestrictedAccessCard(
-                                location = state.location,
-                                onAction = onAction
-                            )
-                        } else if (state.files.isEmpty()) {
-                            InnerCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(
+                        if (isMatchingStorage) {
+                            if (state.isLoading) {
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(32.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
+                                        .fillMaxSize()
+                                        .padding(48.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = stringResource(R.string.this_folder_empty),
-                                        fontSize = 15.sp,
-                                        color = colors.muted,
-                                        textAlign = TextAlign.Center
+                                    com.ripple.filemanager.ui.ExpressiveCircularLoader(
+                                        size = 46.dp,
+                                        color = colors.accent
                                     )
-                                    if (currentStorageId.startsWith("drive") && onLaunchDrivePicker != null) {
-                                        Spacer(modifier = Modifier.height(14.dp))
-                                        Button(
-                                            onClick = onLaunchDrivePicker,
-                                            shape = RoundedCornerShape(24.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = colors.accent,
-                                                contentColor = colors.ink
+                                }
+                            } else if (!state.hasStoragePermission && state.files.isEmpty() && isLocal) {
+                                StoragePermissionCard(
+                                    onGrantAccess = { onAction(AppAction.RequestStorageAccess) }
+                                )
+                            } else if (state.errorMessage != null && state.files.isEmpty()) {
+                                StorageErrorCard(
+                                    message = state.errorMessage,
+                                    onRetry = { onAction(AppAction.Reload) },
+                                    actionLabel = if (isDriveAuth) stringResource(R.string.grant_permission) else if (isLocal && !state.hasStoragePermission) stringResource(R.string.permission_grant_access) else null,
+                                    onGrantAccess = when {
+                                        isDriveAuth -> {
+                                            { onResolveAuthIntent?.invoke() }
+                                        }
+                                        isLocal && !state.hasStoragePermission -> {
+                                            { onAction(AppAction.RequestStorageAccess) }
+                                        }
+                                        else -> null
+                                    }
+                                )
+                            } else if ((state.location.contains("Android/data") || state.location.contains("Android/obb")) && !state.hasShizuku) {
+                                ShizukuRestrictedAccessCard(
+                                    location = state.location,
+                                    onAction = onAction
+                                )
+                            } else if (state.files.isEmpty()) {
+                                InnerCard(modifier = Modifier.fillMaxWidth()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(32.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.this_folder_empty),
+                                            fontSize = 15.sp,
+                                            color = colors.muted,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        if (currentStorageId.startsWith("drive") && onLaunchDrivePicker != null) {
+                                            Spacer(modifier = Modifier.height(14.dp))
+                                            Button(
+                                                onClick = onLaunchDrivePicker,
+                                                shape = RoundedCornerShape(24.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = colors.accent,
+                                                    contentColor = colors.ink
+                                                )
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Cloud,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = stringResource(R.string.select_files_from_drive),
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontSize = 14.sp
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (state.isListMode) {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+                                ) {
+                                    items(state.files, key = { it.id }) { file ->
+                                        BrowseListRow(
+                                            file = file,
+                                            isSelected = state.selectedFiles.contains(file.id),
+                                            onSelect = { onAction(AppAction.ToggleSelection(file.id)) },
+                                            onClick = { onFileClick(file) },
+                                            onMenuClick = { onFileMenuClick(file) }
+                                        )
+                                    }
+                                }
+                            } else {
+                                val columns = state.gridColumns.coerceIn(2, 4)
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(columns),
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+                                ) {
+                                    items(state.files, key = { it.id }) { file ->
+                                        BrowseGridCard(
+                                            file = file,
+                                            isSelected = state.selectedFiles.contains(file.id),
+                                            onSelect = { onAction(AppAction.ToggleSelection(file.id)) },
+                                            onClick = { onFileClick(file) },
+                                            onMenuClick = { onFileMenuClick(file) },
+                                            columns = columns
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            // Non-matching page (adjacent page while swiping)
+                            val targetLocation = state.storageStates[page.item.id]?.lastLocation ?: page.item.location
+                            val cachedFiles = state.folderCache[targetLocation]
+                            if (cachedFiles != null && cachedFiles.isNotEmpty()) {
+                                if (state.isListMode) {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+                                    ) {
+                                        items(cachedFiles, key = { it.id }) { file ->
+                                            BrowseListRow(
+                                                file = file,
+                                                isSelected = false,
+                                                onSelect = {},
+                                                onClick = { onFileClick(file) },
+                                                onMenuClick = { onFileMenuClick(file) }
                                             )
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Cloud,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = stringResource(R.string.select_files_from_drive),
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 14.sp
+                                        }
+                                    }
+                                } else {
+                                    val columns = state.gridColumns.coerceIn(2, 4)
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(columns),
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+                                    ) {
+                                        items(cachedFiles, key = { it.id }) { file ->
+                                            BrowseGridCard(
+                                                file = file,
+                                                isSelected = false,
+                                                onSelect = {},
+                                                onClick = { onFileClick(file) },
+                                                onMenuClick = { onFileMenuClick(file) },
+                                                columns = columns
                                             )
                                         }
                                     }
                                 }
-                            }
-                        } else if (state.isListMode) {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
-                            ) {
-                                items(state.files, key = { it.id }) { file ->
-                                    BrowseListRow(
-                                        file = file,
-                                        isSelected = state.selectedFiles.contains(file.id),
-                                        onSelect = { onAction(AppAction.ToggleSelection(file.id)) },
-                                        onClick = { onFileClick(file) },
-                                        onMenuClick = { onFileMenuClick(file) }
+                            } else {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(48.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    CookieIcon(
+                                        icon = page.item.icon,
+                                        bgColor = page.item.gaugeColor,
+                                        size = 52.dp,
+                                        lobes = 8
                                     )
-                                }
-                            }
-                        } else {
-                            val columns = state.gridColumns.coerceIn(2, 4)
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(columns),
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
-                            ) {
-                                items(state.files, key = { it.id }) { file ->
-                                    BrowseGridCard(
-                                        file = file,
-                                        isSelected = state.selectedFiles.contains(file.id),
-                                        onSelect = { onAction(AppAction.ToggleSelection(file.id)) },
-                                        onClick = { onFileClick(file) },
-                                        onMenuClick = { onFileMenuClick(file) },
-                                        columns = columns
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    Text(
+                                        text = page.item.name,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.text
+                                    )
+                                    if (page.item.detail.isNotBlank() && !page.item.detail.endsWith("free")) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = page.item.detail,
+                                            fontSize = 13.sp,
+                                            color = colors.muted
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    com.ripple.filemanager.ui.ExpressiveCircularLoader(
+                                        size = 36.dp,
+                                        color = colors.accent
                                     )
                                 }
                             }
@@ -477,13 +639,7 @@ fun ExpressiveBrowseScreen(
             state = state,
             currentStorageId = currentStorageId,
             onDismissRequest = { showStorageSheet = false },
-            onSelectStorage = { location ->
-                val stId = com.ripple.filemanager.getStorageIdForLocation(
-                    location,
-                    state.sdCardPath,
-                    state.googleDriveAccountEmail,
-                    state.megaAccountEmail
-                )
+            onSelectStorage = { stId, location ->
                 onAction(AppAction.SwitchToStorage(stId, location))
                 showStorageSheet = false
             },
