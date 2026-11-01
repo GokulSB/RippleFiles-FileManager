@@ -603,6 +603,16 @@ fun rememberFolderMeta(file: FileItem): String {
 }
 
 fun formatFolderMeta(file: FileItem): String {
+    if (com.ripple.filemanager.isCloudPath(file.path)) {
+        val count = file.folderItemCount
+        return if (count != null) {
+            if (count == 1) "1 item" else "$count items"
+        } else if (file.changed.isNotEmpty() && file.changed != "Unknown") {
+            file.changed
+        } else {
+            "Folder"
+        }
+    }
     if (file.size.contains("file") && file.size.contains("·")) return file.size
     val count = file.folderItemCount ?: try {
         val f = java.io.File(file.path)
@@ -637,7 +647,7 @@ fun formatFileDateTime(file: FileItem): String {
 fun formatFileMeta(file: FileItem): String {
     val dateTime = formatFileDateTime(file)
     val rawSize = file.size
-    val sizeStr = if (rawSize.isNotEmpty() && !rawSize.contains("file") && !rawSize.contains("item")) rawSize else formatFileSize(file.sizeBytes)
+    val sizeStr = if (rawSize.isNotEmpty() && !rawSize.contains("file") && !rawSize.contains("item") && rawSize != "--" && rawSize != "Unknown") rawSize else if (file.sizeBytes > 0L) formatFileSize(file.sizeBytes) else ""
     return if (sizeStr.isNotEmpty() && dateTime.isNotEmpty()) {
         "$sizeStr · $dateTime"
     } else {

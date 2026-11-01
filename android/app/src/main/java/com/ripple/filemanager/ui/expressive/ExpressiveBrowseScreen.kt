@@ -85,6 +85,8 @@ fun ExpressiveBrowseScreen(
     onOrganiseClick: () -> Unit = { onAction(AppAction.OrganiseDownloads) },
     onOpenNewConnection: () -> Unit = {},
     onConnectGoogleDrive: () -> Unit = {},
+    onLaunchDrivePicker: (() -> Unit)? = null,
+    onResolveAuthIntent: (() -> Unit)? = null,
     onConnectMega: () -> Unit = {},
     onConnectDropbox: () -> Unit = {},
     onConnectNextcloud: () -> Unit = {},
@@ -121,8 +123,13 @@ fun ExpressiveBrowseScreen(
     }
 
     // 3. Current active storage ID based on state.location
-    val currentStorageId = remember(state.location, state.sdCardPath) {
-        com.ripple.filemanager.getStorageIdForLocation(state.location, state.sdCardPath)
+    val currentStorageId = remember(state.location, state.sdCardPath, state.googleDriveAccountEmail, state.megaAccountEmail) {
+        com.ripple.filemanager.getStorageIdForLocation(
+            state.location,
+            state.sdCardPath,
+            state.googleDriveAccountEmail,
+            state.megaAccountEmail
+        )
     }
 
     val initialPageIndex = remember(pages) {
@@ -151,7 +158,10 @@ fun ExpressiveBrowseScreen(
     LaunchedEffect(pagerState.currentPage) {
         val page = pages.getOrNull(pagerState.currentPage)
         if (page is BrowseStoragePage.Storage) {
-            if (page.item.id != currentStorageId) {
+            val isSameStorage = page.item.id == currentStorageId ||
+                (page.item.id.startsWith("drive") && currentStorageId.startsWith("drive")) ||
+                (page.item.id.startsWith("mega") && currentStorageId.startsWith("mega"))
+            if (!isSameStorage) {
                 onAction(AppAction.SwitchToStorage(page.item.id, page.item.location))
             }
         }
@@ -169,8 +179,8 @@ fun ExpressiveBrowseScreen(
                         val sdRoot = state.sdCardPath ?: "sd"
                         state.location == sdRoot || state.location == "sd"
                     }
-                    currentStorageId == "drive" -> state.location == "drive" || state.driveFolderStack.isEmpty()
-                    currentStorageId == "mega" -> state.location == "mega" || state.driveFolderStack.isEmpty()
+                    currentStorageId.startsWith("drive") -> state.location == "drive" || state.location.startsWith("drive:") || state.driveFolderStack.isEmpty()
+                    currentStorageId.startsWith("mega") -> state.location == "mega" || state.location.startsWith("mega:") || state.driveFolderStack.isEmpty()
                     currentStorageId == "dropbox" -> state.location == "dropbox" || state.driveFolderStack.isEmpty()
                     else -> state.location.endsWith(":/") || state.driveFolderStack.isEmpty()
                 }
@@ -333,11 +343,16 @@ fun ExpressiveBrowseScreen(
                     )
                 }
                 is BrowseStoragePage.Storage -> {
-                    val isActivePage = page.item.id == currentStorageId
+                    val isMatchingStorage = page.item.id == currentStorageId ||
+                        (currentStorageId.startsWith("drive") && page.item.id.startsWith("drive")) ||
+                        (currentStorageId.startsWith("mega") && page.item.id.startsWith("mega"))
+                    val isLocal = currentStorageId == "internal" || currentStorageId == "sd"
+                    val isDriveAuth = currentStorageId.startsWith("drive") && state.recoverableAuthIntent != null
+
                     SectionContainer(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        if (!isActivePage || state.isLoading) {
+                        if (state.isLoading && isMatchingStorage) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -349,17 +364,24 @@ fun ExpressiveBrowseScreen(
                                     color = colors.accent
                                 )
                             }
-                        } else if (!state.hasStoragePermission && state.files.isEmpty() && (state.location == "home" || state.location.startsWith("/storage") || state.location.startsWith("/sdcard") || state.location.startsWith("/mnt"))) {
+                        } else if (!state.hasStoragePermission && state.files.isEmpty() && isLocal) {
                             StoragePermissionCard(
                                 onGrantAccess = { onAction(AppAction.RequestStorageAccess) }
                             )
-                        } else if (state.errorMessage != null && state.files.isEmpty()) {
+                        } else if (state.errorMessage != null && state.files.isEmpty() && isMatchingStorage) {
                             StorageErrorCard(
                                 message = state.errorMessage,
                                 onRetry = { onAction(AppAction.Reload) },
-                                onGrantAccess = if (!state.hasStoragePermission || state.errorMessage.contains("permission", ignoreCase = true) || state.errorMessage.contains("access", ignoreCase = true)) {
-                                    { onAction(AppAction.RequestStorageAccess) }
-                                } else null
+                                actionLabel = if (isDriveAuth) stringResource(R.string.grant_permission) else if (isLocal && !state.hasStoragePermission) stringResource(R.string.permission_grant_access) else null,
+                                onGrantAccess = when {
+                                    isDriveAuth -> {
+                                        { onResolveAuthIntent?.invoke() }
+                                    }
+                                    isLocal && !state.hasStoragePermission -> {
+                                        { onAction(AppAction.RequestStorageAccess) }
+                                    }
+                                    else -> null
+                                }
                             )
                         } else if ((state.location.contains("Android/data") || state.location.contains("Android/obb")) && !state.hasShizuku) {
                             ShizukuRestrictedAccessCard(
@@ -381,10 +403,10 @@ fun ExpressiveBrowseScreen(
                                         color = colors.muted,
                                         textAlign = TextAlign.Center
                                     )
-                                    if (currentStorageId == "drive") {
+                                    if (currentStorageId.startsWith("drive") && onLaunchDrivePicker != null) {
                                         Spacer(modifier = Modifier.height(14.dp))
                                         Button(
-                                            onClick = onConnectGoogleDrive,
+                                            onClick = onLaunchDrivePicker,
                                             shape = RoundedCornerShape(24.dp),
                                             colors = ButtonDefaults.buttonColors(
                                                 containerColor = colors.accent,
@@ -456,7 +478,12 @@ fun ExpressiveBrowseScreen(
             currentStorageId = currentStorageId,
             onDismissRequest = { showStorageSheet = false },
             onSelectStorage = { location ->
-                val stId = com.ripple.filemanager.getStorageIdForLocation(location, state.sdCardPath)
+                val stId = com.ripple.filemanager.getStorageIdForLocation(
+                    location,
+                    state.sdCardPath,
+                    state.googleDriveAccountEmail,
+                    state.megaAccountEmail
+                )
                 onAction(AppAction.SwitchToStorage(stId, location))
                 showStorageSheet = false
             },
@@ -466,11 +493,13 @@ fun ExpressiveBrowseScreen(
             },
             onLogoutStorage = { storage ->
                 when {
-                    storage.id == "drive" -> {
-                        onAction(AppAction.SetGoogleDriveAuthStatus(false, null))
+                    storage.id == "drive" || storage.id.startsWith("drive_") -> {
+                        val email = if (storage.id.startsWith("drive_")) storage.id.removePrefix("drive_") else state.googleDriveAccountEmail
+                        onAction(AppAction.SetGoogleDriveAuthStatus(false, email))
                     }
-                    storage.id == "mega" -> {
-                        onAction(AppAction.SetMegaAuthStatus(false, null, null))
+                    storage.id == "mega" || storage.id.startsWith("mega_") -> {
+                        val email = if (storage.id.startsWith("mega_")) storage.id.removePrefix("mega_") else state.megaAccountEmail
+                        onAction(AppAction.SetMegaAuthStatus(false, email, null))
                     }
                     storage.id == "dropbox" -> {
                         onAction(AppAction.SetDropboxAuthStatus(false, null))
@@ -693,6 +722,7 @@ private fun StoragePermissionCard(
 private fun StorageErrorCard(
     message: String,
     onRetry: () -> Unit,
+    actionLabel: String? = null,
     onGrantAccess: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -737,7 +767,7 @@ private fun StorageErrorCard(
                             contentColor = colors.ink
                         )
                     ) {
-                        Text(stringResource(R.string.permission_grant_access), fontWeight = FontWeight.SemiBold)
+                        Text(actionLabel ?: stringResource(R.string.permission_grant_access), fontWeight = FontWeight.SemiBold)
                     }
                 }
                 Button(

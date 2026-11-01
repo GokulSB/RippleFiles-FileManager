@@ -25,7 +25,8 @@ class SmbStorageProvider {
     private var smbClient: SMBClient? = null
     private var session: Session? = null
     private var diskShare: DiskShare? = null
-    private var currentConnectionId: String? = null
+    var currentConnectionId: String? = null
+        private set
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
 
     suspend fun connect(connection: SmbConnection, password: String): Result<Unit> = withContext(Dispatchers.IO) {

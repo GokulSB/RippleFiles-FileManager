@@ -90,10 +90,12 @@ fun ExpressiveCloudScreen(
     val activeConnections = remember(
         state.isGoogleDriveAuthenticated,
         state.googleDriveAccountEmail,
+        state.googleDriveAccounts,
         state.driveStorageTotalBytes,
         state.driveStorageFreeBytes,
         state.isMegaAuthenticated,
         state.megaAccountEmail,
+        state.megaAccounts,
         state.isDropboxAuthenticated,
         state.dropboxAccountEmail,
         state.smbState.savedConnections,
@@ -102,7 +104,22 @@ fun ExpressiveCloudScreen(
         state.webDavState.savedConnections
     ) {
         val list = mutableListOf<CloudConnection>()
-        if (state.isGoogleDriveAuthenticated) {
+        if (state.googleDriveAccounts.isNotEmpty()) {
+            state.googleDriveAccounts.forEach { email ->
+                list.add(
+                    CloudConnection(
+                        id = "drive_$email",
+                        name = "Google Drive",
+                        accountInfo = email,
+                        rootLocation = "drive:$email",
+                        icon = Icons.Outlined.Cloud,
+                        category = "docs",
+                        totalBytes = state.driveStorageTotalBytes,
+                        freeBytes = state.driveStorageFreeBytes
+                    )
+                )
+            }
+        } else if (state.isGoogleDriveAuthenticated) {
             list.add(
                 CloudConnection(
                     id = "drive",
@@ -116,7 +133,20 @@ fun ExpressiveCloudScreen(
                 )
             )
         }
-        if (state.isMegaAuthenticated) {
+        if (state.megaAccounts.isNotEmpty()) {
+            state.megaAccounts.forEach { acc ->
+                list.add(
+                    CloudConnection(
+                        id = "mega_${acc.email}",
+                        name = "Mega",
+                        accountInfo = acc.email,
+                        rootLocation = "mega:${acc.email}",
+                        icon = Icons.Outlined.Cloud,
+                        category = "archives"
+                    )
+                )
+            }
+        } else if (state.isMegaAuthenticated) {
             list.add(
                 CloudConnection(
                     id = "mega",
@@ -197,8 +227,18 @@ fun ExpressiveCloudScreen(
         val idx = activeConnections.indexOfFirst { conn ->
             state.location == conn.rootLocation ||
             state.location.startsWith("${conn.id}:") ||
-            (conn.id == "drive" && state.location.startsWith("drive")) ||
-            (conn.id == "mega" && state.location.startsWith("mega")) ||
+            (conn.id.startsWith("drive") && (
+                state.location == conn.rootLocation ||
+                (state.location.startsWith("drive:") && state.location.removePrefix("drive:").substringBefore("/") == conn.id.removePrefix("drive_")) ||
+                (state.location.startsWith("drive_id:") && (state.googleDriveAccountEmail == null || conn.id == "drive_${state.googleDriveAccountEmail}")) ||
+                (state.location == "drive" && conn.id == "drive")
+            )) ||
+            (conn.id.startsWith("mega") && (
+                state.location == conn.rootLocation ||
+                (state.location.startsWith("mega:") && state.location.removePrefix("mega:").substringBefore("/") == conn.id.removePrefix("mega_")) ||
+                (state.location.startsWith("mega_id:") && (state.megaAccountEmail == null || conn.id == "mega_${state.megaAccountEmail}")) ||
+                (state.location == "mega" && conn.id == "mega")
+            )) ||
             (conn.id == "dropbox" && state.location.startsWith("dropbox"))
         }
         if (idx >= 0) idx else 0
@@ -700,12 +740,14 @@ fun ExpressiveCloudScreen(
             cancelLabel = "Cancel",
             onConfirm = {
                 when {
-                    connToDisconnect.id == "drive" -> {
+                    connToDisconnect.id == "drive" || connToDisconnect.id.startsWith("drive_") -> {
+                        val email = if (connToDisconnect.id.startsWith("drive_")) connToDisconnect.id.removePrefix("drive_") else state.googleDriveAccountEmail
                         onLogoutGoogleDrive()
-                        onAction(AppAction.SetGoogleDriveAuthStatus(false, null))
+                        onAction(AppAction.SetGoogleDriveAuthStatus(false, email))
                     }
-                    connToDisconnect.id == "mega" -> {
-                        onAction(AppAction.SetMegaAuthStatus(false, null, null))
+                    connToDisconnect.id == "mega" || connToDisconnect.id.startsWith("mega_") -> {
+                        val email = if (connToDisconnect.id.startsWith("mega_")) connToDisconnect.id.removePrefix("mega_") else state.megaAccountEmail
+                        onAction(AppAction.SetMegaAuthStatus(false, email, null))
                     }
                     connToDisconnect.id == "dropbox" -> {
                         onAction(AppAction.SetDropboxAuthStatus(false, null))

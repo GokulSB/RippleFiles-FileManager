@@ -230,7 +230,7 @@ class MainActivity : FragmentActivity() {
             val onAction: (AppAction) -> Unit = remember {
                 { action ->
                     when (action) {
-                        is AppAction.SetLocation -> viewModel.setLocation(action.path)
+                        is AppAction.SetLocation -> viewModel.setLocation(action.path, action.folderName)
                         is AppAction.SwitchToStorage -> viewModel.switchToStorage(action.storageId, action.defaultLocation)
                         is AppAction.NavTabTapped -> viewModel.navTabTapped(action.id)
                         is AppAction.NavigateBackInDrive -> viewModel.navigateBackInDrive()
@@ -253,6 +253,8 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SelectNone -> viewModel.selectNone()
                         is AppAction.OpenFileViewer -> viewModel.openFileViewer(action.id)
                         is AppAction.ViewFile -> viewModel.viewFile(action.file)
+                        is AppAction.DownloadAndOpenFile -> viewModel.downloadAndOpenFile(action.file)
+                        is AppAction.ClearDownloadedCloudFileToOpen -> viewModel.clearDownloadedCloudFileToOpen()
                         is AppAction.CloseFileViewer -> viewModel.closeFileViewer()
                         is AppAction.ClearUnlockedFileToOpen -> viewModel.clearUnlockedFileToOpen()
                         is AppAction.CreateFolder -> viewModel.createFolder(action.name)

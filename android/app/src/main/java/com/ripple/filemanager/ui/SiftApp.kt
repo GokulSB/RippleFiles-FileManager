@@ -14,6 +14,7 @@ import androidx.compose.animation.with
 import androidx.compose.animation.togetherWith
 import com.ripple.filemanager.FileItem
 import com.ripple.filemanager.FileDetails
+import com.ripple.filemanager.isCloudPath
 
 
 import androidx.compose.animation.core.*
@@ -559,7 +560,8 @@ fun SiftApp(
                 if (state.viewingFile != null) {
                     if (state.viewingFile!!.type == "image") {
                         val currentViewing = state.viewingFile!!
-                        val baseImages = state.files.filter { it.type == "image" }
+                        val isCloud = isCloudPath(currentViewing.path) || state.location.startsWith("drive") || state.location.startsWith("mega") || state.location.startsWith("dropbox") || state.location.startsWith("smb_") || state.location.startsWith("ftp_") || state.location.startsWith("sftp_") || state.location.startsWith("webdav_") || state.location.startsWith("nextcloud_")
+                        val baseImages = if (isCloud) listOf(currentViewing) else state.files.filter { it.type == "image" }
                         val imageFiles = if (baseImages.none { it.id == currentViewing.id }) listOf(currentViewing) + baseImages else baseImages
                         val initialIndex = imageFiles.indexOfFirst { it.id == currentViewing.id }.coerceAtLeast(0)
                         ImageViewerScreen(
@@ -638,10 +640,10 @@ fun DrawerContent(
     
     val launchDrivePicker = rememberDrivePickerLauncher { success, pickedIds ->
         showGDrivePopup = false
-        if (success) {
-            pickedIds?.let { onAction(AppAction.SetDrivePickedIds(it)) }
+        if (success && !pickedIds.isNullOrEmpty()) {
+            pickedIds.let { onAction(AppAction.SetDrivePickedIds(it)) }
             onCloseDrawer()
-            onAction(AppAction.SetLocation("drive"))
+            onAction(AppAction.Reload)
         }
     }
 
@@ -652,8 +654,10 @@ fun DrawerContent(
         try {
             val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
             if (account?.email != null) {
-                onAction(AppAction.SetGoogleDriveAuthStatus(true, account.email!!))
-                launchDrivePicker()
+                val email = account.email!!
+                onAction(AppAction.SetGoogleDriveAuthStatus(true, email))
+                onCloseDrawer()
+                onAction(AppAction.SwitchToStorage("drive_$email", "drive:$email"))
             }
         } catch (e: Exception) {
             onAction(AppAction.SetErrorMessage("Google Login Failed: ${e.message}"))
@@ -666,12 +670,18 @@ fun DrawerContent(
         onCloseDrawer = onCloseDrawer,
         onShowAbout = onShowAbout,
         onConnectGoogleDrive = {
+            onCloseDrawer()
             val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestEmail()
-                .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
+                .requestScopes(
+                    com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE),
+                    com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE)
+                )
                 .build()
             val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
-            googleSignInLauncher.launch(client.signInIntent)
+            client.signOut().addOnCompleteListener {
+                googleSignInLauncher.launch(client.signInIntent)
+            }
         },
         onConnectMega = { onAction(AppAction.SetShowMegaPopup(true)) },
         onConnectDropbox = { showDropboxPopup = true },
@@ -1564,6 +1574,27 @@ fun handleFileOpen(
     focusManager: androidx.compose.ui.focus.FocusManager,
     onAction: (AppAction) -> Unit
 ) {
+    if (file.type == "folder") {
+        if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(AppAction.SetQuery("")) }
+        onAction(AppAction.SetLocation(file.path, file.name))
+        return
+    }
+    if (isCloudPath(file.path)) {
+        val cloudCacheDir = java.io.File(context.cacheDir, "cloud_cache")
+        val safeName = file.name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val localCached = java.io.File(cloudCacheDir, "${file.id.toLong() and 0xFFFFFFFFL}_$safeName")
+        if (localCached.exists() && localCached.length() > 0L) {
+            val finalType = if (localCached.name.endsWith(".pdf", true)) "document" else file.type
+            handleFileOpen(file.copy(path = localCached.absolutePath, type = finalType), context, state, focusManager, onAction)
+            return
+        }
+        if (localCached.exists() && localCached.length() == 0L) {
+            localCached.delete()
+        }
+        onAction(AppAction.DownloadAndOpenFile(file))
+        return
+    }
+
     if (file.path.startsWith("/")) {
         onAction(AppAction.LogRecentAction(file.path, "Opened"))
     }
@@ -1593,17 +1624,6 @@ fun handleFileOpen(
             focusManager.clearFocus()
             onAction(AppAction.ViewFile(file))
             if (state.query.isNotEmpty()) { onAction(AppAction.SetQuery("")) }
-        }
-    } else if (file.path.startsWith("drive_id:")) {
-        val id = file.path.removePrefix("drive_id:")
-        val url = "https://drive.google.com/file/d/$id/view"
-        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try {
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     } else if (file.type == "audio") {
         if (state.viewerMusic == "Device default") {
@@ -1663,7 +1683,18 @@ fun handleFileTapForPane(
     if (file.isLocked) {
         onAction(AppAction.RequestAuth(com.ripple.filemanager.AuthReason.OPEN_FILE, file.path, fileId = file.id, folderName = file.name))
     } else if (file.name.lowercase().endsWith(".zip") || file.name.lowercase().endsWith(".rar") || file.name.lowercase().endsWith(".tar") || file.name.lowercase().endsWith(".gz") || file.name.lowercase().endsWith(".bz2") || file.name.lowercase().endsWith(".xz")) {
-        onShowArchiveOptions(file)
+        if (isCloudPath(file.path)) {
+            val cloudCacheDir = java.io.File(context.cacheDir, "cloud_cache")
+            val safeName = file.name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val localCached = java.io.File(cloudCacheDir, "${file.id.toLong() and 0xFFFFFFFFL}_$safeName")
+            if (localCached.exists() && localCached.length() > 0L) {
+                onShowArchiveOptions(file.copy(path = localCached.absolutePath))
+            } else {
+                onAction(AppAction.DownloadAndOpenFile(file))
+            }
+        } else {
+            onShowArchiveOptions(file)
+        }
     } else {
         handleFileOpen(file, context, state, focusManager, onAction)
     }
@@ -1756,6 +1787,17 @@ fun MainContent(
             onAction(AppAction.ClearUnlockedFileToOpen)
         }
     }
+
+    LaunchedEffect(state.downloadedCloudFileToOpen) {
+        state.downloadedCloudFileToOpen?.let { file ->
+            onAction(AppAction.ClearDownloadedCloudFileToOpen)
+            if (file.name.lowercase().endsWith(".zip") || file.name.lowercase().endsWith(".rar") || file.name.lowercase().endsWith(".tar") || file.name.lowercase().endsWith(".gz") || file.name.lowercase().endsWith(".bz2") || file.name.lowercase().endsWith(".xz")) {
+                showArchiveOptionsFor = file
+            } else {
+                handleFileOpen(file, context, state, focusManager, onAction)
+            }
+        }
+    }
     
     LaunchedEffect(state.isPasteComplete) {
         if (state.isPasteComplete) {
@@ -1766,9 +1808,9 @@ fun MainContent(
     }
 
     val launchDrivePicker = rememberDrivePickerLauncher { success, pickedIds ->
-        if (success) {
-            pickedIds?.let { onAction(AppAction.SetDrivePickedIds(it)) }
-            onAction(AppAction.SetLocation("drive"))
+        if (success && !pickedIds.isNullOrEmpty()) {
+            pickedIds.let { onAction(AppAction.SetDrivePickedIds(it)) }
+            onAction(AppAction.Reload)
         }
     }
 
@@ -1779,11 +1821,14 @@ fun MainContent(
         try {
             val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
             if (account?.email != null) {
-                onAction(AppAction.SetGoogleDriveAuthStatus(true, account.email!!))
-                launchDrivePicker()
+                val email = account.email!!
+                showNewCloudConnectionSheet = false
+                onAction(AppAction.SetGoogleDriveAuthStatus(true, email))
+                onAction(AppAction.SwitchToStorage("drive_$email", "drive:$email"))
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            showNewCloudConnectionSheet = false
             onAction(AppAction.SetErrorMessage("Google Login Failed: ${e.message}"))
         }
     }
@@ -2011,7 +2056,18 @@ fun MainContent(
                             if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(com.ripple.filemanager.AppAction.SetQuery("")) }
                             onAction(com.ripple.filemanager.AppAction.SetLocation(file.path, file.name))
                         } else if (file.name.lowercase().endsWith(".zip") || file.name.lowercase().endsWith(".rar") || file.name.lowercase().endsWith(".tar") || file.name.lowercase().endsWith(".gz") || file.name.lowercase().endsWith(".bz2") || file.name.lowercase().endsWith(".xz")) {
-                            showArchiveOptionsFor = file
+                            if (isCloudPath(file.path)) {
+                                val cloudCacheDir = java.io.File(context.cacheDir, "cloud_cache")
+                                val safeName = file.name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                                val localCached = java.io.File(cloudCacheDir, "${file.id.toLong() and 0xFFFFFFFFL}_$safeName")
+                                if (localCached.exists() && localCached.length() > 0L) {
+                                    showArchiveOptionsFor = file.copy(path = localCached.absolutePath)
+                                } else {
+                                    onAction(AppAction.DownloadAndOpenFile(file))
+                                }
+                            } else {
+                                showArchiveOptionsFor = file
+                            }
                         } else {
                             handleFileOpen(file, context, state, focusManager, onAction)
                         }
@@ -2287,19 +2343,20 @@ fun MainContent(
                                 onOrganiseClick = { onAction(com.ripple.filemanager.AppAction.OrganiseDownloads) },
                                 onOpenNewConnection = { showNewCloudConnectionSheet = true },
                                 onConnectGoogleDrive = {
-                                    if (state.isGoogleDriveAuthenticated) {
-                                        launchDrivePicker()
-                                    } else {
-                                        val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                            .requestEmail()
-                                            .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
-                                            .build()
-                                        val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
-                                        client.signOut().addOnCompleteListener {
-                                            googleSignInLauncher.launch(client.signInIntent)
-                                        }
+                                    val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                        .requestEmail()
+                                        .requestScopes(
+                                            com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE),
+                                            com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE)
+                                        )
+                                        .build()
+                                    val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+                                    client.signOut().addOnCompleteListener {
+                                        googleSignInLauncher.launch(client.signInIntent)
                                     }
                                 },
+                                onLaunchDrivePicker = launchDrivePicker,
+                                onResolveAuthIntent = { state.recoverableAuthIntent?.let { authRecoverLauncher.launch(it) } },
                                 onConnectMega = { onAction(com.ripple.filemanager.AppAction.SetShowMegaPopup(true)) },
                                 onConnectDropbox = { showDropboxPopup = true },
                                 onConnectNextcloud = { showNextcloudConnections = true },
@@ -2852,17 +2909,17 @@ fun MainContent(
                                 NewCloudConnectionSheet(
                                     onDismissRequest = { showNewCloudConnectionSheet = false },
                                     onConnectGoogleDrive = {
-                                        if (state.isGoogleDriveAuthenticated) {
-                                            launchDrivePicker()
-                                        } else {
-                                            val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                                .requestEmail()
-                                                .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
-                                                .build()
-                                            val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
-                                            client.signOut().addOnCompleteListener {
-                                                googleSignInLauncher.launch(client.signInIntent)
-                                            }
+                                        showNewCloudConnectionSheet = false
+                                        val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                            .requestEmail()
+                                            .requestScopes(
+                                                com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE),
+                                                com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE)
+                                            )
+                                            .build()
+                                        val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+                                        client.signOut().addOnCompleteListener {
+                                            googleSignInLauncher.launch(client.signInIntent)
                                         }
                                     },
                                     onConnectMega = { onAction(com.ripple.filemanager.AppAction.SetShowMegaPopup(true)) },

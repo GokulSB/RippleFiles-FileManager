@@ -11,7 +11,8 @@ import java.util.Locale
 class WebDavStorageProvider {
 
     private var client: WebDavClient? = null
-    private var currentConnectionId: String? = null
+    var currentConnectionId: String? = null
+        private set
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
 
     suspend fun connect(connection: WebDavConnection, password: String): Result<Unit> = withContext(Dispatchers.IO) {
@@ -101,7 +102,8 @@ class WebDavStorageProvider {
     suspend fun download(remotePath: String, localFile: File): Result<Unit> = withContext(Dispatchers.IO) {
         val davClient = client ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            davClient.download(remotePath, localFile)
+            val cleanPath = remotePath.substringAfter(":")
+            davClient.download(cleanPath, localFile)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -111,7 +113,8 @@ class WebDavStorageProvider {
     suspend fun upload(localFile: File, remotePath: String): Result<Unit> = withContext(Dispatchers.IO) {
         val davClient = client ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            davClient.upload(localFile, remotePath)
+            val cleanPath = remotePath.substringAfter(":")
+            davClient.upload(localFile, cleanPath)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -121,7 +124,8 @@ class WebDavStorageProvider {
     suspend fun delete(remotePath: String): Result<Unit> = withContext(Dispatchers.IO) {
         val davClient = client ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            davClient.delete(remotePath)
+            val cleanPath = remotePath.substringAfter(":")
+            davClient.delete(cleanPath)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -131,8 +135,8 @@ class WebDavStorageProvider {
     suspend fun createFolder(path: String, name: String): Result<Unit> = withContext(Dispatchers.IO) {
         val davClient = client ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            // FIX: actually build the target path using path + name
-            val target = if (path.endsWith("/")) "$path$name" else "$path/$name"
+            val cleanParent = path.substringAfter(":")
+            val target = if (cleanParent.endsWith("/")) "$cleanParent$name" else "$cleanParent/$name"
             davClient.createFolder(target)
             Result.success(Unit)
         } catch (e: Exception) {

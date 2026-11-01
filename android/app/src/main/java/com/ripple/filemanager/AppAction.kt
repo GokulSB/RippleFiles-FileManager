@@ -43,6 +43,8 @@ sealed class AppAction {
     // File Operations
     data class OpenFileViewer(val id: Int) : AppAction()
     data class ViewFile(val file: FileItem) : AppAction()
+    data class DownloadAndOpenFile(val file: FileItem) : AppAction()
+    object ClearDownloadedCloudFileToOpen : AppAction()
     object CloseFileViewer : AppAction()
     object ClearUnlockedFileToOpen : AppAction()
     data class CreateFolder(val name: String) : AppAction()

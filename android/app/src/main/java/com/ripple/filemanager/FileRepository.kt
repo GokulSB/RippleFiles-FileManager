@@ -383,35 +383,82 @@ class FileRepository(private val context: Context) {
 
     private val prefs = context.getSharedPreferences("sift_prefs", Context.MODE_PRIVATE)
     private var googleAccountEmail: String? = null
-    private var driveService: Drive? = null
+    private val driveServices = java.util.concurrent.ConcurrentHashMap<String, Drive>()
     
     val currentGoogleAccountEmail: String?
-        get() = prefs.getString("google_drive_email", null)
+        get() = googleAccountEmail ?: prefs.getString("google_drive_email", null)
+
+    fun getGoogleAccounts(): List<String> {
+        val set = prefs.getStringSet("google_drive_accounts", null)
+        if (!set.isNullOrEmpty()) {
+            return set.toList()
+        }
+        val single = prefs.getString("google_drive_email", null)
+        return if (single != null) listOf(single) else emptyList()
+    }
+
+    fun setActiveGoogleAccount(email: String) {
+        googleAccountEmail = email
+        prefs.edit().putString("google_drive_email", email).apply()
+    }
+
+    fun getDriveService(email: String? = null): Drive? {
+        val targetEmail = email ?: currentGoogleAccountEmail ?: getGoogleAccounts().firstOrNull() ?: return null
+        return driveServices.getOrPut(targetEmail) {
+            val credential = GoogleAccountCredential.usingOAuth2(
+                context, listOf(DriveScopes.DRIVE_FILE, DriveScopes.DRIVE)
+            )
+            credential.selectedAccount = Account(targetEmail, "com.google")
+            Drive.Builder(
+                NetHttpTransport(),
+                GsonFactory.getDefaultInstance(),
+                credential
+            ).setApplicationName("Ripple Files").build()
+        }
+    }
+
+    val driveService: Drive?
+        get() = getDriveService()
 
     init {
-        val email = prefs.getString("google_drive_email", null)
-        if (email != null) {
-            setGoogleAccount(email)
+        val accounts = getGoogleAccounts()
+        for (acc in accounts) {
+            try {
+                getDriveService(acc)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
     fun setGoogleAccount(email: String?) {
         googleAccountEmail = email
+        val currentSet = getGoogleAccounts().toMutableSet()
         if (email != null) {
-            val credential = GoogleAccountCredential.usingOAuth2(
-                context, listOf(DriveScopes.DRIVE_FILE)
-            )
-            credential.selectedAccount = Account(email, "com.google")
-            driveService = Drive.Builder(
-                NetHttpTransport(),
-                GsonFactory.getDefaultInstance(),
-                credential
-            ).setApplicationName("Sift").build()
-            prefs.edit().putString("google_drive_email", email).apply()
+            currentSet.add(email)
+            prefs.edit()
+                .putStringSet("google_drive_accounts", currentSet)
+                .putString("google_drive_email", email)
+                .apply()
+            getDriveService(email)
         } else {
-            driveService = null
             prefs.edit().remove("google_drive_email").apply()
         }
+    }
+
+    fun removeGoogleAccount(email: String) {
+        val currentSet = getGoogleAccounts().toMutableSet()
+        currentSet.remove(email)
+        driveServices.remove(email)
+        val nextEmail = currentSet.firstOrNull()
+        googleAccountEmail = nextEmail
+        val editor = prefs.edit().putStringSet("google_drive_accounts", currentSet)
+        if (nextEmail != null) {
+            editor.putString("google_drive_email", nextEmail)
+        } else {
+            editor.remove("google_drive_email")
+        }
+        editor.apply()
     }
 
     fun getPinnedFiles(): Set<String> {
@@ -476,18 +523,19 @@ class FileRepository(private val context: Context) {
 
     suspend fun createFolder(parentPath: String, name: String): Boolean = withContext(Dispatchers.IO) {
         if (parentPath == "recent" || parentPath == "pinned") return@withContext false
-        if (parentPath.startsWith("drive_id:") || parentPath == "drive") {
-            if (driveService == null) return@withContext false
+        if (parentPath.startsWith("drive_id:") || parentPath == "drive" || parentPath.startsWith("drive:")) {
+            val email = if (parentPath.startsWith("drive:")) parentPath.removePrefix("drive:").substringBefore("/") else currentGoogleAccountEmail
+            val service = getDriveService(email) ?: return@withContext false
             return@withContext try {
                 val folder = com.google.api.services.drive.model.File().apply {
                     this.name = name
                     this.mimeType = "application/vnd.google-apps.folder"
-                    if (parentPath != "drive") {
+                    if (parentPath.startsWith("drive_id:")) {
                         val parentId = parentPath.removePrefix("drive_id:")
                         this.parents = listOf(parentId)
                     }
                 }
-                driveService!!.files().create(folder).execute()
+                service.files().create(folder).setSupportsAllDrives(true).execute()
                 true
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -514,17 +562,18 @@ class FileRepository(private val context: Context) {
 
     suspend fun createFile(parentPath: String, name: String): Boolean = withContext(Dispatchers.IO) {
         if (parentPath == "recent" || parentPath == "pinned") return@withContext false
-        if (parentPath.startsWith("drive_id:") || parentPath == "drive") {
-            if (driveService == null) return@withContext false
+        if (parentPath.startsWith("drive_id:") || parentPath == "drive" || parentPath.startsWith("drive:")) {
+            val email = if (parentPath.startsWith("drive:")) parentPath.removePrefix("drive:").substringBefore("/") else currentGoogleAccountEmail
+            val service = getDriveService(email) ?: return@withContext false
             return@withContext try {
                 val file = com.google.api.services.drive.model.File().apply {
                     this.name = name
-                    if (parentPath != "drive") {
+                    if (parentPath.startsWith("drive_id:")) {
                         val parentId = parentPath.removePrefix("drive_id:")
                         this.parents = listOf(parentId)
                     }
                 }
-                driveService!!.files().create(file).execute()
+                service.files().create(file).setSupportsAllDrives(true).execute()
                 true
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -551,9 +600,11 @@ class FileRepository(private val context: Context) {
         val pinned = getPinnedFiles()
         val locked = getLockedFiles()
         
-        if (location == "drive" || location.startsWith("drive_id:")) {
-            if (driveService != null) {
-                return@withContext fetchDriveFiles(pinned, location)
+        if (location == "drive" || location.startsWith("drive:") || location.startsWith("drive_id:")) {
+            val email = if (location.startsWith("drive:")) location.removePrefix("drive:").substringBefore("/") else currentGoogleAccountEmail
+            val service = getDriveService(email)
+            if (service != null) {
+                return@withContext fetchDriveFiles(pinned, location, service)
             } else {
                 return@withContext emptyList()
             }
@@ -1253,24 +1304,62 @@ class FileRepository(private val context: Context) {
     }
     var currentDrivePickedIds: Set<String>? = null
 
-    private suspend fun fetchDriveFiles(pinned: Set<String>, location: String): List<FileItem> = withContext(Dispatchers.IO) {
+    private suspend fun fetchDriveFiles(pinned: Set<String>, location: String, targetService: Drive? = null): List<FileItem> = withContext(Dispatchers.IO) {
         val locked = getLockedFiles()
-        val query = if (location == "drive") {
-            "trashed = false"
+        val query = if (location == "drive" || location.startsWith("drive:")) {
+            "trashed = false and 'root' in parents"
         } else {
             val folderId = location.removePrefix("drive_id:")
             "trashed = false and '$folderId' in parents"
         }
         
-        val result = driveService!!.files().list()
-            .setSpaces("drive")
-            .setQ(query)
-            .setFields("nextPageToken, files(id, name, mimeType, size, modifiedTime, owners, thumbnailLink)")
-            .execute()
-            var driveFiles = result.files ?: emptyList()
-            if (location == "drive" && currentDrivePickedIds != null) {
-                driveFiles = driveFiles.filter { it.id in currentDrivePickedIds!! }
+        val service = targetService ?: driveService ?: return@withContext emptyList()
+        var driveFiles = try {
+            val result = service.files().list()
+                .setSpaces("drive")
+                .setQ(query)
+                .setSupportsAllDrives(true)
+                .setIncludeItemsFromAllDrives(true)
+                .setFields("nextPageToken, files(id, name, mimeType, size, modifiedTime, owners, thumbnailLink)")
+                .execute()
+            result.files ?: emptyList()
+        } catch (e: Exception) {
+            if (location == "drive" || location.startsWith("drive:")) {
+                try {
+                    val fallback = service.files().list()
+                        .setSpaces("drive")
+                        .setQ("trashed = false")
+                        .setSupportsAllDrives(true)
+                        .setIncludeItemsFromAllDrives(true)
+                        .setFields("nextPageToken, files(id, name, mimeType, size, modifiedTime, owners, thumbnailLink)")
+                        .execute()
+                    fallback.files ?: emptyList()
+                } catch (fallbackEx: Exception) {
+                    throw fallbackEx
+                }
+            } else {
+                throw e
             }
+        }
+
+        if (driveFiles.isEmpty() && (location == "drive" || location.startsWith("drive:"))) {
+            try {
+                val fallback = service.files().list()
+                    .setSpaces("drive")
+                    .setQ("trashed = false")
+                    .setSupportsAllDrives(true)
+                    .setIncludeItemsFromAllDrives(true)
+                    .setFields("nextPageToken, files(id, name, mimeType, size, modifiedTime, owners, thumbnailLink)")
+                    .execute()
+                driveFiles = fallback.files ?: emptyList()
+            } catch (e: Exception) {
+                // Ignore fallback error
+            }
+        }
+
+        if ((location == "drive" || location.startsWith("drive:")) && !currentDrivePickedIds.isNullOrEmpty()) {
+            driveFiles = driveFiles.filter { it.id in currentDrivePickedIds!! }
+        }
             val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
             
             val items = mutableListOf<FileItem>()
@@ -1358,21 +1447,35 @@ class FileRepository(private val context: Context) {
     // Added for FileSource/dual-pane support: pulls the download/upload
     // logic that already existed inside copyFiles() into standalone,
     // reusable methods so DriveFileSource can call them directly.
-    suspend fun downloadDriveFileToLocal(fileId: String, destination: File): Result<File> = withContext(Dispatchers.IO) {
-        if (driveService == null) return@withContext Result.failure(IllegalStateException("Drive not connected"))
+    suspend fun downloadDriveFileToLocal(fileId: String, destination: File, email: String? = null): Result<File> = withContext(Dispatchers.IO) {
+        val service = getDriveService(email) ?: return@withContext Result.failure(IllegalStateException("Drive not connected"))
         try {
-            val driveFile = driveService!!.files().get(fileId)
+            val driveFile = service.files().get(fileId)
                 .setSupportsAllDrives(true)
                 .setFields("name, size, mimeType")
                 .execute()
             val isGoogleDoc = driveFile.mimeType?.startsWith("application/vnd.google-apps.") == true
-            val size = driveFile.size ?: 0L
+            val mimeType = driveFile.mimeType ?: ""
 
-            if (size == 0L || isGoogleDoc) {
-                destination.createNewFile()
+            if (mimeType == "application/vnd.google-apps.folder") {
+                return@withContext Result.failure(IllegalStateException("Cannot download folder as file"))
+            }
+
+            if (destination.exists() && destination.length() == 0L) {
+                destination.delete()
+            }
+
+            if (isGoogleDoc) {
+                val exportMimeType = when (driveFile.mimeType) {
+                    "application/vnd.google-apps.drawing" -> "image/png"
+                    else -> "application/pdf"
+                }
+                java.io.FileOutputStream(destination).use { out ->
+                    service.files().export(fileId, exportMimeType).executeMediaAndDownloadTo(out)
+                }
             } else {
                 java.io.FileOutputStream(destination).use { out ->
-                    driveService!!.files().get(fileId).setSupportsAllDrives(true).executeMediaAndDownloadTo(out)
+                    service.files().get(fileId).setSupportsAllDrives(true).executeMediaAndDownloadTo(out)
                 }
             }
             Result.success(destination)
@@ -1381,25 +1484,25 @@ class FileRepository(private val context: Context) {
         }
     }
 
-    suspend fun uploadLocalFileToDrive(localFile: File, destParentLocation: String): Result<Unit> = withContext(Dispatchers.IO) {
-        if (driveService == null) return@withContext Result.failure(IllegalStateException("Drive not connected"))
+    suspend fun uploadLocalFileToDrive(localFile: File, destParentLocation: String, email: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
+        val service = getDriveService(email) ?: return@withContext Result.failure(IllegalStateException("Drive not connected"))
         try {
-            val destParentId = if (destParentLocation == "drive") "root" else destParentLocation.removePrefix("drive_id:")
+            val destParentId = if (destParentLocation == "drive" || destParentLocation.startsWith("drive:")) "root" else destParentLocation.removePrefix("drive_id:")
             val fileContent = com.google.api.client.http.FileContent("application/octet-stream", localFile)
             val driveFile = com.google.api.services.drive.model.File()
             driveFile.name = localFile.name
             driveFile.parents = listOf(destParentId)
-            driveService!!.files().create(driveFile, fileContent).execute()
+            service.files().create(driveFile, fileContent).setSupportsAllDrives(true).execute()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun getDriveStorageQuota(): Pair<Long, Long>? = withContext(Dispatchers.IO) {
-        if (driveService == null) return@withContext null
+    suspend fun getDriveStorageQuota(email: String? = null): Pair<Long, Long>? = withContext(Dispatchers.IO) {
+        val service = getDriveService(email) ?: return@withContext null
         try {
-            val about = driveService!!.about().get().setFields("storageQuota").execute()
+            val about = service.about().get().setFields("storageQuota").execute()
             val quota = about.storageQuota
             val limit = quota.limit ?: 0L
             val usage = quota.usage ?: 0L
@@ -1410,28 +1513,56 @@ class FileRepository(private val context: Context) {
         }
     }
 
-    suspend fun downloadDriveFile(fileId: String, fileName: String): File? = withContext(Dispatchers.IO) {
-        if (driveService == null) return@withContext null
+    suspend fun downloadDriveFile(fileId: String, fileName: String, email: String? = null): File? = withContext(Dispatchers.IO) {
+        val service = getDriveService(email) ?: return@withContext null
         try {
-            val cacheDir = File(context.cacheDir, "drive_cache")
+            val cacheDir = File(context.cacheDir, "cloud_cache")
             if (!cacheDir.exists()) {
                 cacheDir.mkdirs()
             }
             val outputFile = File(cacheDir, fileName)
+            if (outputFile.exists() && outputFile.length() == 0L) {
+                outputFile.delete()
+            }
             
-            // First check if the file is 0 bytes or a google docs file (which has no media)
-            val driveFile = driveService!!.files().get(fileId).setFields("size, mimeType").execute()
-            val size = driveFile.size ?: 0L
-            
-            if (size == 0L || driveFile.mimeType?.startsWith("application/vnd.google-apps.") == true) {
-                // For empty files or google native docs without exports, just create an empty local file
-                outputFile.createNewFile()
-                return@withContext outputFile
+            // First check if the file is a google docs file (which has no direct media stream)
+            val driveFile = service.files().get(fileId)
+                .setSupportsAllDrives(true)
+                .setFields("id, name, size, mimeType")
+                .execute()
+            val mimeType = driveFile.mimeType ?: ""
+
+            if (mimeType.startsWith("application/vnd.google-apps.")) {
+                if (mimeType == "application/vnd.google-apps.folder") {
+                    return@withContext null // Never download a folder as a file
+                }
+                val exportMimeType = when (mimeType) {
+                    "application/vnd.google-apps.spreadsheet" -> "application/pdf"
+                    "application/vnd.google-apps.presentation" -> "application/pdf"
+                    "application/vnd.google-apps.drawing" -> "image/png"
+                    else -> "application/pdf"
+                }
+                val exportFile = if (outputFile.name.endsWith(".pdf", ignoreCase = true) || (exportMimeType == "image/png" && outputFile.name.endsWith(".png", ignoreCase = true))) {
+                    outputFile
+                } else {
+                    val base = outputFile.nameWithoutExtension
+                    val targetExt = if (exportMimeType == "image/png") ".png" else ".pdf"
+                    File(cacheDir, "$base$targetExt")
+                }
+                if (exportFile.exists() && exportFile.length() == 0L) {
+                    exportFile.delete()
+                }
+                java.io.FileOutputStream(exportFile).use { out ->
+                    service.files().export(fileId, exportMimeType).executeMediaAndDownloadTo(out)
+                }
+                return@withContext exportFile
             }
 
-            val outputStream = java.io.FileOutputStream(outputFile)
-            driveService!!.files().get(fileId).executeMediaAndDownloadTo(outputStream)
-            outputStream.close()
+            java.io.FileOutputStream(outputFile).use { out ->
+                service.files().get(fileId)
+                    .setSupportsAllDrives(true)
+                    .executeMediaAndDownloadTo(out)
+            }
             return@withContext outputFile
         } catch (e: Exception) {
             e.printStackTrace()

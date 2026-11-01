@@ -26,7 +26,8 @@ class SftpStorageProvider {
 
     private var ssh: SSHClient? = null
     private var sftp: SFTPClient? = null
-    private var currentConnectionId: String? = null
+    var currentConnectionId: String? = null
+        private set
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
 
     data class ConnectResult(val observedFingerprint: String)
@@ -163,7 +164,8 @@ class SftpStorageProvider {
     suspend fun download(remotePath: String, localFile: File): Result<Unit> = withContext(Dispatchers.IO) {
         val client = sftp ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            client.get(remotePath, localFile.absolutePath)
+            val cleanPath = remotePath.substringAfter(":")
+            client.get(cleanPath, localFile.absolutePath)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -173,7 +175,8 @@ class SftpStorageProvider {
     suspend fun upload(localFile: File, remotePath: String): Result<Unit> = withContext(Dispatchers.IO) {
         val client = sftp ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            client.put(localFile.absolutePath, remotePath)
+            val cleanPath = remotePath.substringAfter(":")
+            client.put(localFile.absolutePath, cleanPath)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -183,7 +186,8 @@ class SftpStorageProvider {
     suspend fun delete(remotePath: String, isDirectory: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
         val client = sftp ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            if (isDirectory) client.rmdir(remotePath) else client.rm(remotePath)
+            val cleanPath = remotePath.substringAfter(":")
+            if (isDirectory) client.rmdir(cleanPath) else client.rm(cleanPath)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -193,7 +197,8 @@ class SftpStorageProvider {
     suspend fun createFolder(path: String, name: String): Result<Unit> = withContext(Dispatchers.IO) {
         val client = sftp ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            val target = if (path.endsWith("/")) "$path$name" else "$path/$name"
+            val cleanParent = path.substringAfter(":")
+            val target = if (cleanParent.endsWith("/")) "$cleanParent$name" else "$cleanParent/$name"
             client.mkdir(target)
             Result.success(Unit)
         } catch (e: Exception) {

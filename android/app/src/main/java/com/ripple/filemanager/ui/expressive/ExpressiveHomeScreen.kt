@@ -241,13 +241,23 @@ fun ExpressiveHomeScreen(
 
     // Storage Switcher Bottom Sheet
     if (showStorageSheet) {
-        val currentStId = com.ripple.filemanager.getStorageIdForLocation(state.location, state.sdCardPath)
+        val currentStId = com.ripple.filemanager.getStorageIdForLocation(
+            state.location,
+            state.sdCardPath,
+            state.googleDriveAccountEmail,
+            state.megaAccountEmail
+        )
         StorageSwitcherBottomSheet(
             state = state,
             currentStorageId = currentStId,
             onDismissRequest = { showStorageSheet = false },
             onSelectStorage = { location ->
-                val stId = com.ripple.filemanager.getStorageIdForLocation(location, state.sdCardPath)
+                val stId = com.ripple.filemanager.getStorageIdForLocation(
+                    location,
+                    state.sdCardPath,
+                    state.googleDriveAccountEmail,
+                    state.megaAccountEmail
+                )
                 onAction(AppAction.SwitchToStorage(stId, location))
                 showStorageSheet = false
             },
@@ -257,11 +267,13 @@ fun ExpressiveHomeScreen(
             },
             onLogoutStorage = { storage ->
                 when {
-                    storage.id == "drive" -> {
-                        onAction(AppAction.SetGoogleDriveAuthStatus(false, null))
+                    storage.id == "drive" || storage.id.startsWith("drive_") -> {
+                        val email = if (storage.id.startsWith("drive_")) storage.id.removePrefix("drive_") else state.googleDriveAccountEmail
+                        onAction(AppAction.SetGoogleDriveAuthStatus(false, email))
                     }
-                    storage.id == "mega" -> {
-                        onAction(AppAction.SetMegaAuthStatus(false, null, null))
+                    storage.id == "mega" || storage.id.startsWith("mega_") -> {
+                        val email = if (storage.id.startsWith("mega_")) storage.id.removePrefix("mega_") else state.megaAccountEmail
+                        onAction(AppAction.SetMegaAuthStatus(false, email, null))
                     }
                     storage.id == "dropbox" -> {
                         onAction(AppAction.SetDropboxAuthStatus(false, null))
@@ -384,7 +396,33 @@ fun getConnectedStorages(state: AppState): List<ConnectedStorageItem> {
     }
 
     // 3. Google Drive (if authenticated)
-    if (state.isGoogleDriveAuthenticated) {
+    if (state.googleDriveAccounts.isNotEmpty()) {
+        state.googleDriveAccounts.forEach { email ->
+            val driveTotal = if (state.driveStorageTotalBytes > 0L) {
+                state.driveStorageTotalBytes.toFloat() / (1024f * 1024f * 1024f)
+            } else {
+                15f
+            }
+            val driveFree = if (state.driveStorageTotalBytes > 0L) {
+                state.driveStorageFreeBytes.toFloat() / (1024f * 1024f * 1024f)
+            } else {
+                15f
+            }
+            items.add(
+                ConnectedStorageItem(
+                    id = "drive_$email",
+                    name = "Google Drive",
+                    detail = email,
+                    totalGb = driveTotal,
+                    freeGb = driveFree,
+                    location = "drive:$email",
+                    icon = Icons.Outlined.Cloud,
+                    category = "docs",
+                    gaugeColor = ExpressiveTokens.PastelSky
+                )
+            )
+        }
+    } else if (state.isGoogleDriveAuthenticated) {
         val driveTotal = if (state.driveStorageTotalBytes > 0L) {
             state.driveStorageTotalBytes.toFloat() / (1024f * 1024f * 1024f)
         } else {
@@ -411,7 +449,23 @@ fun getConnectedStorages(state: AppState): List<ConnectedStorageItem> {
     }
 
     // 4. Mega (if authenticated)
-    if (state.isMegaAuthenticated) {
+    if (state.megaAccounts.isNotEmpty()) {
+        state.megaAccounts.forEach { acc ->
+            items.add(
+                ConnectedStorageItem(
+                    id = "mega_${acc.email}",
+                    name = "Mega",
+                    detail = acc.email,
+                    totalGb = 20f,
+                    freeGb = 20f,
+                    location = "mega:${acc.email}",
+                    icon = Icons.Outlined.Cloud,
+                    category = "archives",
+                    gaugeColor = ExpressiveTokens.PastelRose
+                )
+            )
+        }
+    } else if (state.isMegaAuthenticated) {
         items.add(
             ConnectedStorageItem(
                 id = "mega",
@@ -579,7 +633,12 @@ fun ExpressiveStorageCard(
 
                     InnerCard(
                         modifier = cardModifier.clickable {
-                            val stId = com.ripple.filemanager.getStorageIdForLocation(storage.location, state.sdCardPath)
+                            val stId = com.ripple.filemanager.getStorageIdForLocation(
+                                storage.location,
+                                state.sdCardPath,
+                                state.googleDriveAccountEmail,
+                                state.megaAccountEmail
+                            )
                             onAction(AppAction.SwitchToStorage(stId, storage.location))
                         }
                     ) {

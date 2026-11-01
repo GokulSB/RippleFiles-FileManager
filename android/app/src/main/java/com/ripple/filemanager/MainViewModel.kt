@@ -32,6 +32,8 @@ import com.ripple.filemanager.data.share.IncomingSharePrompt
 import com.ripple.filemanager.data.share.SharedIncomingFile
 import android.media.MediaScannerConnection
 import com.ripple.filemanager.data.core.ConflictResolution
+import java.io.File
+import kotlinx.collections.immutable.toPersistentList
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
@@ -149,18 +151,52 @@ data class ReceivedFilesPrompt(
 )
 
 @androidx.compose.runtime.Immutable
+data class MegaAccount(
+    val email: String,
+    val session: String
+)
+
+@androidx.compose.runtime.Immutable
 data class StorageNavState(
     val lastLocation: String,
     val sortMode: SortMode = SortMode.ALPHABETICAL,
     val filter: String = "all"
 )
 
-fun getStorageIdForLocation(location: String, sdCardPath: String? = null): String {
+fun isCloudPath(path: String): Boolean {
+    return path.startsWith("drive_id:") ||
+           path.startsWith("mega_id:") ||
+           path.startsWith("smb_") ||
+           path.startsWith("ftp_") ||
+           path.startsWith("sftp_") ||
+           path.startsWith("webdav_") ||
+           path.startsWith("nextcloud_") ||
+           path.startsWith("dropbox_id:")
+}
+
+fun getStorageIdForLocation(
+    location: String,
+    sdCardPath: String? = null,
+    activeDriveEmail: String? = null,
+    activeMegaEmail: String? = null
+): String {
     return when {
         location == "home" || location == "send" || location == "cleaner" || location == "trash" || location == "settings" || location == "about" -> "internal"
         com.ripple.filemanager.data.StorageUtils.isSdCardLocation(location, sdCardPath) -> "sd"
-        location.startsWith("drive") -> "drive"
-        location.startsWith("mega") -> "mega"
+        location.startsWith("drive:") -> {
+            val email = location.removePrefix("drive:").substringBefore("/").ifBlank { activeDriveEmail }
+            if (!email.isNullOrBlank()) "drive_$email" else "drive"
+        }
+        location == "drive" || location.startsWith("drive_id:") -> {
+            if (!activeDriveEmail.isNullOrBlank()) "drive_$activeDriveEmail" else "drive"
+        }
+        location.startsWith("mega:") -> {
+            val email = location.removePrefix("mega:").substringBefore("/").ifBlank { activeMegaEmail }
+            if (!email.isNullOrBlank()) "mega_$email" else "mega"
+        }
+        location == "mega" || location.startsWith("mega_id:") -> {
+            if (!activeMegaEmail.isNullOrBlank()) "mega_$activeMegaEmail" else "mega"
+        }
         location.startsWith("dropbox") -> "dropbox"
         location.startsWith("smb_") -> location.substringBefore(":")
         location.startsWith("ftp_") -> location.substringBefore(":")
@@ -215,8 +251,10 @@ data class AppState(
     val pendingHideConflict: PendingHideConflict? = null,
     val isGoogleDriveAuthenticated: Boolean = false,
     val googleDriveAccountEmail: String? = null,
+    val googleDriveAccounts: ImmutableList<String> = persistentListOf(),
     val isMegaAuthenticated: Boolean = false,
     val megaAccountEmail: String? = null,
+    val megaAccounts: ImmutableList<MegaAccount> = persistentListOf(),
     val megaLoginError: String? = null,
     val showMegaPopup: Boolean = false,
     val isDropboxAuthenticated: Boolean = false,
@@ -227,6 +265,7 @@ data class AppState(
     val folderCache: kotlinx.collections.immutable.PersistentMap<String, ImmutableList<FileItem>> = kotlinx.collections.immutable.persistentMapOf(),
     val isLoading: Boolean = false,
     val viewingFile: FileItem? = null,
+    val downloadedCloudFileToOpen: FileItem? = null,
     val storageFreeGb: Float = 0f,
     val storageTotalGb: Float = 0f,
     val sdCardStorageFreeGb: Float = 0f,
@@ -357,7 +396,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE)
 
-    private val megaClient by lazy { nz.mega.sdk.MegaClient(application) }
+    private val megaClients = java.util.concurrent.ConcurrentHashMap<String, nz.mega.sdk.MegaClient>()
+    fun getMegaClient(email: String? = null): nz.mega.sdk.MegaClient {
+        val targetEmail = email 
+            ?: _state.value.megaAccountEmail 
+            ?: _state.value.megaAccounts.firstOrNull()?.email 
+            ?: "default"
+        return megaClients.getOrPut(targetEmail) { nz.mega.sdk.MegaClient(getApplication(), targetEmail) }
+    }
+    private val megaClient get() = getMegaClient()
+
+    private fun loadSavedMegaAccounts(): List<MegaAccount> {
+        val json = prefs.getString("mega_accounts", null)
+        if (!json.isNullOrBlank()) {
+            try {
+                val type = object : com.google.gson.reflect.TypeToken<List<MegaAccount>>() {}.type
+                val list: List<MegaAccount>? = com.google.gson.Gson().fromJson(json, type)
+                if (!list.isNullOrEmpty()) return list
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        val legacySession = prefs.getString("mega_session", null)
+        val legacyEmail = prefs.getString("mega_email", null)
+        if (legacySession != null && legacyEmail != null) {
+            val list = listOf(MegaAccount(legacyEmail, legacySession))
+            saveMegaAccounts(list)
+            return list
+        }
+        return emptyList()
+    }
+
+    private fun saveMegaAccounts(accounts: List<MegaAccount>) {
+        val json = com.google.gson.Gson().toJson(accounts)
+        prefs.edit().putString("mega_accounts", json).apply()
+        if (accounts.isEmpty()) {
+            prefs.edit().remove("mega_session").remove("mega_email").apply()
+        } else {
+            prefs.edit().putString("mega_session", accounts[0].session).putString("mega_email", accounts[0].email).apply()
+        }
+    }
 
     private val smbStore by lazy { com.ripple.filemanager.data.smb.SmbStore(application) }
     private val smbProvider = com.ripple.filemanager.data.smb.SmbStorageProvider()
@@ -525,23 +603,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val hasShizuku = repository.hasShizuku()
             _state.update { it.copy(hasShizuku = hasShizuku) }
-            val email = repository.currentGoogleAccountEmail
-            if (email != null) {
-                _state.update { it.copy(isGoogleDriveAuthenticated = true, googleDriveAccountEmail = email) }
+            val gDriveAccounts = repository.getGoogleAccounts()
+            val activeEmail = repository.currentGoogleAccountEmail ?: gDriveAccounts.firstOrNull()
+            if (gDriveAccounts.isNotEmpty()) {
+                _state.update {
+                    it.copy(
+                        isGoogleDriveAuthenticated = true,
+                        googleDriveAccountEmail = activeEmail,
+                        googleDriveAccounts = gDriveAccounts.toPersistentList()
+                    )
+                }
                 fetchDriveStorageQuota()
             }
             
-            val megaSession = prefs.getString("mega_session", null)
-            val megaEmail = prefs.getString("mega_email", null)
-            if (megaSession != null && megaEmail != null) {
-                try {
-                    val success = megaClient.fastLogin(megaSession)
-                    if (success) {
-                        megaClient.fetchNodes()
-                        _state.update { it.copy(isMegaAuthenticated = true, megaAccountEmail = megaEmail) }
+            val savedMega = loadSavedMegaAccounts()
+            if (savedMega.isNotEmpty()) {
+                _state.update {
+                    it.copy(
+                        isMegaAuthenticated = true,
+                        megaAccountEmail = savedMega.firstOrNull()?.email,
+                        megaAccounts = savedMega.toPersistentList()
+                    )
+                }
+                for (acc in savedMega) {
+                    try {
+                        val client = getMegaClient(acc.email)
+                        val success = client.fastLogin(acc.session)
+                        if (success) {
+                            client.fetchNodes()
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
-                } catch (e: Exception) {
-                    // silently fail session login
                 }
             }
             
@@ -709,10 +802,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // duplicating this prefix-checking chain. Behavior is unchanged from
     // before — this is a pure reorganization, not new logic.
     private suspend fun fetchFilesForLocation(location: String): List<FileItem> {
-        return if (location == "mega") {
-            megaClient.getChildren(null)
-        } else if (location.startsWith("mega_id:")) {
-            megaClient.getChildren(location.removePrefix("mega_id:"))
+        return if (location == "mega" || location.startsWith("mega:") || location.startsWith("mega_id:")) {
+            val email = if (location.startsWith("mega:")) location.removePrefix("mega:").substringBefore("/") else _state.value.megaAccountEmail
+            val client = getMegaClient(email)
+            if (location.startsWith("mega_id:")) {
+                client.getChildren(location.removePrefix("mega_id:"))
+            } else {
+                client.getChildren(null)
+            }
+        } else if (location == "drive" || location.startsWith("drive:") || location.startsWith("drive_id:")) {
+            val email = if (location.startsWith("drive:")) location.removePrefix("drive:").substringBefore("/") else _state.value.googleDriveAccountEmail
+            if (email != null) {
+                repository.setActiveGoogleAccount(email)
+            }
+            repository.getFiles(location)
         } else if (location.startsWith("smb_")) {
             val connectionId = location.substringAfter("smb_").substringBefore(":")
             var res = smbProvider.listFiles(location, connectionId)
@@ -905,10 +1008,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return when {
             location == "home" || location.startsWith("/") ->
                 com.ripple.filemanager.data.local.LocalFileSource(repository)
-            location == "drive" || location.startsWith("drive_id:") ->
+            location == "drive" || location.startsWith("drive:") || location.startsWith("drive_id:") ->
                 com.ripple.filemanager.data.drive.DriveFileSource(repository)
-            location == "mega" || location.startsWith("mega_id:") ->
-                nz.mega.sdk.MegaFileSource(megaClient)
+            location == "mega" || location.startsWith("mega:") || location.startsWith("mega_id:") -> {
+                val email = if (location.startsWith("mega:")) location.removePrefix("mega:").substringBefore("/") else _state.value.megaAccountEmail
+                nz.mega.sdk.MegaFileSource(getMegaClient(email))
+            }
             location.startsWith("smb_") -> {
                 val connectionId = location.substringAfter("smb_").substringBefore(":")
                 com.ripple.filemanager.data.smb.SmbFileSource(smbProvider, connectionId)
@@ -1001,8 +1106,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     // Path-based providers (SMB/FTP/SFTP/WebDAV/Local) already
                     // overwrite in place on upload, so this is a no-op for them.
                     if (conflictResolution is com.ripple.filemanager.data.core.ConflictResolution.Overwrite) {
-                        val isPathless = destinationFolderLocation == "drive" || destinationFolderLocation.startsWith("drive_id:") ||
-                            destinationFolderLocation == "mega" || destinationFolderLocation.startsWith("mega_id:")
+                        val isPathless = destinationFolderLocation == "drive" || destinationFolderLocation.startsWith("drive:") || destinationFolderLocation.startsWith("drive_id:") ||
+                            destinationFolderLocation == "mega" || destinationFolderLocation.startsWith("mega:") || destinationFolderLocation.startsWith("mega_id:")
                         if (isPathless) {
                             val existingMatch = destFs.listFiles(destinationFolderLocation)
                                 .getOrNull()
@@ -1091,12 +1196,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val realSd = current.sdCardPath ?: com.ripple.filemanager.data.StorageUtils.getSdCardPath(getApplication())
         val effectiveLocation = if ((location == "sd" || location == "sd/" || location == "sd:") && realSd != null) realSd else location
         val enteringCloudSubfolder = effectiveLocation.startsWith("drive_id:") || effectiveLocation.startsWith("mega_id:") || effectiveLocation.startsWith("dropbox_id:") || effectiveLocation.startsWith("smb_") || effectiveLocation.startsWith("ftp_") || effectiveLocation.startsWith("sftp_") || effectiveLocation.startsWith("webdav_") || effectiveLocation.startsWith("nextcloud_")
-        val wasInCloud = current.location == "drive" || current.location == "mega" || current.location == "dropbox" || current.location.startsWith("drive_id:") || current.location.startsWith("mega_id:") || current.location.startsWith("dropbox_id:") || current.location.startsWith("smb_") || current.location.startsWith("ftp_") || current.location.startsWith("sftp_") || current.location.startsWith("webdav_") || current.location.startsWith("nextcloud_")
+        val wasInCloud = current.location == "drive" || current.location.startsWith("drive:") || current.location == "mega" || current.location.startsWith("mega:") || current.location == "dropbox" || current.location.startsWith("drive_id:") || current.location.startsWith("mega_id:") || current.location.startsWith("dropbox_id:") || current.location.startsWith("smb_") || current.location.startsWith("ftp_") || current.location.startsWith("sftp_") || current.location.startsWith("webdav_") || current.location.startsWith("nextcloud_")
 
         val newStack = when {
             enteringCloudSubfolder && wasInCloud ->
                 current.driveFolderStack + (current.location to (current.currentFolderName ?: "Cloud"))
-            effectiveLocation == "drive" || effectiveLocation == "mega" || effectiveLocation == "dropbox" || (effectiveLocation.startsWith("smb_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("ftp_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("sftp_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("webdav_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("nextcloud_") && effectiveLocation.endsWith(":/")) -> emptyList()
+            effectiveLocation == "drive" || effectiveLocation.startsWith("drive:") || effectiveLocation == "mega" || effectiveLocation.startsWith("mega:") || effectiveLocation == "dropbox" || (effectiveLocation.startsWith("smb_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("ftp_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("sftp_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("webdav_") && effectiveLocation.endsWith(":/")) || (effectiveLocation.startsWith("nextcloud_") && effectiveLocation.endsWith(":/")) -> emptyList()
             else -> current.driveFolderStack
         }
 
@@ -1104,7 +1209,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val resetFilter = if (effectiveLocation.startsWith("/")) "all" else current.filter
         val newBrowseLoc = if (effectiveLocation.startsWith("/") && effectiveLocation != "home") effectiveLocation else current.lastBrowseLocation
 
-        val stId = getStorageIdForLocation(effectiveLocation, current.sdCardPath ?: realSd)
+        val stId = getStorageIdForLocation(
+            effectiveLocation,
+            current.sdCardPath ?: realSd,
+            current.googleDriveAccountEmail,
+            current.megaAccountEmail
+        )
         val isNavigableStorage = effectiveLocation.startsWith("/") || effectiveLocation.startsWith("drive") || effectiveLocation.startsWith("mega") || effectiveLocation.startsWith("dropbox") || effectiveLocation.startsWith("smb_") || effectiveLocation.startsWith("ftp_") || effectiveLocation.startsWith("sftp_") || effectiveLocation.startsWith("webdav_") || effectiveLocation.startsWith("nextcloud_") || effectiveLocation == "sd"
         val updatedStorageStates = if (isNavigableStorage) {
             val existing = current.storageStates[stId] ?: StorageNavState(lastLocation = effectiveLocation, sortMode = current.sortMode, filter = current.filter)
@@ -1162,6 +1272,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun switchToStorage(storageId: String, defaultLocation: String) {
+        if (storageId.startsWith("drive_")) {
+            val email = storageId.removePrefix("drive_")
+            repository.setActiveGoogleAccount(email)
+            _state.update { it.copy(googleDriveAccountEmail = email) }
+        } else if (storageId.startsWith("mega_")) {
+            val email = storageId.removePrefix("mega_")
+            _state.update { it.copy(megaAccountEmail = email) }
+        }
         val navState = _state.value.storageStates[storageId]
         var targetLocation = navState?.lastLocation ?: defaultLocation
         if (storageId == "sd") {
@@ -1177,7 +1295,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setFilter(filter: String) {
-        val stId = getStorageIdForLocation(_state.value.location, _state.value.sdCardPath)
+        val stId = getStorageIdForLocation(
+            _state.value.location,
+            _state.value.sdCardPath,
+            _state.value.googleDriveAccountEmail,
+            _state.value.megaAccountEmail
+        )
         val existing = _state.value.storageStates[stId] ?: StorageNavState(lastLocation = _state.value.location, sortMode = _state.value.sortMode, filter = filter)
         val updatedStates = _state.value.storageStates.put(stId, existing.copy(filter = filter))
         _state.update { it.copy(filter = filter, selectedFiles = persistentSetOf(), storageStates = updatedStates) }
@@ -1243,7 +1366,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(isLoading = true, files = kotlinx.collections.immutable.persistentListOf()) }
             searchJob = viewModelScope.launch(Dispatchers.Default) {
                 val st = _state.value
-                val isLocal = !(st.location == "mega" || st.location.startsWith("mega_id:") || st.location.startsWith("smb_") || st.location.startsWith("ftp_") || st.location.startsWith("sftp_") || st.location.startsWith("webdav_") || st.location.startsWith("nextcloud_") || st.location == "drive" || st.location.startsWith("drive_id:") || st.location == "recent" || st.location == "pinned")
+                val isLocal = !(st.location == "mega" || st.location.startsWith("mega:") || st.location.startsWith("mega_id:") || st.location.startsWith("smb_") || st.location.startsWith("ftp_") || st.location.startsWith("sftp_") || st.location.startsWith("webdav_") || st.location.startsWith("nextcloud_") || st.location == "drive" || st.location.startsWith("drive:") || st.location.startsWith("drive_id:") || st.location == "recent" || st.location == "pinned")
                 
                 val results = if (isLocal) {
                     repository.searchLocalFiles(st.location, query, st.showHiddenFiles)
@@ -2133,16 +2256,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(megaLoginError = null) }
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    val success = megaClient.login(email, password)
+                    val client = getMegaClient(email)
+                    val success = client.login(email, password)
                     if (success) {
-                        val session = megaClient.dumpSession()
+                        val session = client.dumpSession()
                         if (session != null) {
-                            prefs.edit().putString("mega_session", session).putString("mega_email", email).apply()
-                        }
-                        megaClient.fetchNodes()
-                        _state.update { it.copy(isMegaAuthenticated = true, megaAccountEmail = email, megaLoginError = null, showMegaPopup = false) }
-                        if (_state.value.location == "mega") {
-                            loadFiles("mega")
+                            val newAcc = MegaAccount(email, session)
+                            val currentList = _state.value.megaAccounts.filter { it.email != email }
+                            val updatedList = currentList + newAcc
+                            saveMegaAccounts(updatedList)
+                            client.fetchNodes()
+                            _state.update {
+                                it.copy(
+                                    isMegaAuthenticated = true,
+                                    megaAccountEmail = email,
+                                    megaAccounts = updatedList.toPersistentList(),
+                                    megaLoginError = null,
+                                    showMegaPopup = false
+                                )
+                            }
+                            if (_state.value.location == "mega" || _state.value.location.startsWith("mega:")) {
+                                loadFiles("mega:$email")
+                            }
                         }
                     } else {
                         _state.update { it.copy(megaLoginError = "Invalid email or password.") }
@@ -2151,9 +2286,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _state.update { it.copy(megaLoginError = "Mega Login Failed: ${e.message}") }
                 }
             }
-        } else {
-            prefs.edit().remove("mega_session").remove("mega_email").apply()
-            _state.update { it.copy(isMegaAuthenticated = false, megaAccountEmail = null, megaLoginError = null, showMegaPopup = false) }
+        } else if (!isAuthenticated) {
+            val targetEmail = email ?: _state.value.megaAccountEmail
+            val updatedList = _state.value.megaAccounts.filter { it.email != targetEmail }
+            saveMegaAccounts(updatedList)
+            if (targetEmail != null) {
+                megaClients.remove(targetEmail)
+            }
+            _state.update {
+                it.copy(
+                    isMegaAuthenticated = updatedList.isNotEmpty(),
+                    megaAccountEmail = updatedList.firstOrNull()?.email,
+                    megaAccounts = updatedList.toPersistentList(),
+                    megaLoginError = null,
+                    showMegaPopup = false
+                )
+            }
         }
     }
 
@@ -2170,15 +2318,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateGoogleDriveAuthStatus(isAuthenticated: Boolean, email: String?) {
-        if (isAuthenticated) {
+        if (isAuthenticated && email != null) {
             repository.setGoogleAccount(email)
-        } else {
-            repository.setGoogleAccount(null)
-        }
-        setGoogleDriveAuthStatus(isAuthenticated, email)
-        
-        if (isAuthenticated) {
+            val updatedAccounts = repository.getGoogleAccounts().toPersistentList()
+            _state.update {
+                it.copy(
+                    isGoogleDriveAuthenticated = true,
+                    googleDriveAccountEmail = email,
+                    googleDriveAccounts = updatedAccounts,
+                    errorMessage = null
+                )
+            }
             fetchDriveStorageQuota()
+        } else if (!isAuthenticated) {
+            if (email != null) {
+                repository.removeGoogleAccount(email)
+            } else {
+                repository.setGoogleAccount(null)
+            }
+            val updatedAccounts = repository.getGoogleAccounts().toPersistentList()
+            val nextEmail = repository.currentGoogleAccountEmail ?: updatedAccounts.firstOrNull()
+            _state.update {
+                it.copy(
+                    isGoogleDriveAuthenticated = updatedAccounts.isNotEmpty(),
+                    googleDriveAccountEmail = nextEmail,
+                    googleDriveAccounts = updatedAccounts,
+                    errorMessage = null
+                )
+            }
+            if (updatedAccounts.isNotEmpty()) {
+                fetchDriveStorageQuota()
+            }
         }
     }
 
@@ -2223,31 +2393,125 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(showThemeSheet = show) }
     }
 
+    fun clearDownloadedCloudFileToOpen() {
+        _state.update { it.copy(downloadedCloudFileToOpen = null) }
+    }
+
+    fun downloadAndOpenFile(file: FileItem) {
+        if (file.type == "folder") {
+            setLocation(file.path, file.name)
+            return
+        }
+        if (_state.value.isDownloading) return
+        _state.update { it.copy(isDownloading = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cacheDir = File(getApplication<Application>().cacheDir, "cloud_cache")
+                if (!cacheDir.exists()) cacheDir.mkdirs()
+                val rawName = file.name
+                val safeName = rawName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                val targetFile = File(cacheDir, "${file.id.toLong() and 0xFFFFFFFFL}_$safeName")
+                if (targetFile.exists() && targetFile.length() == 0L) {
+                    targetFile.delete()
+                }
+
+                var success = false
+                var exportedDocFile: File? = null
+
+                when {
+                    file.path.startsWith("drive_id:") -> {
+                        val driveId = file.path.removePrefix("drive_id:")
+                        val downloaded = repository.downloadDriveFile(driveId, targetFile.name, _state.value.googleDriveAccountEmail)
+                        if (downloaded != null && downloaded.exists() && downloaded.length() > 0L) {
+                            success = true
+                            exportedDocFile = downloaded
+                        }
+                    }
+                    file.path.startsWith("mega_id:") -> {
+                        val handle = file.path.removePrefix("mega_id:")
+                        val client = getMegaClient(_state.value.megaAccountEmail)
+                        success = client.downloadFile(handle, targetFile.absolutePath)
+                    }
+                    file.path.startsWith("smb_") -> {
+                        val connectionId = file.path.removePrefix("smb_").substringBefore(":")
+                        if (smbProvider.currentConnectionId != connectionId) {
+                            val connection = smbStore.getConnections().find { it.id == connectionId }
+                            val password = smbStore.getPassword(connectionId)
+                            if (connection != null && password != null) {
+                                smbProvider.connect(connection, password)
+                            }
+                        }
+                        val res = smbProvider.download(file.path, targetFile)
+                        success = res.isSuccess
+                    }
+                    file.path.startsWith("ftp_") -> {
+                        val connectionId = file.path.removePrefix("ftp_").substringBefore(":")
+                        if (ftpProvider.currentConnectionId != connectionId) {
+                            val connection = ftpStore.getConnections().find { it.id == connectionId }
+                            val password = ftpStore.getPassword(connectionId)
+                            if (connection != null && password != null) {
+                                ftpProvider.connect(connection, password)
+                            }
+                        }
+                        val res = ftpProvider.download(file.path, targetFile)
+                        success = res.isSuccess
+                    }
+                    file.path.startsWith("sftp_") -> {
+                        val connectionId = file.path.removePrefix("sftp_").substringBefore(":")
+                        if (sftpProvider.currentConnectionId != connectionId) {
+                            val connection = sftpStore.getConnections().find { it.id == connectionId }
+                            val password = sftpStore.getPassword(connectionId)
+                            if (connection != null && password != null) {
+                                sftpProvider.connect(connection, password)
+                            }
+                        }
+                        val res = sftpProvider.download(file.path, targetFile)
+                        success = res.isSuccess
+                    }
+                    file.path.startsWith("webdav_") || file.path.startsWith("nextcloud_") -> {
+                        val prefix = if (file.path.startsWith("nextcloud_")) "nextcloud_" else "webdav_"
+                        val connectionId = file.path.removePrefix(prefix).substringBefore(":")
+                        if (webDavProvider.currentConnectionId != connectionId) {
+                            val connection = webDavStore.getConnections().find { it.id == connectionId }
+                            val password = webDavStore.getPassword(connectionId)
+                            if (connection != null && password != null) {
+                                webDavProvider.connect(connection, password)
+                            }
+                        }
+                        val res = webDavProvider.download(file.path, targetFile)
+                        success = res.isSuccess
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    _state.update { it.copy(isDownloading = false) }
+                    if (success) {
+                        val finalFile = exportedDocFile ?: targetFile
+                        val finalType = if (finalFile.name.endsWith(".pdf", true)) "document" else file.type
+                        val localFileItem = file.copy(
+                            path = finalFile.absolutePath,
+                            name = finalFile.name,
+                            type = finalType,
+                            sizeBytes = finalFile.length()
+                        )
+                        _state.update { it.copy(downloadedCloudFileToOpen = localFileItem) }
+                    } else {
+                        showToast("Failed to load file: ${file.name}")
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _state.update { it.copy(isDownloading = false) }
+                    showToast("Error opening cloud file: ${e.message}")
+                }
+            }
+        }
+    }
+
     fun openFileViewer(id: Int) {
         val file = _state.value.files.find { it.id == id } ?: _state.value.recentFiles.find { it.id == id }
         if (file != null) {
-            repository.logRecentAction(file.path, "Opened")
-            loadRecentFiles()
-            if (file.path.startsWith("drive_id:")) {
-                // Download and then view
-                _state.update { it.copy(isDownloading = true) }
-                viewModelScope.launch {
-                    val driveId = file.path.removePrefix("drive_id:")
-                    val localFile = repository.downloadDriveFile(driveId, file.name)
-                    if (localFile != null) {
-                        _state.update { 
-                            it.copy(
-                                isDownloading = false,
-                                viewingFile = file.copy(path = localFile.absolutePath)
-                            )
-                        }
-                    } else {
-                        _state.update { it.copy(isDownloading = false, errorMessage = "Failed to download file from Google Drive.") }
-                    }
-                }
-            } else {
-                _state.update { it.copy(viewingFile = file) }
-            }
+            viewFile(file)
         }
     }
 
@@ -2256,6 +2520,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun viewFile(file: FileItem) {
+        if (isCloudPath(file.path)) {
+            val cloudCacheDir = File(getApplication<Application>().cacheDir, "cloud_cache")
+            val safeName = file.name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val localCached = File(cloudCacheDir, "${file.id.toLong() and 0xFFFFFFFFL}_$safeName")
+            if (localCached.exists() && localCached.length() > 0L) {
+                val finalType = if (localCached.name.endsWith(".pdf", true)) "document" else file.type
+                val localFile = file.copy(path = localCached.absolutePath, type = finalType)
+                repository.logRecentAction(localFile.path, "Opened")
+                loadRecentFiles()
+                _state.update { it.copy(viewingFile = localFile) }
+                return
+            }
+            downloadAndOpenFile(file)
+            return
+        }
         repository.logRecentAction(file.path, "Opened")
         loadRecentFiles()
         _state.update { it.copy(viewingFile = file) }
@@ -2698,6 +2977,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var closePlayerJob: kotlinx.coroutines.Job? = null
     
     fun playAudio(file: FileItem) {
+        if (isCloudPath(file.path)) {
+            val cloudCacheDir = File(getApplication<Application>().cacheDir, "cloud_cache")
+            val safeName = file.name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val localCached = File(cloudCacheDir, "${file.id.toLong() and 0xFFFFFFFFL}_$safeName")
+            if (localCached.exists() && localCached.length() > 0L) {
+                playAudio(file.copy(path = localCached.absolutePath))
+                return
+            }
+            downloadAndOpenFile(file)
+            return
+        }
         if (exoPlayer == null) {
             exoPlayer = androidx.media3.exoplayer.ExoPlayer.Builder(getApplication()).build().apply {
                 addListener(object : androidx.media3.common.Player.Listener {

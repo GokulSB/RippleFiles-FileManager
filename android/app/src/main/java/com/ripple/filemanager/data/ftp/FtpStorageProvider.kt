@@ -24,7 +24,8 @@ import java.util.Locale
 class FtpStorageProvider {
 
     private var client: FTPClient? = null
-    private var currentConnectionId: String? = null
+    var currentConnectionId: String? = null
+        private set
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
 
     suspend fun connect(connection: FtpConnection, password: String): Result<Unit> = withContext(Dispatchers.IO) {
@@ -143,8 +144,9 @@ class FtpStorageProvider {
     suspend fun download(remotePath: String, localFile: File): Result<Unit> = withContext(Dispatchers.IO) {
         val ftpClient = client ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
+            val cleanPath = remotePath.substringAfter(":")
             BufferedOutputStream(FileOutputStream(localFile)).use { out ->
-                val ok = ftpClient.retrieveFile(remotePath, out)
+                val ok = ftpClient.retrieveFile(cleanPath, out)
                 if (!ok) return@withContext Result.failure(Exception("Download failed: ${ftpClient.replyString}"))
             }
             Result.success(Unit)
@@ -156,8 +158,9 @@ class FtpStorageProvider {
     suspend fun upload(localFile: File, remotePath: String): Result<Unit> = withContext(Dispatchers.IO) {
         val ftpClient = client ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
+            val cleanPath = remotePath.substringAfter(":")
             BufferedInputStream(FileInputStream(localFile)).use { input ->
-                val ok = ftpClient.storeFile(remotePath, input)
+                val ok = ftpClient.storeFile(cleanPath, input)
                 if (!ok) return@withContext Result.failure(Exception("Upload failed: ${ftpClient.replyString}"))
             }
             Result.success(Unit)
@@ -169,7 +172,8 @@ class FtpStorageProvider {
     suspend fun delete(remotePath: String, isDirectory: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
         val ftpClient = client ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            val ok = if (isDirectory) ftpClient.removeDirectory(remotePath) else ftpClient.deleteFile(remotePath)
+            val cleanPath = remotePath.substringAfter(":")
+            val ok = if (isDirectory) ftpClient.removeDirectory(cleanPath) else ftpClient.deleteFile(cleanPath)
             if (!ok) return@withContext Result.failure(Exception("Delete failed: ${ftpClient.replyString}"))
             Result.success(Unit)
         } catch (e: Exception) {
@@ -180,7 +184,8 @@ class FtpStorageProvider {
     suspend fun createFolder(path: String, name: String): Result<Unit> = withContext(Dispatchers.IO) {
         val ftpClient = client ?: return@withContext Result.failure(IllegalStateException("Not connected"))
         try {
-            val target = if (path.endsWith("/")) "$path$name" else "$path/$name"
+            val cleanParent = path.substringAfter(":")
+            val target = if (cleanParent.endsWith("/")) "$cleanParent$name" else "$cleanParent/$name"
             val ok = ftpClient.makeDirectory(target)
             if (!ok) return@withContext Result.failure(Exception("Create folder failed: ${ftpClient.replyString}"))
             Result.success(Unit)
