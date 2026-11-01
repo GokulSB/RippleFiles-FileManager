@@ -600,7 +600,10 @@ class FileRepository(private val context: Context) {
                 val mediaStoreItems = listMediaStoreFiles(resolvedLocation, dateFormatForRestricted)
                 if (!mediaStoreItems.isNullOrEmpty()) return@withContext mediaStoreItems
             }
-            rawFiles ?: return@withContext emptyList()
+            rawFiles ?: run {
+                android.util.Log.e("RippleStorage", "listFiles() returned null for '$resolvedLocation'. Storage access may not be granted.")
+                throw java.io.IOException(context.getString(R.string.storage_access_denied_or_error))
+            }
         }
 
         val items = mutableListOf<FileItem>()

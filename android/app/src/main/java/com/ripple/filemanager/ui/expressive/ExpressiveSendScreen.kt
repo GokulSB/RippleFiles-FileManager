@@ -181,7 +181,7 @@ fun ExpressiveSendScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
-        contentPadding = PaddingValues(bottom = 130.dp)
+        contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
     ) {
         item {
             ExpressiveScreenHeader(

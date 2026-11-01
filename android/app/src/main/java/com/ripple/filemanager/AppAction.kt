@@ -83,6 +83,7 @@ sealed class AppAction {
     data class ToggleHapticsOption(val key: String, val enabled: Boolean) : AppAction()
     
     // Auth & Permissions
+    object RequestStorageAccess : AppAction()
     data class SetGoogleDriveAuthStatus(val isAuthenticated: Boolean, val email: String?) : AppAction()
     data class SetDrivePickedIds(val ids: List<String>) : AppAction()
     data class SetMegaAuthStatus(val isAuthenticated: Boolean, val email: String?, val password: String? = null) : AppAction()

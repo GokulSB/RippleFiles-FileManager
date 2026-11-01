@@ -189,7 +189,7 @@ private fun ExpressiveStorageOverview(
             .fillMaxSize()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(bottom = 130.dp)
+        contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
     ) {
         // Container -> Inner Card: Storage Bar & Legend
         item {

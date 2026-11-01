@@ -208,7 +208,7 @@ fun TrashScreen(
                             LazyColumn(
                                 modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(bottom = 16.dp)
+                                contentPadding = PaddingValues(bottom = 16.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
                             ) {
                                 itemsIndexed(
                                     items = state.trashFiles,
@@ -236,7 +236,7 @@ fun TrashScreen(
                                 modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                contentPadding = PaddingValues(bottom = 16.dp)
+                                contentPadding = PaddingValues(bottom = 16.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
                             ) {
                                 itemsIndexed(
                                     items = state.trashFiles,

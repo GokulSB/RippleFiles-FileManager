@@ -2635,7 +2635,10 @@ fun MainContent(
                         onAction = onAction,
                         capturedTargetFolderName = capturedTargetFolderName,
                         onCaptureTargetFolder = { capturedTargetFolderName = it },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(bottom = 12.dp),
                         selectionModeContent = {
                             ExpressiveSelectionBar(
                                 selectedCount = state.selectedFiles.size,

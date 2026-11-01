@@ -1,6 +1,9 @@
 package com.ripple.filemanager
 
 import android.app.Application
+import android.os.Build
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -182,6 +185,7 @@ data class PendingHideConflict(
 @androidx.compose.runtime.Immutable
 data class AppState(
     val navBarState: NavBarState = NavBarState(),
+    val hasStoragePermission: Boolean = true,
     val hasShizuku: Boolean = false,
     val smbState: SmbState = SmbState(),
     val ftpState: FtpState = FtpState(),
@@ -602,6 +606,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             e.printStackTrace()
         }
 
+        val hasAccess = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                getApplication(),
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+        _state.update { it.copy(hasStoragePermission = hasAccess) }
+
         loadFiles("home")
         loadRecentFiles()
         viewModelScope.launch(Dispatchers.IO) {
@@ -658,7 +672,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateStorageAccessState(hasAccess: Boolean) {
+        _state.update { it.copy(hasStoragePermission = hasAccess) }
+    }
+
     fun reload() {
+        updateStorageStats()
         viewModelScope.launch(Dispatchers.IO) {
             repository.invalidateShizukuCache()
             val hasShizuku = repository.hasShizuku()

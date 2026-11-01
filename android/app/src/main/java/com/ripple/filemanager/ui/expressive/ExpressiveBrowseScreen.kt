@@ -349,10 +349,17 @@ fun ExpressiveBrowseScreen(
                                     color = colors.accent
                                 )
                             }
+                        } else if (!state.hasStoragePermission && state.files.isEmpty() && (state.location == "home" || state.location.startsWith("/storage") || state.location.startsWith("/sdcard") || state.location.startsWith("/mnt"))) {
+                            StoragePermissionCard(
+                                onGrantAccess = { onAction(AppAction.RequestStorageAccess) }
+                            )
                         } else if (state.errorMessage != null && state.files.isEmpty()) {
                             StorageErrorCard(
                                 message = state.errorMessage,
-                                onRetry = { onAction(AppAction.Reload) }
+                                onRetry = { onAction(AppAction.Reload) },
+                                onGrantAccess = if (!state.hasStoragePermission || state.errorMessage.contains("permission", ignoreCase = true) || state.errorMessage.contains("access", ignoreCase = true)) {
+                                    { onAction(AppAction.RequestStorageAccess) }
+                                } else null
                             )
                         } else if ((state.location.contains("Android/data") || state.location.contains("Android/obb")) && !state.hasShizuku) {
                             ShizukuRestrictedAccessCard(
@@ -403,7 +410,7 @@ fun ExpressiveBrowseScreen(
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(bottom = 130.dp)
+                                contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
                             ) {
                                 items(state.files, key = { it.id }) { file ->
                                     BrowseListRow(
@@ -422,7 +429,7 @@ fun ExpressiveBrowseScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                contentPadding = PaddingValues(bottom = 130.dp)
+                                contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
                             ) {
                                 items(state.files, key = { it.id }) { file ->
                                     BrowseGridCard(
@@ -636,9 +643,57 @@ internal fun BrowseBreadcrumbs(
 
 
 @Composable
+private fun StoragePermissionCard(
+    onGrantAccess: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExpressiveTheme.colors
+    InnerCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CookieIcon(
+                icon = Icons.Outlined.FolderShared,
+                bgColor = ExpressiveTokens.PastelCoral,
+                size = 52.dp,
+                lobes = 8
+            )
+            Text(
+                text = stringResource(R.string.permission_dialog_title),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.text,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = stringResource(R.string.permission_dialog_message),
+                fontSize = 13.sp,
+                color = colors.muted,
+                textAlign = TextAlign.Center
+            )
+            Button(
+                onClick = onGrantAccess,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.accent,
+                    contentColor = colors.ink
+                )
+            ) {
+                Text(stringResource(R.string.permission_grant_access), fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
 private fun StorageErrorCard(
     message: String,
     onRetry: () -> Unit,
+    onGrantAccess: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val colors = ExpressiveTheme.colors
@@ -669,15 +724,32 @@ private fun StorageErrorCard(
                 color = colors.muted,
                 textAlign = TextAlign.Center
             )
-            Button(
-                onClick = onRetry,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.accent,
-                    contentColor = colors.ink
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(stringResource(R.string.retry), fontWeight = FontWeight.SemiBold)
+                if (onGrantAccess != null) {
+                    Button(
+                        onClick = onGrantAccess,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.accent,
+                            contentColor = colors.ink
+                        )
+                    ) {
+                        Text(stringResource(R.string.permission_grant_access), fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Button(
+                    onClick = onRetry,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (onGrantAccess != null) colors.card else colors.accent,
+                        contentColor = if (onGrantAccess != null) colors.text else colors.ink
+                    )
+                ) {
+                    Text(stringResource(R.string.retry), fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
@@ -956,7 +1028,7 @@ private fun ConnectCloudPromptContent(
         modifier = modifier
             .fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(bottom = 130.dp)
+        contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
     ) {
         item {
             SectionContainer {

@@ -177,7 +177,7 @@ fun ExpressiveAboutScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(130.dp))
+            Spacer(modifier = Modifier.height(130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()))
         }
     }
 }

@@ -419,4 +419,13 @@
     <string name="auto_close_10s">10s</string>
     <string name="auto_close_30s">30s</string>
     <string name="close_player">Close player</string>
+
+    <!-- Storage Permissions & Access -->
+    <string name="permission_dialog_title">Allow access to your files</string>
+    <string name="permission_dialog_message">Ripple Files needs All files access to show your files.</string>
+    <string name="permission_open_settings">Open settings</string>
+    <string name="permission_not_now">Not now</string>
+    <string name="permission_settings_fallback_toast">Open Settings &gt; Apps &gt; Ripple Files &gt; Permissions and allow Files access</string>
+    <string name="permission_grant_access">Grant access</string>
+    <string name="storage_access_denied_or_error">Unable to access storage. Storage permission may be missing.</string>
 </resources>

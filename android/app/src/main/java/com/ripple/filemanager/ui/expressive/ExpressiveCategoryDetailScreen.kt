@@ -179,7 +179,7 @@ fun ExpressiveCategoryDetailScreen(
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 120.dp)
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 120.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
                 ) {
                     groupedByDate.forEach { (dateLabel, filesInGroup) ->
                         item(key = "header_$dateLabel") {

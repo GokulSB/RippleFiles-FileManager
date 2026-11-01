@@ -96,7 +96,7 @@ fun ExpressiveHomeScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
-        contentPadding = PaddingValues(bottom = 130.dp)
+        contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
     ) {
         // 1. Home Header
         item(key = "header") {
@@ -146,24 +146,68 @@ fun ExpressiveHomeScreen(
             }
 
             if (displayedFiles.isEmpty()) {
-                SectionContainer {
-                    InnerCard {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (state.query.isNotEmpty()) {
-                                    stringResource(R.string.no_files_found_query, state.query)
-                                } else {
-                                    stringResource(R.string.no_recent_files)
-                                },
-                                fontSize = 14.sp,
-                                color = colors.muted,
-                                textAlign = TextAlign.Center
-                            )
+                if (!state.hasStoragePermission && state.query.isEmpty()) {
+                    SectionContainer {
+                        InnerCard {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CookieIcon(
+                                    icon = Icons.Outlined.FolderShared,
+                                    bgColor = ExpressiveTokens.PastelCoral,
+                                    size = 52.dp,
+                                    lobes = 8
+                                )
+                                Text(
+                                    text = stringResource(R.string.permission_dialog_title),
+                                    fontSize = 16.sp,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                    color = colors.text,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = stringResource(R.string.permission_dialog_message),
+                                    fontSize = 13.sp,
+                                    color = colors.muted,
+                                    textAlign = TextAlign.Center
+                                )
+                                Button(
+                                    onClick = { onAction(AppAction.RequestStorageAccess) },
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = colors.accent,
+                                        contentColor = colors.ink
+                                    )
+                                ) {
+                                    Text(stringResource(R.string.permission_grant_access), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    SectionContainer {
+                        InnerCard {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (state.query.isNotEmpty()) {
+                                        stringResource(R.string.no_files_found_query, state.query)
+                                    } else {
+                                        stringResource(R.string.no_recent_files)
+                                    },
+                                    fontSize = 14.sp,
+                                    color = colors.muted,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }
@@ -269,7 +313,7 @@ fun ExpressiveHomeHeader(
     }
 
     ExpressiveScreenHeader(
-        title = stringResource(R.string.app_name),
+        title = stringResource(R.string.app_name_brand),
         subtitle = currentDateStr,
         modifier = modifier,
         leftIcon = Icons.Default.Menu,

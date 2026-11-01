@@ -36,9 +36,18 @@ class MainActivity : FragmentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
 
+    private var hasUserDismissedPermissionDialog = false
+    private var permissionDialog: android.app.AlertDialog? = null
+    private var lastHadStorageAccess: Boolean? = null
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
+    ) { _ ->
+        val granted = hasStorageAccess()
+        viewModel.updateStorageAccessState(granted)
+        if (granted) {
+            viewModel.scanDeviceForCleaner(showLoading = false)
+        }
         viewModel.reload()
     }
 
@@ -144,6 +153,23 @@ class MainActivity : FragmentActivity() {
             viewModel.onAppLaunch()
         }
         enableEdgeToEdge()
+        val hasAccess = hasStorageAccess()
+        lastHadStorageAccess = hasAccess
+        viewModel.updateStorageAccessState(hasAccess)
+        if (hasAccess) {
+            viewModel.scanDeviceForCleaner(showLoading = false)
+        }
+
+        val rootFile = Environment.getExternalStorageDirectory()
+        val rootListingCount = try {
+            rootFile.listFiles()?.size ?: -1
+        } catch (e: Exception) {
+            -2
+        }
+        android.util.Log.i(
+            "RippleStorage",
+            "Startup check: Android SDK=${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE}), Model=${Build.MANUFACTURER} ${Build.MODEL}, hasStorageAccess=$hasAccess, rootPath=${rootFile.absolutePath}, rootListFilesCount=$rootListingCount"
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
             window.isStatusBarContrastEnforced = false
@@ -250,6 +276,18 @@ class MainActivity : FragmentActivity() {
                         is AppAction.SetMegaAuthStatus -> viewModel.setMegaAuthStatus(action.isAuthenticated, action.email, action.password)
                         is AppAction.SetShowMegaPopup -> viewModel.setShowMegaPopup(action.show)
                         is AppAction.SetDropboxAuthStatus -> viewModel.setDropboxAuthStatus(action.isAuthenticated, action.email)
+                        is AppAction.RequestStorageAccess -> {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                openStorageSettings()
+                            } else {
+                                requestPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                    )
+                                )
+                            }
+                        }
                         is AppAction.AutoRequestAccess -> viewModel.autoRequestAccess(action.path)
                         is AppAction.RequestShizukuAccess -> {
                             try {
@@ -435,39 +473,130 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    fun hasStorageAccess(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     override fun onResume() {
         super.onResume()
-        checkPermissions()
-        if (!isFirstResume) {
+        val hasAccessNow = hasStorageAccess()
+        viewModel.updateStorageAccessState(hasAccessNow)
+        if (hasAccessNow && lastHadStorageAccess == false) {
+            viewModel.scanDeviceForCleaner(showLoading = false)
+            viewModel.reload()
+        } else if (!isFirstResume) {
             viewModel.reload()
         }
+        lastHadStorageAccess = hasAccessNow
         isFirstResume = false
+        checkPermissions()
     }
 
     private fun checkPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                    intent.data = Uri.parse("package:$packageName")
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                    startActivity(intent)
+        val accessGranted = hasStorageAccess()
+        viewModel.updateStorageAccessState(accessGranted)
+        if (accessGranted) {
+            permissionDialog?.dismiss()
+            if (lastHadStorageAccess == false) {
+                viewModel.scanDeviceForCleaner(showLoading = false)
+                viewModel.reload()
+            }
+            lastHadStorageAccess = true
+        } else {
+            lastHadStorageAccess = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (!hasUserDismissedPermissionDialog && (permissionDialog == null || !permissionDialog!!.isShowing)) {
+                    showPermissionDialog()
+                }
+            } else {
+                val permissions = arrayOf(
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                )
+                val needed = permissions.filter {
+                    ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+                }
+                if (needed.isNotEmpty()) {
+                    requestPermissionLauncher.launch(needed.toTypedArray())
                 }
             }
-        } else {
-            val permissions = arrayOf(
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            )
-            val needed = permissions.filter {
-                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun showPermissionDialog() {
+        if (isFinishing || isDestroyed) return
+        if (permissionDialog?.isShowing == true) return
+
+        val builder = android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.permission_dialog_title)
+            .setMessage(R.string.permission_dialog_message)
+            .setPositiveButton(R.string.permission_open_settings) { dialog, _ ->
+                dialog.dismiss()
+                openStorageSettings()
             }
-            if (needed.isNotEmpty()) {
-                requestPermissionLauncher.launch(needed.toTypedArray())
+            .setNegativeButton(R.string.permission_not_now) { dialog, _ ->
+                hasUserDismissedPermissionDialog = true
+                dialog.dismiss()
+            }
+            .setOnCancelListener {
+                hasUserDismissedPermissionDialog = true
+            }
+
+        permissionDialog = builder.create().apply {
+            setCanceledOnTouchOutside(true)
+            show()
+        }
+    }
+
+    private fun openStorageSettings() {
+        // a) Intent(ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName"))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+                return
+            } catch (e: Exception) {
+                android.util.Log.w("RippleStorage", "Failed to open ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION", e)
+            }
+
+            // b) Intent(ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                startActivity(intent)
+                return
+            } catch (e: Exception) {
+                android.util.Log.w("RippleStorage", "Failed to open ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION", e)
             }
         }
+
+        // c) Intent(ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        try {
+            val intent = Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
+            return
+        } catch (e: Exception) {
+            android.util.Log.w("RippleStorage", "Failed to open ACTION_APPLICATION_DETAILS_SETTINGS", e)
+        }
+
+        // d) If all fail, Toast: "Open Settings > Apps > Ripple Files > Permissions and allow Files access"
+        Toast.makeText(
+            this,
+            R.string.permission_settings_fallback_toast,
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private val screenOffReceiver = object : android.content.BroadcastReceiver() {
@@ -480,6 +609,8 @@ class MainActivity : FragmentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        permissionDialog?.dismiss()
+        permissionDialog = null
         try {
             unregisterReceiver(screenOffReceiver)
         } catch (_: Exception) {}
