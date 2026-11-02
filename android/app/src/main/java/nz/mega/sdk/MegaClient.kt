@@ -1,35 +1,142 @@
 package nz.mega.sdk
 
 import android.content.Context
+import android.os.SystemClock
+import android.util.Log
 import com.ripple.filemanager.FileItem
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-class MegaClient(private val context: Context, val accountEmail: String? = null) {
+class MegaClient(
+    private val context: Context,
+    val accountEmail: String? = null
+) {
     private val appKey = "l4cmkI7B"
-    
-    internal val megaApi: MegaApi by lazy {
-        val cacheDir = context.cacheDir.absolutePath
-        MegaApi(appKey, cacheDir, "RippleFiles/1.0")
-    }
 
-    suspend fun login(email: String, password: String): Boolean = suspendCancellableCoroutine { cont ->
-        val listener = object : MegaRequestListener() {
-            override fun onRequestFinish(api: MegaApi?, request: MegaRequest?, e: MegaError?) {
-                if (!cont.isActive) return
-                if (e != null && e.errorCode == MegaError.API_OK) {
-                    cont.resume(true)
-                } else {
-                    cont.resumeWithException(Exception("MEGA Login failed: ${e?.errorString}"))
+    companion object {
+        private const val TAG = "MegaClient"
+
+        // Set of active listeners strongly retained on the Java heap to prevent
+        // premature Garbage Collection while native C++ calls (libmega.so) are in flight.
+        // If an anonymous listener is GC-collected before onRequestFinish completes,
+        // its C++ director is deleted, causing SIGSEGV inside MegaApiImpl::fireOnRequestFinish.
+        private val activeListeners = ConcurrentHashMap.newKeySet<Any>()
+        private val listenerTimestamps = ConcurrentHashMap<Any, Long>()
+        private const val LISTENER_TIMEOUT_MS = 15 * 60 * 1000L // 15 minutes safety prune
+
+        // Static cache of client instances to ensure MegaApi instances and native C++
+        // state are preserved for the process lifetime and isolated per account.
+        private val clientInstances = ConcurrentHashMap<String, MegaClient>()
+
+        fun getInstance(context: Context, email: String?): MegaClient {
+            val key = email ?: "default"
+            return clientInstances.getOrPut(key) {
+                MegaClient(context.applicationContext, email)
+            }
+        }
+
+        private fun retainListener(listener: Any) {
+            val now = SystemClock.elapsedRealtime()
+            activeListeners.add(listener)
+            listenerTimestamps[listener] = now
+
+            // Periodic safety cleanup of stale listeners older than 15 minutes
+            if (listenerTimestamps.size > 20) {
+                val iterator = listenerTimestamps.entries.iterator()
+                while (iterator.hasNext()) {
+                    val entry = iterator.next()
+                    if (now - entry.value > LISTENER_TIMEOUT_MS) {
+                        activeListeners.remove(entry.key)
+                        iterator.remove()
+                    }
                 }
             }
         }
-        megaApi.login(email, password, listener)
+
+        private fun releaseListener(listener: Any) {
+            activeListeners.remove(listener)
+            listenerTimestamps.remove(listener)
+        }
     }
+
+    internal val megaApi: MegaApi by lazy {
+        val accountFolder = if (!accountEmail.isNullOrBlank()) {
+            "mega_" + accountEmail.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        } else {
+            "mega_default"
+        }
+        val accountDir = File(context.cacheDir, accountFolder).apply { mkdirs() }
+        MegaApi(appKey, accountDir.absolutePath, "RippleFiles/1.0")
+    }
+
+    private suspend inline fun <T> executeRequest(
+        crossinline action: (MegaRequestListener) -> Unit,
+        crossinline onFinish: (cont: CancellableContinuation<T>, api: MegaApi?, request: MegaRequest?, e: MegaError?) -> Unit
+    ): T = suspendCancellableCoroutine { cont ->
+        val listener = object : MegaRequestListener() {
+            override fun onRequestFinish(api: MegaApi?, request: MegaRequest?, e: MegaError?) {
+                try {
+                    onFinish(cont, api, request, e)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Error in onRequestFinish", t)
+                    if (cont.isActive) cont.resumeWithException(t)
+                } finally {
+                    releaseListener(this)
+                }
+            }
+        }
+        retainListener(listener)
+        try {
+            action(listener)
+        } catch (t: Throwable) {
+            releaseListener(listener)
+            if (cont.isActive) cont.resumeWithException(t)
+        }
+    }
+
+    private suspend inline fun <T> executeTransfer(
+        crossinline action: (MegaTransferListener) -> Unit,
+        crossinline onFinish: (cont: CancellableContinuation<T>, api: MegaApi?, transfer: MegaTransfer?, error: MegaError?) -> Unit
+    ): T = suspendCancellableCoroutine { cont ->
+        val listener = object : MegaTransferListener() {
+            override fun onTransferFinish(api: MegaApi?, transfer: MegaTransfer?, error: MegaError?) {
+                try {
+                    onFinish(cont, api, transfer, error)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Error in onTransferFinish", t)
+                    if (cont.isActive) cont.resumeWithException(t)
+                } finally {
+                    releaseListener(this)
+                }
+            }
+        }
+        retainListener(listener)
+        try {
+            action(listener)
+        } catch (t: Throwable) {
+            releaseListener(listener)
+            if (cont.isActive) cont.resumeWithException(t)
+        }
+    }
+
+    suspend fun login(email: String, password: String): Boolean = executeRequest(
+        action = { listener -> megaApi.login(email, password, listener) },
+        onFinish = { cont, _, _, e ->
+            if (!cont.isActive) return@executeRequest
+            if (e != null && e.errorCode == MegaError.API_OK) {
+                cont.resume(true)
+            } else {
+                cont.resumeWithException(Exception("MEGA Login failed: ${e?.errorString ?: "Unknown error"}"))
+            }
+        }
+    )
 
     fun dumpSession(): String? {
         return try {
@@ -39,33 +146,29 @@ class MegaClient(private val context: Context, val accountEmail: String? = null)
         }
     }
 
-    suspend fun fastLogin(session: String): Boolean = suspendCancellableCoroutine { cont ->
-        val listener = object : MegaRequestListener() {
-            override fun onRequestFinish(api: MegaApi?, request: MegaRequest?, e: MegaError?) {
-                if (!cont.isActive) return
-                if (e != null && e.errorCode == MegaError.API_OK) {
-                    cont.resume(true)
-                } else {
-                    cont.resumeWithException(Exception("MEGA FastLogin failed: ${e?.errorString}"))
-                }
+    suspend fun fastLogin(session: String): Boolean = executeRequest(
+        action = { listener -> megaApi.fastLogin(session, listener) },
+        onFinish = { cont, _, _, e ->
+            if (!cont.isActive) return@executeRequest
+            if (e != null && e.errorCode == MegaError.API_OK) {
+                cont.resume(true)
+            } else {
+                cont.resumeWithException(Exception("MEGA FastLogin failed: ${e?.errorString ?: "Unknown error"}"))
             }
         }
-        megaApi.fastLogin(session, listener)
-    }
+    )
 
-    suspend fun fetchNodes(): Boolean = suspendCancellableCoroutine { cont ->
-        val listener = object : MegaRequestListener() {
-            override fun onRequestFinish(api: MegaApi?, request: MegaRequest?, e: MegaError?) {
-                if (!cont.isActive) return
-                if (e != null && e.errorCode == MegaError.API_OK) {
-                    cont.resume(true)
-                } else {
-                    cont.resumeWithException(Exception("Failed to fetch MEGA nodes: ${e?.errorString}"))
-                }
+    suspend fun fetchNodes(): Boolean = executeRequest(
+        action = { listener -> megaApi.fetchNodes(listener) },
+        onFinish = { cont, _, _, e ->
+            if (!cont.isActive) return@executeRequest
+            if (e != null && e.errorCode == MegaError.API_OK) {
+                cont.resume(true)
+            } else {
+                cont.resumeWithException(Exception("Failed to fetch MEGA nodes: ${e?.errorString ?: "Unknown error"}"))
             }
         }
-        megaApi.fetchNodes(listener)
-    }
+    )
 
     fun getChildren(folderId: String?): List<FileItem> {
         return try {
@@ -111,124 +214,115 @@ class MegaClient(private val context: Context, val accountEmail: String? = null)
         }
     }
     
-    suspend fun deleteNode(handleStr: String): Boolean = suspendCancellableCoroutine { cont ->
-        val node = megaApi.getNodeByHandle(handleStr.toLongOrNull() ?: 0L)
-        if (node == null) {
-            if (cont.isActive) cont.resume(false)
-            return@suspendCancellableCoroutine
-        }
-        
-        val listener = object : MegaRequestListener() {
-            override fun onRequestFinish(api: MegaApi?, request: MegaRequest?, e: MegaError?) {
-                if (!cont.isActive) return
+    suspend fun deleteNode(handleStr: String): Boolean {
+        val node = megaApi.getNodeByHandle(handleStr.toLongOrNull() ?: 0L) ?: return false
+        return executeRequest(
+            action = { listener -> megaApi.remove(node, listener) },
+            onFinish = { cont, _, _, e ->
+                if (!cont.isActive) return@executeRequest
                 if (e != null && e.errorCode == MegaError.API_OK) {
                     cont.resume(true)
                 } else {
-                    cont.resumeWithException(Exception("Failed to delete MEGA node: ${e?.errorString}"))
+                    cont.resumeWithException(Exception("Failed to delete MEGA node: ${e?.errorString ?: "Unknown error"}"))
                 }
             }
-        }
-        megaApi.remove(node, listener)
-    }
-
-    suspend fun getStorageQuota(): Pair<Long, Long> = suspendCancellableCoroutine { cont ->
-        val listener = object : MegaRequestListener() {
-            override fun onRequestFinish(api: MegaApi?, request: MegaRequest?, e: MegaError?) {
-                if (!cont.isActive) return
-                if (e != null && e.errorCode == MegaError.API_OK && request != null) {
-                    val details = request.megaAccountDetails
-                    if (details != null) {
-                        cont.resume(Pair(details.storageUsed, details.storageMax))
-                    } else {
-                        cont.resume(Pair(0L, 0L))
-                    }
-                } else {
-                    cont.resume(Pair(0L, 0L))
-                }
-            }
-        }
-        megaApi.getAccountDetails(listener)
-    }
-
-    suspend fun downloadFile(handleStr: String, destPath: String): Boolean = suspendCancellableCoroutine { cont ->
-        val node = megaApi.getNodeByHandle(handleStr.toLongOrNull() ?: 0L)
-        if (node == null) {
-            if (cont.isActive) cont.resume(false)
-            return@suspendCancellableCoroutine
-        }
-        
-        val listener = object : nz.mega.sdk.MegaTransferListener() {
-            override fun onTransferFinish(api: MegaApi?, transfer: nz.mega.sdk.MegaTransfer?, error: MegaError?) {
-                if (!cont.isActive) return
-                if (error != null && error.errorCode == MegaError.API_OK) {
-                    cont.resume(true)
-                } else {
-                    cont.resumeWithException(Exception("Download failed: ${error?.errorString}"))
-                }
-            }
-        }
-        megaApi.startDownload(node, destPath, null, null, false, null, 0, 0, false, listener)
-    }
-
-    suspend fun uploadFile(localPath: String, parentHandle: String?): Boolean = suspendCancellableCoroutine { cont ->
-        val parentNode = if (parentHandle != null) {
-            megaApi.getNodeByHandle(parentHandle.toLongOrNull() ?: 0L)
-        } else {
-            megaApi.rootNode
-        }
-        if (parentNode == null) {
-            if (cont.isActive) cont.resumeWithException(Exception("MEGA upload failed: destination folder not found"))
-            return@suspendCancellableCoroutine
-        }
-
-        val fileName = localPath.substringAfterLast('/')
-        val listener = object : nz.mega.sdk.MegaTransferListener() {
-            override fun onTransferFinish(api: MegaApi?, transfer: nz.mega.sdk.MegaTransfer?, error: MegaError?) {
-                if (!cont.isActive) return
-                if (error != null && error.errorCode == MegaError.API_OK) {
-                    cont.resume(true)
-                } else {
-                    cont.resumeWithException(Exception("MEGA upload failed: ${error?.errorString}"))
-                }
-            }
-        }
-        // mtime = -1 tells the SDK to use the local file's own modification time.
-        megaApi.startUpload(
-            localPath,
-            parentNode,
-            fileName,
-            -1L,
-            null,
-            false,
-            false,
-            null,
-            listener
         )
     }
 
-    suspend fun createFolder(name: String, parentHandle: String?): Boolean = suspendCancellableCoroutine { cont ->
+    suspend fun getStorageQuota(): Pair<Long, Long> = executeRequest(
+        action = { listener -> megaApi.getAccountDetails(listener) },
+        onFinish = { cont, _, request, e ->
+            if (!cont.isActive) return@executeRequest
+            if (e != null && e.errorCode == MegaError.API_OK && request != null) {
+                val details = request.megaAccountDetails
+                if (details != null) {
+                    cont.resume(Pair(details.storageUsed, details.storageMax))
+                } else {
+                    cont.resume(Pair(0L, 0L))
+                }
+            } else {
+                cont.resume(Pair(0L, 0L))
+            }
+        }
+    )
+
+    suspend fun downloadFile(handleStr: String, destPath: String): Boolean {
+        val node = megaApi.getNodeByHandle(handleStr.toLongOrNull() ?: 0L) ?: return false
+        return executeTransfer(
+            action = { listener ->
+                megaApi.startDownload(node, destPath, null, null, false, null, 0, 0, false, listener)
+            },
+            onFinish = { cont, _, _, error ->
+                if (!cont.isActive) return@executeTransfer
+                if (error != null && error.errorCode == MegaError.API_OK) {
+                    cont.resume(true)
+                } else {
+                    cont.resumeWithException(Exception("Download failed: ${error?.errorString ?: "Unknown error"}"))
+                }
+            }
+        )
+    }
+
+    suspend fun uploadFile(localPath: String, parentHandle: String?): Boolean {
         val parentNode = if (parentHandle != null) {
             megaApi.getNodeByHandle(parentHandle.toLongOrNull() ?: 0L)
         } else {
             megaApi.rootNode
-        }
-        if (parentNode == null) {
-            if (cont.isActive) cont.resumeWithException(Exception("MEGA create folder failed: destination folder not found"))
-            return@suspendCancellableCoroutine
-        }
+        } ?: throw Exception("MEGA upload failed: destination folder not found")
 
-        val listener = object : MegaRequestListener() {
-            override fun onRequestFinish(api: MegaApi?, request: MegaRequest?, e: MegaError?) {
-                if (!cont.isActive) return
+        val fileName = localPath.substringAfterLast('/')
+        return executeTransfer(
+            action = { listener ->
+                megaApi.startUpload(
+                    localPath,
+                    parentNode,
+                    fileName,
+                    -1L,
+                    null,
+                    false,
+                    false,
+                    null,
+                    listener
+                )
+            },
+            onFinish = { cont, _, _, error ->
+                if (!cont.isActive) return@executeTransfer
+                if (error != null && error.errorCode == MegaError.API_OK) {
+                    cont.resume(true)
+                } else {
+                    cont.resumeWithException(Exception("MEGA upload failed: ${error?.errorString ?: "Unknown error"}"))
+                }
+            }
+        )
+    }
+
+    suspend fun createFolder(name: String, parentHandle: String?): Boolean {
+        val parentNode = if (parentHandle != null) {
+            megaApi.getNodeByHandle(parentHandle.toLongOrNull() ?: 0L)
+        } else {
+            megaApi.rootNode
+        } ?: throw Exception("MEGA create folder failed: destination folder not found")
+
+        return executeRequest(
+            action = { listener -> megaApi.createFolder(name, parentNode, listener) },
+            onFinish = { cont, _, _, e ->
+                if (!cont.isActive) return@executeRequest
                 if (e != null && e.errorCode == MegaError.API_OK) {
                     cont.resume(true)
                 } else {
-                    cont.resumeWithException(Exception("MEGA create folder failed: ${e?.errorString}"))
+                    cont.resumeWithException(Exception("MEGA create folder failed: ${e?.errorString ?: "Unknown error"}"))
                 }
             }
-        }
-        megaApi.createFolder(name, parentNode, listener)
+        )
     }
+
+    suspend fun localLogout(): Boolean = executeRequest(
+        action = { listener -> megaApi.localLogout(listener) },
+        onFinish = { cont, _, _, e ->
+            if (!cont.isActive) return@executeRequest
+            cont.resume(e == null || e.errorCode == MegaError.API_OK)
+        }
+    )
 
     private fun formatSize(size: Long): String {
         if (size <= 0) return "0 B"

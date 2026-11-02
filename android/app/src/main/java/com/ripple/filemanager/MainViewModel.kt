@@ -398,13 +398,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("sift_prefs", android.content.Context.MODE_PRIVATE)
 
-    private val megaClients = java.util.concurrent.ConcurrentHashMap<String, nz.mega.sdk.MegaClient>()
     fun getMegaClient(email: String? = null): nz.mega.sdk.MegaClient {
         val targetEmail = email 
             ?: _state.value.megaAccountEmail 
             ?: _state.value.megaAccounts.firstOrNull()?.email 
             ?: "default"
-        return megaClients.getOrPut(targetEmail) { nz.mega.sdk.MegaClient(getApplication(), targetEmail) }
+        return nz.mega.sdk.MegaClient.getInstance(getApplication(), targetEmail)
     }
     private val megaClient get() = getMegaClient()
 
@@ -2319,7 +2318,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val updatedList = _state.value.megaAccounts.filter { it.email != targetEmail }
             saveMegaAccounts(updatedList)
             if (targetEmail != null) {
-                megaClients.remove(targetEmail)
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        getMegaClient(targetEmail).localLogout()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
             }
             _state.update {
                 it.copy(

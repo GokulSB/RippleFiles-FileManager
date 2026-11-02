@@ -187,27 +187,9 @@
 # ============================================================================
 # MEGA SDK JNI Bindings (SWIG generated)
 # ============================================================================
--keepclasseswithmembernames class nz.mega.sdk.** {
-    native <methods>;
-}
--keepclassmembers class nz.mega.sdk.** {
-    long swigCPtr;
-    boolean swigCMemOwn;
-    <init>(long, boolean);
-}
--keep class nz.mega.sdk.megaJNI { *; }
--keep class nz.mega.sdk.MegaApi { *; }
--keep class nz.mega.sdk.MegaApiLock { *; }
--keep class nz.mega.sdk.*Listener* { *; }
--keep class nz.mega.sdk.MegaNode { *; }
--keep class nz.mega.sdk.MegaNodeList { *; }
--keep class nz.mega.sdk.MegaError { *; }
--keep class nz.mega.sdk.MegaRequest { *; }
--keep class nz.mega.sdk.MegaTransfer { *; }
--keep class nz.mega.sdk.MegaUser { *; }
--keep class nz.mega.sdk.MegaAccountDetails { *; }
--keep class nz.mega.sdk.MegaClient { *; }
--keep class nz.mega.sdk.MegaFileSource { *; }
+-keep class nz.mega.sdk.** { *; }
+-keep interface nz.mega.sdk.** { *; }
+-keepclassmembers class nz.mega.sdk.** { *; }
 -dontwarn nz.mega.sdk.**
 
 # ============================================================================

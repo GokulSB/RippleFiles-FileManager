@@ -35,7 +35,9 @@ class MegaApi {
 
   @SuppressWarnings({"deprecation", "removal"})
   protected void finalize() {
-    delete();
+    // Avoid running delete() inside GC finalize.
+    // Deleting MegaApi from the finalizer daemon thread while background worker
+    // threads are running leads to SIGSEGV in libmega.so.
   }
 
   protected synchronized void delete() {   

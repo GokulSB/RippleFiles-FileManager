@@ -35,7 +35,9 @@ class MegaTransferListener {
 
   @SuppressWarnings({"deprecation", "removal"})
   protected void finalize() {
-    delete();
+    // Avoid running delete() inside GC finalize.
+    // Deleting C++ director objects from the finalizer daemon thread while native
+    // transfers or progress callbacks are in flight leads to SIGSEGV.
   }
 
   protected synchronized void delete() {   

@@ -35,7 +35,7 @@ class MegaGlobalListener {
 
   @SuppressWarnings({"deprecation", "removal"})
   protected void finalize() {
-    delete();
+    // Avoid running delete() inside GC finalize.
   }
 
   protected synchronized void delete() {   
