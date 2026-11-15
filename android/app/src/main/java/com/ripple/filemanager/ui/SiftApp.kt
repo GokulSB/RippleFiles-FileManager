@@ -558,8 +558,13 @@ fun SiftApp(
                 exit = modalExit
             ) {
                 if (state.viewingFile != null) {
-                    if (state.viewingFile!!.type == "image") {
-                        val currentViewing = state.viewingFile!!
+                    val currentViewing = state.viewingFile!!
+                    if (com.ripple.filemanager.archive.ArchiveUtils.isArchiveFile(currentViewing)) {
+                        androidx.compose.runtime.LaunchedEffect(currentViewing) {
+                            onAction(AppAction.CloseFileViewer)
+                            onAction(AppAction.OpenArchive(currentViewing))
+                        }
+                    } else if (currentViewing.type == "image") {
                         val isCloud = isCloudPath(currentViewing.path) || state.location.startsWith("drive") || state.location.startsWith("mega") || state.location.startsWith("dropbox") || state.location.startsWith("smb_") || state.location.startsWith("ftp_") || state.location.startsWith("sftp_") || state.location.startsWith("webdav_") || state.location.startsWith("nextcloud_")
                         val baseImages = if (isCloud) listOf(currentViewing) else state.files.filter { it.type == "image" }
                         val imageFiles = if (baseImages.none { it.id == currentViewing.id }) listOf(currentViewing) + baseImages else baseImages
@@ -1595,6 +1600,11 @@ fun handleFileOpen(
         return
     }
 
+    if (com.ripple.filemanager.archive.ArchiveUtils.isArchiveFile(file)) {
+        onAction(AppAction.OpenArchive(file))
+        return
+    }
+
     if (file.path.startsWith("/")) {
         onAction(AppAction.LogRecentAction(file.path, "Opened"))
     }
@@ -1631,17 +1641,33 @@ fun handleFileOpen(
         } else {
             onAction(AppAction.PlayAudio(file))
         }
-    } else if (file.type == "video") {
-        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", java.io.File(file.path))
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "video/*")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try {
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            e.printStackTrace()
+    } else if (file.type == "video" || file.name.substringAfterLast('.', "").lowercase(java.util.Locale.getDefault()) in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "3gp", "ts", "m2ts", "ogv", "vob", "mpg", "mpeg")) {
+        if (state.viewerVideo.equals("External", ignoreCase = true) || state.viewerVideo.equals("Device default", ignoreCase = true)) {
+            openFileInExternalApp(context, file, "video/*") { msg ->
+                onAction(AppAction.ShowToast(msg))
+            }
+        } else {
+            val videoExts = setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "3gp", "ts", "m2ts", "ogv", "vob", "mpg", "mpeg")
+            val folderVideos = state.files
+                .filter { it.type == "video" || it.name.substringAfterLast('.', "").lowercase(java.util.Locale.getDefault()) in videoExts }
+                .map { it.path }
+            val intent = Intent(context, com.ripple.filemanager.video.VideoPlayerActivity::class.java).apply {
+                putExtra(com.ripple.filemanager.video.VideoPlayerActivity.EXTRA_VIDEO_PATH, file.path)
+                putExtra(com.ripple.filemanager.video.VideoPlayerActivity.EXTRA_VIDEO_TITLE, file.name)
+                if (folderVideos.isNotEmpty() && folderVideos.contains(file.path)) {
+                    putStringArrayListExtra(com.ripple.filemanager.video.VideoPlayerActivity.EXTRA_PLAYLIST_PATHS, ArrayList(folderVideos))
+                    putExtra(com.ripple.filemanager.video.VideoPlayerActivity.EXTRA_PLAYLIST_INDEX, folderVideos.indexOf(file.path))
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                openFileInExternalApp(context, file, "video/*") { msg ->
+                    onAction(AppAction.ShowToast(msg))
+                }
+            }
         }
     } else if (file.name.endsWith(".apk", ignoreCase = true)) {
         try {
@@ -1682,7 +1708,7 @@ fun handleFileTapForPane(
 ) {
     if (file.isLocked) {
         onAction(AppAction.RequestAuth(com.ripple.filemanager.AuthReason.OPEN_FILE, file.path, fileId = file.id, folderName = file.name))
-    } else if (file.name.lowercase().endsWith(".zip") || file.name.lowercase().endsWith(".rar") || file.name.lowercase().endsWith(".tar") || file.name.lowercase().endsWith(".gz") || file.name.lowercase().endsWith(".bz2") || file.name.lowercase().endsWith(".xz")) {
+    } else if (com.ripple.filemanager.archive.ArchiveUtils.isArchiveFile(file)) {
         if (isCloudPath(file.path)) {
             val cloudCacheDir = java.io.File(context.cacheDir, "cloud_cache")
             val safeName = file.name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
@@ -1728,6 +1754,7 @@ fun MainContent(
     var showArchiveOptionsFor by remember { mutableStateOf<FileItem?>(null) }
     var fileForSafExtraction by remember { mutableStateOf<FileItem?>(null) }
     var pendingArchivePassword by remember { mutableStateOf<String?>(null) }
+    var pendingSelectedIndices by remember { mutableStateOf<List<Int>?>(null) }
     val coroutineScope = rememberCoroutineScope()
     var showArchiveCreateSheet by remember { mutableStateOf(false) }
     var filesToArchive by remember { mutableStateOf<List<FileItem>>(emptyList()) }
@@ -1748,8 +1775,10 @@ fun MainContent(
             val file = fileForSafExtraction!!
             val sourceUri = if (file.path.startsWith("content://")) android.net.Uri.parse(file.path) else android.net.Uri.fromFile(File(file.path))
             val pwd = pendingArchivePassword
+            val indices = pendingSelectedIndices
             pendingArchivePassword = null
-            archiveViewModel.extract(sourceUri, uri, pwd, archiveName = file.name)
+            pendingSelectedIndices = null
+            archiveViewModel.extract(sourceUri, uri, pwd, archiveName = file.name, selectedIndices = indices)
             showArchiveOptionsFor = null
             fileForSafExtraction = null
         }
@@ -1777,10 +1806,19 @@ fun MainContent(
     var showFirstTimeHideWarning by remember { mutableStateOf(false) }
     var pendingHideFiles by remember { mutableStateOf<List<FileItem>>(emptyList()) }
 
+    LaunchedEffect(state.archiveFileToOpen) {
+        state.archiveFileToOpen?.let { file ->
+            onAction(AppAction.ClearArchiveFileToOpen)
+            showArchiveOptionsFor = file
+        }
+    }
+
     LaunchedEffect(state.unlockedFileToOpen) {
         state.unlockedFileToOpen?.let { file ->
             if (file.type == "folder") {
                 onAction(AppAction.SetLocation(file.path, file.name))
+            } else if (com.ripple.filemanager.archive.ArchiveUtils.isArchiveFile(file)) {
+                showArchiveOptionsFor = file
             } else {
                 handleFileOpen(file, context, state, focusManager, onAction)
             }
@@ -1791,7 +1829,7 @@ fun MainContent(
     LaunchedEffect(state.downloadedCloudFileToOpen) {
         state.downloadedCloudFileToOpen?.let { file ->
             onAction(AppAction.ClearDownloadedCloudFileToOpen)
-            if (file.name.lowercase().endsWith(".zip") || file.name.lowercase().endsWith(".rar") || file.name.lowercase().endsWith(".tar") || file.name.lowercase().endsWith(".gz") || file.name.lowercase().endsWith(".bz2") || file.name.lowercase().endsWith(".xz")) {
+            if (com.ripple.filemanager.archive.ArchiveUtils.isArchiveFile(file)) {
                 showArchiveOptionsFor = file
             } else {
                 handleFileOpen(file, context, state, focusManager, onAction)
@@ -2055,7 +2093,7 @@ fun MainContent(
                         } else if (file.type == "folder") {
                             if (state.query.isNotEmpty()) { focusManager.clearFocus(); onAction(com.ripple.filemanager.AppAction.SetQuery("")) }
                             onAction(com.ripple.filemanager.AppAction.SetLocation(file.path, file.name))
-                        } else if (file.name.lowercase().endsWith(".zip") || file.name.lowercase().endsWith(".rar") || file.name.lowercase().endsWith(".tar") || file.name.lowercase().endsWith(".gz") || file.name.lowercase().endsWith(".bz2") || file.name.lowercase().endsWith(".xz")) {
+                        } else if (com.ripple.filemanager.archive.ArchiveUtils.isArchiveFile(file)) {
                             if (isCloudPath(file.path)) {
                                 val cloudCacheDir = java.io.File(context.cacheDir, "cloud_cache")
                                 val safeName = file.name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
@@ -2265,6 +2303,11 @@ fun MainContent(
                                 onClose = { onAction(AppAction.SetShowVaultScreen(false)) }
                             )
                         } else if (currentTargetLocation == "home") {
+                            val defaultBrowse = android.os.Environment.getExternalStorageDirectory().absolutePath
+                            val targetStorageId = com.ripple.filemanager.getStorageIdForLocation(state.location, state.sdCardPath)
+                            val browseTarget = state.storageStates[targetStorageId]?.lastLocation
+                                ?: state.lastBrowseLocation.ifEmpty { defaultBrowse }
+
                             ExpressiveHomeScreen(
                                 state = state,
                                 onAction = onAction,
@@ -2274,9 +2317,16 @@ fun MainContent(
                                 onOpenNewConnection = { showNewCloudConnectionSheet = true },
                                 onFileClick = onFileClickCommon,
                                 onFileMenuClick = { file -> infoDialogFile = file },
+                                onSwipeToBrowse = {
+                                    com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched(browseTarget)
+                                    onAction(AppAction.SetLocation(browseTarget))
+                                },
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else if (currentTargetLocation == "send") {
+                            BackHandler(enabled = true) {
+                                onAction(AppAction.SetLocation("home"))
+                            }
                             ExpressiveSendScreen(
                                 state = state,
                                 onAction = onAction,
@@ -2680,11 +2730,20 @@ fun MainContent(
                     )
                 }
 
-                if ((!isModalScreen && !targetLocation.startsWith("category/")) || state.isSelectionMode || state.clipboardPaths.isNotEmpty()) {
+                if (((!isModalScreen && !targetLocation.startsWith("category/")) || state.isSelectionMode || state.clipboardPaths.isNotEmpty()) && viewingArchive == null) {
                     val selectedFileItems = remember(state.selectedFiles, state.files) {
                         state.files.filter { it.id in state.selectedFiles }
                     }
                     val isAllSelectedHidden = selectedFileItems.isNotEmpty() && selectedFileItems.all { it.name.startsWith(".") }
+                    val isBottomSheet = state.isSelectionMode || state.clipboardPaths.isNotEmpty()
+                    val pillModifier = if (isBottomSheet) {
+                        Modifier.fillMaxWidth()
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(bottom = if (state.pasteProgress != null || archiveProgress != null) 10.dp else 0.dp)
+                    }
                     UnifiedBottomPill(
                         state = state,
                         archiveProgress = archiveProgress,
@@ -2692,10 +2751,7 @@ fun MainContent(
                         onAction = onAction,
                         capturedTargetFolderName = capturedTargetFolderName,
                         onCaptureTargetFolder = { capturedTargetFolderName = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(bottom = 12.dp),
+                        modifier = pillModifier,
                         selectionModeContent = {
                             ExpressiveSelectionBar(
                                 selectedCount = state.selectedFiles.size,
@@ -2834,6 +2890,23 @@ fun MainContent(
                                         }
                                     }
                                 },
+                                onSendClick = {
+                                    haptics.tap()
+                                    if (state.showVaultScreen) {
+                                        onAction(AppAction.SetShowVaultScreen(false))
+                                    }
+                                    if (state.location == "send") {
+                                        onAction(AppAction.SetLocation("home"))
+                                    } else {
+                                        com.ripple.filemanager.ui.TabSwitchLatencyTracker.onActionDispatched("send")
+                                        if (state.isSelectionMode && state.selectedFiles.isNotEmpty()) {
+                                            val selectedItems = state.selectedFiles.mapNotNull { id -> state.files.find { it.id == id } }
+                                            onAction(AppAction.NearbyShareAction.StageFiles(selectedItems))
+                                            onAction(AppAction.ClearSelection)
+                                        }
+                                        onAction(AppAction.SetLocation("send"))
+                                    }
+                                },
                                 onFabClick = {
                                     haptics.tap()
                                     pillNavExpanded = true
@@ -2889,7 +2962,8 @@ fun MainContent(
                                     }
                                 },
                                 isAllHidden = isAllSelectedHidden,
-                                isFabExpanded = pillNavExpanded || showNewCloudConnectionSheet
+                                isFabExpanded = pillNavExpanded || showNewCloudConnectionSheet,
+                                iconShape = state.activeIconShape
                             )
 
                             if (pillNavExpanded) {
@@ -3213,15 +3287,17 @@ fun MainContent(
         }
 
         if (viewingArchive != null) {
-            com.ripple.filemanager.ui.ArchiveViewerDialog(
+            com.ripple.filemanager.ui.ArchiveBrowserScreen(
                 archiveFile = viewingArchive!!,
-                onDismiss = { viewingArchive = null },
-                onExtractRequest = { pwd ->
+                onClose = { viewingArchive = null },
+                onExtractRequest = { pwd, indices ->
                     pendingArchivePassword = pwd
+                    pendingSelectedIndices = indices
                     fileForSafExtraction = viewingArchive
                     safExtractLauncher.launch(null)
                     viewingArchive = null
-                }
+                },
+                modifier = Modifier.fillMaxSize()
             )
         }
         
@@ -3238,14 +3314,26 @@ fun MainContent(
                 archiveName = file.name,
                 itemCount = file.size,
                 isRar = isRar,
-                onExtractHere = {
+                onExtractHere = { pwd ->
+                    val sourceUri = if (file.path.startsWith("content://")) android.net.Uri.parse(file.path) else android.net.Uri.fromFile(File(file.path))
+                    val parentDir = File(file.path).parentFile ?: File(state.location)
+                    val destUri = android.net.Uri.fromFile(parentDir)
+                    archiveViewModel.extract(sourceUri, destUri, pwd, archiveName = file.name)
+                    showArchiveOptionsFor = null
+                },
+                onExtractToNewFolder = { pwd ->
                     val sourceUri = if (file.path.startsWith("content://")) android.net.Uri.parse(file.path) else android.net.Uri.fromFile(File(file.path))
                     if (file.path.startsWith("content://")) {
+                        pendingArchivePassword = pwd
                         fileForSafExtraction = file
                         safExtractLauncher.launch(null)
                     } else {
                         val parentDir = File(file.path).parentFile ?: File(state.location)
-                        val baseName = file.name.substringBeforeLast(".").ifEmpty { "Extracted" }
+                        val baseName = if (file.name.endsWith(".tar.gz", true) || file.name.endsWith(".tar.zst", true) || file.name.endsWith(".tar.xz", true) || file.name.endsWith(".tar.bz2", true)) {
+                            file.name.substringBeforeLast(".").substringBeforeLast(".")
+                        } else {
+                            file.name.substringBeforeLast(".")
+                        }.ifEmpty { "Extracted" }
                         var targetExtractDir = File(parentDir, baseName)
                         if (targetExtractDir.exists()) {
                             var counter = 1
@@ -3256,13 +3344,15 @@ fun MainContent(
                         }
                         targetExtractDir.mkdirs()
                         val destUri = android.net.Uri.fromFile(targetExtractDir)
-                        archiveViewModel.extract(sourceUri, destUri, archiveName = file.name)
+                        archiveViewModel.extract(sourceUri, destUri, pwd, archiveName = file.name)
                     }
                     showArchiveOptionsFor = null
                 },
-                onExtractTo = {
+                onExtractTo = { pwd ->
+                    pendingArchivePassword = pwd
                     fileForSafExtraction = file
                     safExtractLauncher.launch(null)
+                    showArchiveOptionsFor = null
                 },
                 onViewContents = {
                     viewingArchive = file
@@ -3331,7 +3421,7 @@ fun MainContent(
                         try {
                             val firstFile = filesToArchive.firstOrNull()?.path?.let { File(it) }
                             val parentDir = firstFile?.parentFile ?: File(state.location)
-                            val finalFileName = if (config.name.lowercase().endsWith(".zip") || config.name.lowercase().endsWith(".rar")) {
+                            val finalFileName = if (config.name.lowercase().endsWith(".${config.format.extension}")) {
                                 config.name
                             } else {
                                 "${config.name}.${config.format.extension}"
@@ -3350,7 +3440,8 @@ fun MainContent(
                                     archiveProgressPercent = pct
                                     archiveProgressCurrentFile = curFile
                                 },
-                                isCancelled = { archiveCancelFlag }
+                                isCancelled = { archiveCancelFlag },
+                                context = context
                             )
 
                             android.media.MediaScannerConnection.scanFile(

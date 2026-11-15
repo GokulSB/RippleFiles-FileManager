@@ -106,6 +106,7 @@ fun VaultScreen(
                         vaultRefreshTrigger++
                         haptics.tap()
                         Toast.makeText(context, "Added $count file(s) to Vault", Toast.LENGTH_SHORT).show()
+                        onAction(AppAction.Reload)
                     }
                 }
             }

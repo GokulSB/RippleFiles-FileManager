@@ -18,3 +18,4 @@ audit_results.txt
 android/.kotlin/
 android/*.py
 android/test_icons*.kt
+/temp_7z_zstd/

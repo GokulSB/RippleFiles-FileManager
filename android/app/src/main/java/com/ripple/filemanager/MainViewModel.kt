@@ -1,6 +1,7 @@
 package com.ripple.filemanager
 
 import android.app.Application
+import android.content.Intent
 import android.os.Build
 import android.Manifest
 import android.content.pm.PackageManager
@@ -268,6 +269,7 @@ data class AppState(
     val isLoading: Boolean = false,
     val viewingFile: FileItem? = null,
     val downloadedCloudFileToOpen: FileItem? = null,
+    val archiveFileToOpen: FileItem? = null,
     val storageFreeGb: Float = 0f,
     val storageTotalGb: Float = 0f,
     val sdCardStorageFreeGb: Float = 0f,
@@ -332,6 +334,7 @@ data class AppState(
     // File Organiser
     val orgDestDocs: String = "",
     val orgDestImages: String = "",
+    val orgDestArchives: String = "",
     val orgDestApks: String = "",
     val orgDestMusic: String = "",
     val orgDestVideos: String = "",
@@ -346,6 +349,7 @@ data class AppState(
     val viewerTextPdf: String = "In-app",
     val viewerMusic: String = "In-app",
     val viewerImage: String = "In-app",
+    val viewerVideo: String = "In-app",
     val pasteLoadingCount: Int? = null,
     val unlockedFileToOpen: FileItem? = null,
     val haptics: HapticsSettings = HapticsSettings(),
@@ -487,12 +491,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val downloadPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path
         val defaultDocs = "$downloadPath/Docs"
         val defaultImages = "$downloadPath/Images"
+        val defaultArchives = "$downloadPath/Archives"
         val defaultApks = "$downloadPath/Apk"
         val defaultMusic = "$downloadPath/Music"
         val defaultVideos = "$downloadPath/Videos"
         
         val savedDocs = prefs.getString("org_dest_docs", defaultDocs) ?: defaultDocs
         val savedImages = prefs.getString("org_dest_images", defaultImages) ?: defaultImages
+        val savedArchives = prefs.getString("org_dest_archives", defaultArchives) ?: defaultArchives
         val savedApks = prefs.getString("org_dest_apks", defaultApks) ?: defaultApks
         val savedMusic = prefs.getString("org_dest_music", defaultMusic) ?: defaultMusic
         val savedVideos = prefs.getString("org_dest_videos", defaultVideos) ?: defaultVideos
@@ -537,12 +543,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             recycleBinRetentionUnit = prefs.getString("recycle_bin_retention_unit", "Days") ?: "Days",
             orgDestDocs = savedDocs,
             orgDestImages = savedImages,
+            orgDestArchives = savedArchives,
             orgDestApks = savedApks,
             orgDestMusic = savedMusic,
             orgDestVideos = savedVideos,
             viewerTextPdf = prefs.getString("viewer_text_pdf", "In-app") ?: "In-app",
             viewerMusic = prefs.getString("viewer_music", "In-app") ?: "In-app",
             viewerImage = prefs.getString("viewer_image", "In-app") ?: "In-app",
+            viewerVideo = prefs.getString("viewer_video", "In-app") ?: "In-app",
             nearbyDeviceName = savedDeviceName,
             nearbyReceivePath = savedReceivePath,
             nearbyAskBeforeReceiving = savedAskBeforeReceiving,
@@ -722,7 +730,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val recent = repository.getFiles("recent")
-                val filtered = recent.filter { _state.value.showHiddenFiles || !it.isHidden }
+                val filtered = recent.filter {
+                    (_state.value.showHiddenFiles || !it.isHidden) &&
+                    !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(getApplication(), it.path)
+                }
                 _state.update { it.copy(recentFiles = filtered.toImmutableList()) }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -731,11 +742,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logRecentAction(path: String, action: String) {
+        if (com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(getApplication(), path)) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 repository.logRecentAction(path, action)
                 val recent = repository.getFiles("recent")
-                val filtered = recent.filter { _state.value.showHiddenFiles || !it.isHidden }
+                val filtered = recent.filter {
+                    (_state.value.showHiddenFiles || !it.isHidden) &&
+                    !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(getApplication(), it.path)
+                }
                 _state.update { it.copy(recentFiles = filtered.toImmutableList()) }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -1564,7 +1579,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteSelectedCleanerFiles() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val selected = _state.value.cleanerSelectedFiles
             val currentCategory = _state.value.currentCleanerCategory?.lowercase(java.util.Locale.getDefault())
             val data = _state.value.cleanerData ?: return@launch
@@ -1662,7 +1677,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteSelectedFiles() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val selected = _state.value.selectedFiles
             val allFiles = (_state.value.files + (_state.value.cleanerData?.let { cd ->
                 cd.documents.files + cd.images.files + cd.videos.files +
@@ -1749,6 +1764,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val key = when(category) {
             "Docs" -> "org_dest_docs"
             "Images" -> "org_dest_images"
+            "Archives" -> "org_dest_archives"
             "Apks" -> "org_dest_apks"
             "Music" -> "org_dest_music"
             "Videos" -> "org_dest_videos"
@@ -1759,6 +1775,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             when(category) {
                 "Docs" -> it.copy(orgDestDocs = path)
                 "Images" -> it.copy(orgDestImages = path)
+                "Archives" -> it.copy(orgDestArchives = path)
                 "Apks" -> it.copy(orgDestApks = path)
                 "Music" -> it.copy(orgDestMusic = path)
                 "Videos" -> it.copy(orgDestVideos = path)
@@ -1772,6 +1789,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "Text/PDF" -> "viewer_text_pdf"
             "Music" -> "viewer_music"
             "Image" -> "viewer_image"
+            "Video" -> "viewer_video"
             else -> return
         }
         prefs.edit().putString(key, preference).apply()
@@ -1780,6 +1798,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 "Text/PDF" -> it.copy(viewerTextPdf = preference)
                 "Music" -> it.copy(viewerMusic = preference)
                 "Image" -> it.copy(viewerImage = preference)
+                "Video" -> it.copy(viewerVideo = preference)
                 else -> it
             }
         }
@@ -1787,9 +1806,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun organiseDownloads() {
         val currentPath = _state.value.location
-        if (!currentPath.lowercase(java.util.Locale.getDefault()).endsWith("download")) return
+        val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val isDownloadLocation = currentPath.lowercase(java.util.Locale.getDefault()).endsWith("download") ||
+                currentPath.equals(downloadDir.path, ignoreCase = true)
 
-        val filesToOrganise = _state.value.files.filter { !it.isEmptyFolder && it.type != "folder" }
+        val filesToOrganise = if (isDownloadLocation) {
+            _state.value.files.filter { !it.isEmptyFolder && it.type != "folder" }
+        } else {
+            val list = downloadDir.listFiles()?.filter { it.isFile && !it.name.startsWith(".") } ?: emptyList()
+            val dateFormat = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+            list.map { f ->
+                val ext = f.extension.lowercase(java.util.Locale.getDefault())
+                val type = when {
+                    ext in setOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz", "zst", "tgz", "tbz2", "txz", "iso", "cab", "lz4", "lz5", "lzh", "lha", "z", "taz") -> "archive"
+                    ext in setOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "html", "htm", "csv") -> "doc"
+                    ext in setOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg") -> "image"
+                    ext in setOf("apk", "apks", "apkm", "xapk") -> "apk"
+                    ext in setOf("mp3", "wav", "ogg", "flac", "m4a", "opus", "aac", "ape", "wma", "mpc", "wv", "tta", "dsf", "dff", "dts", "ac3", "mka") -> "audio"
+                    ext in setOf("mp4", "mkv", "avi", "mov", "webm", "wmv", "flv", "3gp", "ts", "m2ts", "ogv", "vob", "mpg", "mpeg") -> "video"
+                    else -> "file"
+                }
+                FileItem(
+                    id = f.hashCode(),
+                    path = f.absolutePath,
+                    name = f.name,
+                    type = type,
+                    kind = "file",
+                    size = android.text.format.Formatter.formatFileSize(getApplication(), f.length()),
+                    changed = dateFormat.format(java.util.Date(f.lastModified())),
+                    owner = "",
+                    sizeBytes = f.length(),
+                    lastModified = f.lastModified()
+                )
+            }
+        }
+
         if (filesToOrganise.isEmpty()) {
             viewModelScope.launch { _snackbarMessage.emit("No files to organise") }
             return
@@ -1812,14 +1863,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(organisePendingFiles = emptyList(), organiseProgress = 0f) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val docsDest = _state.value.orgDestDocs
-            val imagesDest = _state.value.orgDestImages
-            val apksDest = _state.value.orgDestApks
-            val musicDest = _state.value.orgDestMusic
-            val videosDest = _state.value.orgDestVideos
+            val downloadPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path
+            val docsDest = _state.value.orgDestDocs.ifBlank { "$downloadPath/Docs" }
+            val imagesDest = _state.value.orgDestImages.ifBlank { "$downloadPath/Images" }
+            val archivesDest = _state.value.orgDestArchives.ifBlank { "$downloadPath/Archives" }
+            val apksDest = _state.value.orgDestApks.ifBlank { "$downloadPath/Apk" }
+            val musicDest = _state.value.orgDestMusic.ifBlank { "$downloadPath/Music" }
+            val videosDest = _state.value.orgDestVideos.ifBlank { "$downloadPath/Videos" }
 
             val docsFiles = mutableListOf<String>()
             val imagesFiles = mutableListOf<String>()
+            val archivesFiles = mutableListOf<String>()
             val apksFiles = mutableListOf<String>()
             val musicFiles = mutableListOf<String>()
             val videosFiles = mutableListOf<String>()
@@ -1827,15 +1881,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             for (file in filesToOrganise) {
                 val ext = file.name.substringAfterLast('.', "").lowercase(java.util.Locale.getDefault())
                 when (ext) {
-                    "pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "html", "htm" -> docsFiles.add(file.path)
+                    "pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "html", "htm", "csv" -> docsFiles.add(file.path)
                     "jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg" -> imagesFiles.add(file.path)
+                    "zip", "rar", "7z", "tar", "gz", "bz2", "xz", "zst", "tgz", "tbz2", "txz", "iso", "cab", "lz4", "lz5", "lzh", "lha", "z", "taz" -> archivesFiles.add(file.path)
                     "apk", "apks", "apkm", "xapk" -> apksFiles.add(file.path)
                     "mp3", "wav", "ogg", "flac", "m4a", "opus", "aac" -> musicFiles.add(file.path)
                     "mp4", "mkv", "avi", "mov", "webm", "wmv", "flv" -> videosFiles.add(file.path)
                 }
             }
 
-            val totalOps = docsFiles.size + imagesFiles.size + apksFiles.size + musicFiles.size + videosFiles.size
+            val totalOps = docsFiles.size + imagesFiles.size + archivesFiles.size + apksFiles.size + musicFiles.size + videosFiles.size
             if (totalOps == 0) {
                 _state.update { it.copy(organiseProgress = null) }
                 _snackbarMessage.emit("No matching files found to organise")
@@ -1845,10 +1900,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             var completedOps = 0
 
             suspend fun moveGroup(paths: List<String>, dest: String) {
-                if (paths.isEmpty()) return
-                java.io.File(dest).mkdirs()
+                val eligiblePaths = paths.filter {
+                    try {
+                        val parent = java.io.File(it).parentFile
+                        parent != null && parent.canonicalPath != java.io.File(dest).canonicalPath
+                    } catch (_: Exception) {
+                        true
+                    }
+                }
+                if (eligiblePaths.isEmpty()) return
+                val destDir = java.io.File(dest)
+                if (!destDir.exists()) {
+                    destDir.mkdirs()
+                }
                 repository.moveFiles(
-                    sourcePaths = paths,
+                    sourcePaths = eligiblePaths,
                     destDir = dest,
                     onProgress = { /* We can ignore individual progress for simplicity and just increment completedOps */ },
                     checkPause = {}
@@ -1860,6 +1926,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 moveGroup(docsFiles, docsDest)
                 moveGroup(imagesFiles, imagesDest)
+                moveGroup(archivesFiles, archivesDest)
                 moveGroup(apksFiles, apksDest)
                 moveGroup(musicFiles, musicDest)
                 moveGroup(videosFiles, videosDest)
@@ -2552,7 +2619,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(viewingFile = null) }
     }
 
+    fun openArchiveFile(file: FileItem) {
+        _state.update { it.copy(archiveFileToOpen = file) }
+    }
+
+    fun clearArchiveFileToOpen() {
+        _state.update { it.copy(archiveFileToOpen = null) }
+    }
+
     fun viewFile(file: FileItem) {
+        if (com.ripple.filemanager.archive.ArchiveUtils.isArchiveFile(file)) {
+            openArchiveFile(file)
+            return
+        }
         if (isCloudPath(file.path)) {
             val cloudCacheDir = File(getApplication<Application>().cacheDir, "cloud_cache")
             val safeName = file.name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
@@ -2803,9 +2882,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun openFileItemDirectly(file: FileItem, mimeType: String) {
         withContext(Dispatchers.Main) {
+            val lowerMime = mimeType.lowercase(java.util.Locale.getDefault())
+            val isArchiveMime = lowerMime.contains("zip") || lowerMime.contains("tar") || lowerMime.contains("7z") ||
+                    lowerMime.contains("rar") || lowerMime.contains("compressed") || lowerMime.contains("archive") ||
+                    lowerMime == "application/x-iso9660-image" || lowerMime == "application/zstd" || lowerMime == "application/x-7z-compressed"
             if (file.type == "audio" || mimeType.startsWith("audio/")) {
                 playAudio(file)
                 setShowFullScreenPlayer(true)
+            } else if (file.type == "video" || mimeType.startsWith("video/") || file.name.substringAfterLast('.', "").lowercase(java.util.Locale.getDefault()) in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "3gp", "ts", "m2ts", "ogv", "vob", "mpg", "mpeg")) {
+                if (_state.value.viewerVideo.equals("External", ignoreCase = true) || _state.value.viewerVideo.equals("Device default", ignoreCase = true)) {
+                    val context = getApplication<Application>()
+                    com.ripple.filemanager.ui.openFileInExternalApp(context, file, "video/*")
+                } else {
+                    val context = getApplication<Application>()
+                    val intent = Intent(context, com.ripple.filemanager.video.VideoPlayerActivity::class.java).apply {
+                        putExtra(com.ripple.filemanager.video.VideoPlayerActivity.EXTRA_VIDEO_PATH, file.path)
+                        putExtra(com.ripple.filemanager.video.VideoPlayerActivity.EXTRA_VIDEO_TITLE, file.name)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }
+            } else if (com.ripple.filemanager.archive.ArchiveUtils.isArchiveFile(file) || isArchiveMime) {
+                openArchiveFile(file)
             } else {
                 viewFile(file)
             }
@@ -2816,9 +2914,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val ext = file.extension.lowercase(java.util.Locale.getDefault())
         val typeStr = when {
             ext in setOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic") -> "image"
-            ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm") -> "video"
-            ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac") -> "audio"
-            ext in setOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz") -> "archive"
+            ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "3gp", "ts", "m2ts", "ogv", "vob", "mpg", "mpeg") -> "video"
+            ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac", "opus", "ape", "wma", "mpc", "wv", "tta", "dsf", "dff", "dts", "ac3", "mka") -> "audio"
+            com.ripple.filemanager.archive.ArchiveUtils.isArchiveExtension(ext) -> "archive"
             ext in setOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "csv") -> "doc"
             ext in setOf("apk", "xapk", "aab") -> "apk"
             else -> "file"
@@ -3008,6 +3106,127 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var exoPlayer: androidx.media3.exoplayer.ExoPlayer? = null
     private var musicJob: kotlinx.coroutines.Job? = null
     private var closePlayerJob: kotlinx.coroutines.Job? = null
+    private var vlcLibVlc: org.videolan.libvlc.LibVLC? = null
+    private var vlcAudioPlayer: org.videolan.libvlc.MediaPlayer? = null
+    private var isVlcAudioActive = false
+    private val exoticAudioExtensions = setOf(
+        "ape", "wma", "mpc", "wv", "tta", "dsd", "dsf", "dff", "dts", "ac3", "mka", "tak", "ofr", "ofs"
+    )
+
+    private fun playWithVlcAudio(file: FileItem) {
+        isVlcAudioActive = true
+        try {
+            exoPlayer?.pause()
+        } catch (_: Exception) {}
+
+        if (vlcLibVlc == null) {
+            val options = arrayListOf("--audio-time-stretch", "--no-video")
+            vlcLibVlc = org.videolan.libvlc.LibVLC(getApplication(), options)
+        }
+        if (vlcAudioPlayer == null) {
+            vlcAudioPlayer = org.videolan.libvlc.MediaPlayer(vlcLibVlc!!).apply {
+                setEventListener { event ->
+                    when (event.type) {
+                        org.videolan.libvlc.MediaPlayer.Event.Playing -> {
+                            _state.update { it.copy(isAudioPlaying = true) }
+                            closePlayerJob?.cancel()
+                            val len = length
+                            if (len > 0L) {
+                                _state.update { it.copy(audioDuration = len) }
+                            }
+                        }
+                        org.videolan.libvlc.MediaPlayer.Event.Paused -> {
+                            _state.update { it.copy(isAudioPlaying = false) }
+                            closePlayerJob?.cancel()
+                            val timeoutSec = _state.value.miniPlayerAutoCloseSeconds
+                            if (timeoutSec > 0) {
+                                closePlayerJob = viewModelScope.launch {
+                                    kotlinx.coroutines.delay(timeoutSec * 1000L)
+                                    stopAudio()
+                                }
+                            }
+                        }
+                        org.videolan.libvlc.MediaPlayer.Event.EndReached -> {
+                            _state.update { it.copy(isAudioPlaying = false) }
+                            _audioPosition.value = 0L
+                        }
+                        org.videolan.libvlc.MediaPlayer.Event.TimeChanged -> {
+                            _audioPosition.value = event.timeChanged
+                        }
+                        org.videolan.libvlc.MediaPlayer.Event.LengthChanged -> {
+                            if (event.lengthChanged > 0L) {
+                                _state.update { it.copy(audioDuration = event.lengthChanged) }
+                            }
+                        }
+                        org.videolan.libvlc.MediaPlayer.Event.EncounteredError -> {
+                            _state.update { it.copy(isAudioPlaying = false) }
+                            showToast("Unable to play exotic audio format")
+                        }
+                    }
+                }
+            }
+        }
+
+        val uri = if (file.path.startsWith("drive_id:") || file.path.startsWith("content://")) {
+            android.net.Uri.parse(file.path)
+        } else {
+            android.net.Uri.fromFile(java.io.File(file.path))
+        }
+
+        val media = if (uri.scheme == "file" && uri.path != null) {
+            org.videolan.libvlc.Media(vlcLibVlc!!, uri.path!!)
+        } else if (uri.scheme == "content") {
+            try {
+                val pfd = getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")
+                if (pfd != null) {
+                    org.videolan.libvlc.Media(vlcLibVlc!!, pfd.fileDescriptor)
+                } else {
+                    org.videolan.libvlc.Media(vlcLibVlc!!, uri)
+                }
+            } catch (_: Exception) {
+                org.videolan.libvlc.Media(vlcLibVlc!!, uri)
+            }
+        } else {
+            org.videolan.libvlc.Media(vlcLibVlc!!, uri)
+        }
+
+        vlcAudioPlayer?.media = media
+        vlcAudioPlayer?.play()
+
+        _state.update {
+            it.copy(
+                currentAudioFile = file,
+                audioTitle = file.name,
+                audioArtist = "libVLC Audio Engine",
+                audioArtworkData = null
+            )
+        }
+
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val retriever = android.media.MediaMetadataRetriever()
+                if (file.path.startsWith("content://")) {
+                    retriever.setDataSource(getApplication(), uri)
+                } else if (!file.path.startsWith("drive_id:")) {
+                    retriever.setDataSource(file.path)
+                } else {
+                    return@launch
+                }
+                val title = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)
+                val artist = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                val art = retriever.embeddedPicture
+                retriever.release()
+
+                _state.update {
+                    it.copy(
+                        audioTitle = title ?: it.audioTitle,
+                        audioArtist = artist ?: it.audioArtist,
+                        audioArtworkData = art ?: it.audioArtworkData
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+    }
     
     fun playAudio(file: FileItem) {
         if (isCloudPath(file.path)) {
@@ -3021,6 +3240,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             downloadAndOpenFile(file)
             return
         }
+
+        val ext = file.name.substringAfterLast('.', "").lowercase()
+        if (ext in exoticAudioExtensions) {
+            playWithVlcAudio(file)
+            return
+        }
+
+        if (isVlcAudioActive) {
+            vlcAudioPlayer?.stop()
+            isVlcAudioActive = false
+        }
+
         if (exoPlayer == null) {
             exoPlayer = androidx.media3.exoplayer.ExoPlayer.Builder(getApplication()).build().apply {
                 addListener(object : androidx.media3.common.Player.Listener {
@@ -3048,6 +3279,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             seekTo(0)
                         }
                     }
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        android.util.Log.w("MainViewModel", "ExoPlayer failed, falling back to libVLC audio: ${error.message}")
+                        playWithVlcAudio(file)
+                    }
                     override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
                         _state.update {
                             it.copy(
@@ -3062,7 +3297,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             musicJob = viewModelScope.launch {
                 while(true) {
                     val p = exoPlayer
-                    if (p != null && p.isPlaying) {
+                    if (!isVlcAudioActive && p != null && p.isPlaying) {
                         _audioPosition.value = p.currentPosition
                     }
                     kotlinx.coroutines.delay(500)
@@ -3121,17 +3356,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     fun toggleAudioPlayback() {
-        exoPlayer?.let {
-            if (it.isPlaying) it.pause() else it.play()
+        if (isVlcAudioActive) {
+            vlcAudioPlayer?.let {
+                if (it.isPlaying) it.pause() else it.play()
+            }
+        } else {
+            exoPlayer?.let {
+                if (it.isPlaying) it.pause() else it.play()
+            }
         }
     }
     
     fun seekAudio(position: Long) {
-        exoPlayer?.seekTo(position)
-        _audioPosition.value = position
+        if (isVlcAudioActive) {
+            vlcAudioPlayer?.time = position
+            _audioPosition.value = position
+        } else {
+            exoPlayer?.seekTo(position)
+            _audioPosition.value = position
+        }
     }
     
     fun stopAudio() {
+        if (isVlcAudioActive) {
+            vlcAudioPlayer?.stop()
+            isVlcAudioActive = false
+        }
         exoPlayer?.stop()
         exoPlayer?.clearMediaItems()
         _audioPosition.value = 0L
@@ -3165,7 +3415,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _state.value.currentAudioFile ?: return
         val audioFiles = _state.value.files.filter { 
             val ext = it.name.substringAfterLast('.', "").lowercase()
-            ext in listOf("mp3", "opus", "wav", "ogg", "flac", "m4a", "aac")
+            ext in listOf("mp3", "opus", "wav", "ogg", "flac", "m4a", "aac", "ape", "wma", "mpc", "wv", "tta", "dsf", "dff", "dts", "ac3", "mka")
         }
         val idx = audioFiles.indexOfFirst { it.id == current.id }
         if (idx != -1 && idx < audioFiles.size - 1) {
@@ -3179,7 +3429,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _state.value.currentAudioFile ?: return
         val audioFiles = _state.value.files.filter { 
             val ext = it.name.substringAfterLast('.', "").lowercase()
-            ext in listOf("mp3", "opus", "wav", "ogg", "flac", "m4a", "aac")
+            ext in listOf("mp3", "opus", "wav", "ogg", "flac", "m4a", "aac", "ape", "wma", "mpc", "wv", "tta", "dsf", "dff", "dts", "ac3", "mka")
         }
         val idx = audioFiles.indexOfFirst { it.id == current.id }
         if (idx > 0) {
@@ -3681,6 +3931,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         musicJob?.cancel()
         exoPlayer?.release()
         exoPlayer = null
+        try {
+            vlcAudioPlayer?.stop()
+            vlcAudioPlayer?.release()
+            vlcAudioPlayer = null
+            vlcLibVlc?.release()
+            vlcLibVlc = null
+        } catch (_: Exception) {}
         ftpProvider.disconnect()
         sftpProvider.disconnect()
     }

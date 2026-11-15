@@ -948,8 +948,8 @@ val FlowerShape = GenericShape { size, _ ->
     close()
 }
 
-fun getCustomShape(type: com.ripple.filemanager.IconShapeType): androidx.compose.ui.graphics.Shape {
-    return com.ripple.filemanager.ui.expressive.IconShapes.forType(type)
+fun getCustomShape(type: com.ripple.filemanager.IconShapeType, cornerRoundness: Float = 0.5f): androidx.compose.ui.graphics.Shape {
+    return com.ripple.filemanager.ui.expressive.IconShapes.forType(type, cornerRoundness = cornerRoundness)
 }
 
 @Composable
@@ -964,7 +964,8 @@ fun getShapeData(type: String, name: String, iconShape: com.ripple.filemanager.I
         else -> BlobShape
     }
     
-    val finalShape = getCustomShape(iconShape)
+    val cornerRoundness = com.ripple.filemanager.ui.expressive.LocalCornerRoundness.current
+    val finalShape = getCustomShape(iconShape, cornerRoundness)
 
     return when (type) {
         "folder" -> {

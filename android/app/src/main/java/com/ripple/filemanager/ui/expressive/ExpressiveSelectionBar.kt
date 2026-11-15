@@ -102,7 +102,7 @@ fun ExpressiveSelectionBar(
             .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp))
             .animateContentSize(animationSpec = tween(220, easing = FastOutSlowInEasing))
             .navigationBarsPadding()
-            .padding(top = 10.dp, bottom = if (isExpanded) 16.dp else 10.dp),
+            .padding(top = 10.dp, bottom = if (isExpanded) 12.dp else 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Centered grab handle (toggles expansion on tap)

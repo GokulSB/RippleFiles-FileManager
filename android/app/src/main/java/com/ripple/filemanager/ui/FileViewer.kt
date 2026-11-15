@@ -71,10 +71,15 @@ fun FileViewerScreen(fileItem: FileItem, onClose: () -> Unit, cornerRoundness: F
         ) {
             val file = File(fileItem.path)
             val isDocx = fileItem.name.endsWith(".docx", ignoreCase = true) || fileItem.name.endsWith(".doc", ignoreCase = true)
-            if (fileItem.name.endsWith(".pdf", ignoreCase = true)) {
+            if (com.ripple.filemanager.archive.ArchiveUtils.isArchiveFile(fileItem)) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "Archive files cannot be viewed as text.",
+                        color = com.ripple.filemanager.ui.expressive.ExpressiveTheme.colors.muted
+                    )
+                }
+            } else if (fileItem.name.endsWith(".pdf", ignoreCase = true)) {
                 PdfViewer(file, cornerRoundness)
-            } else if (fileItem.name.endsWith(".zip", ignoreCase = true)) {
-                ZipViewer(file)
             } else {
                 TextViewer(file, isDocx = isDocx)
             }

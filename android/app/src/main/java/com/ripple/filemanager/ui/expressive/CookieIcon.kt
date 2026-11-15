@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -33,7 +34,8 @@ fun CookieIcon(
     lobes: Int = 8,
     shape: Shape? = null
 ) {
-    val activeShape = shape ?: rememberIconShape(lobes = lobes)
+    val cornerRoundness = LocalCornerRoundness.current
+    val activeShape = shape ?: rememberIconShape(lobes = lobes, cornerRoundness = cornerRoundness)
     Box(
         modifier = modifier
             .size(size)
@@ -51,7 +53,8 @@ fun CookieIcon(
 }
 
 /**
- * Clickable icon button styled with the active icon shape and accessibility description.
+ * Clickable icon button styled with a container whose corner roundness dynamically
+ * responds to [LocalCornerRoundness] and accessibility description.
  */
 @Composable
 fun CookieIconButton(
@@ -66,7 +69,12 @@ fun CookieIconButton(
     lobes: Int = 8,
     shape: Shape? = null
 ) {
-    val activeShape = shape ?: rememberIconShape(lobes = lobes)
+    val cornerRoundness = LocalCornerRoundness.current
+    val maxRadius = size.value / 2f
+    val baseRadius = size.value / 3.2f
+    val dynamicRadius = (baseRadius * (cornerRoundness * 2f)).coerceIn(0f, maxRadius)
+    val dynamicShape = RoundedCornerShape(dynamicRadius.dp)
+    val activeShape = shape ?: dynamicShape
     val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = modifier

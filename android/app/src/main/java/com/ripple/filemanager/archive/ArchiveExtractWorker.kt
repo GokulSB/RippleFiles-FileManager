@@ -47,6 +47,7 @@ class ArchiveExtractWorker(
         val destStr = inputData.getString("dest") ?: return@withContext Result.failure()
         val password = inputData.getString("password")
         val archiveName = inputData.getString("archiveName") ?: "Archive"
+        val selectedIndices = inputData.getIntArray("selectedIndices")?.toList()
 
         val sourceUri = Uri.parse(sourceStr)
         val destUri = Uri.parse(destStr)
@@ -79,7 +80,7 @@ class ArchiveExtractWorker(
         try {
             var finalResult: Result = Result.success()
 
-            handler.extract(sourceUri, targetDestDir, password).collect { progress ->
+            handler.extract(sourceUri, targetDestDir, password, selectedIndices).collect { progress ->
                 when (progress) {
                     is ArchiveProgress.Running -> {
                         val percent = if (progress.filesTotal > 0) {
@@ -146,9 +147,12 @@ class ArchiveExtractWorker(
         } finally {
             // Clean up partially written entries if cancelled
             if (isStopped) {
-                if (isSaf) {
-                    try { targetDestDir.path?.let { File(it).deleteRecursively() } } catch (_: Exception) {}
-                }
+                try {
+                    val path = targetDestDir.path
+                    if (path != null) {
+                        File(path).listFiles()?.forEach { it.deleteRecursively() }
+                    }
+                } catch (_: Exception) {}
             }
         }
     }

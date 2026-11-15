@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripple.filemanager.R
+import com.ripple.filemanager.IconShapeType
 
 import com.ripple.filemanager.ui.theme.OutfitFontFamily
 import com.ripple.filemanager.ui.theme.LocalAppFont
@@ -41,7 +43,9 @@ enum class ExpressiveTab(val id: String, val label: String, val icon: ImageVecto
 }
 
 /**
- * Floating navigation pill with cookie FAB to the right.
+ * Expressive navigation shell.
+ * The bottom navigation bar is removed entirely.
+ * Only the FAB button is kept, with a small send FAB stacked directly on top.
  * Morphs into multi-select action bar when selectionMode is active.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -66,7 +70,9 @@ fun ExpressiveNavShell(
     onToggleHide: (() -> Unit)? = null,
     isAllHidden: Boolean = false,
     isVaultVisible: Boolean = false,
-    onFabLongClick: (() -> Unit)? = null
+    onFabLongClick: (() -> Unit)? = null,
+    onSendClick: (() -> Unit)? = null,
+    iconShape: IconShapeType = LocalIconShapeType.current
 ) {
     if (isSelectionMode) {
         ExpressiveSelectionBar(
@@ -87,177 +93,121 @@ fun ExpressiveNavShell(
     } else {
         val colors = ExpressiveTheme.colors
         val reduced = ExpressiveMotion.isReducedMotion()
-        var selectedTab by remember { mutableStateOf(activeTab) }
-        LaunchedEffect(activeTab) {
-            selectedTab = activeTab
-        }
 
-        val visibleTabs = remember(isVaultVisible) {
-            if (isVaultVisible) {
-                listOf(ExpressiveTab.HOME, ExpressiveTab.BROWSE, ExpressiveTab.VAULT, ExpressiveTab.SEND)
-            } else {
-                listOf(ExpressiveTab.HOME, ExpressiveTab.BROWSE, ExpressiveTab.SEND)
-            }
+        // ── Main Primary FAB (+) ──
+        val roundness = LocalCornerRoundness.current
+        val fabShape = rememberIconShape(type = iconShape, lobes = 10, amplitude = 0.08f, cornerRoundness = roundness)
+        val fabMaxR = when (iconShape) {
+            IconShapeType.SQUARE -> 8f
+            IconShapeType.ROUNDED_SQUARE -> 24f
+            IconShapeType.IOS -> 26f
+            IconShapeType.ONE_UI -> 28f
+            IconShapeType.CIRCLE, IconShapeType.COOKIE, IconShapeType.AUTO -> 30f
         }
+        val fabShadowShape = RoundedCornerShape((fabMaxR * roundness.coerceIn(0f, 1f)).dp)
+        val fabInteractionSource = remember { MutableInteractionSource() }
+        val fabRotation by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (isFabExpanded) 45f else 0f,
+            animationSpec = if (reduced) androidx.compose.animation.core.snap() else ExpressiveMotion.SpringSpec,
+            label = "fab_rotation"
+        )
+
+        // ── Small Send FAB on Top ──
+        val sendShape = rememberIconShape(type = iconShape, lobes = 8, amplitude = 0.08f, cornerRoundness = roundness)
+        val sendMaxR = when (iconShape) {
+            IconShapeType.SQUARE -> 8f
+            IconShapeType.ROUNDED_SQUARE -> 18f
+            IconShapeType.IOS -> 20f
+            IconShapeType.ONE_UI -> 22f
+            IconShapeType.CIRCLE, IconShapeType.COOKIE, IconShapeType.AUTO -> 22f
+        }
+        val sendShadowShape = RoundedCornerShape((sendMaxR * roundness.coerceIn(0f, 1f)).dp)
+        val sendInteractionSource = remember { MutableInteractionSource() }
+        val isSendActive = activeTab == ExpressiveTab.SEND
+        val sendBg = if (isSendActive) colors.accent else colors.card
+        val sendIconTint = if (isSendActive) colors.ink else colors.accent
 
         Box(
             modifier = modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.BottomEnd
         ) {
-            Row(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth(if (isVaultVisible) 0.88f else 0.75f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                    .padding(end = 16.dp, bottom = 0.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Floating pill with Home, Browse, (Vault), Send
-                Row(
+                // Small FAB-like button on top with Send icon
+                Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .height(60.dp)
+                        .size(44.dp)
+                        .pressScale(pressedScale = 0.92f, interactionSource = sendInteractionSource)
                         .shadow(
-                            elevation = 8.dp,
-                            shape = RoundedCornerShape(30.dp),
+                            elevation = 4.dp,
+                            shape = sendShadowShape,
+                            ambientColor = Color.Transparent,
+                            spotColor = colors.shadow.copy(alpha = 0.20f)
+                        )
+                        .clip(sendShape)
+                        .background(sendBg)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSendActive) Color.Transparent else colors.line.copy(alpha = colors.lineAlpha),
+                            shape = sendShape
+                        )
+                        .clickable(
+                            interactionSource = sendInteractionSource,
+                            indication = null,
+                            onClick = {
+                                if (onSendClick != null) {
+                                    onSendClick()
+                                } else {
+                                    if (isSendActive) {
+                                        onTabSelected(ExpressiveTab.HOME)
+                                    } else {
+                                        onTabSelected(ExpressiveTab.SEND)
+                                    }
+                                }
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send & Receive",
+                        tint = sendIconTint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Primary Creation FAB on bottom
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .pressScale(pressedScale = 0.94f, interactionSource = fabInteractionSource)
+                        .shadow(
+                            elevation = 6.dp,
+                            shape = fabShadowShape,
                             ambientColor = Color.Transparent,
                             spotColor = colors.shadow.copy(alpha = 0.25f)
                         )
-                        .clip(RoundedCornerShape(30.dp))
-                        .background(colors.insetCard)
-                        .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), RoundedCornerShape(30.dp))
-                        .padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                        .clip(fabShape)
+                        .background(colors.accent)
+                        .combinedClickable(
+                            interactionSource = fabInteractionSource,
+                            indication = null,
+                            onClick = onFabClick,
+                            onLongClick = onFabLongClick
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    visibleTabs.forEach { tab ->
-                        val isActive = tab == selectedTab
-                        ExpressiveNavTabItem(
-                            tab = tab,
-                            isActive = isActive,
-                            onClick = {
-                                com.ripple.filemanager.ui.TabSwitchLatencyTracker.onTabTap(tab.name)
-                                if (selectedTab != tab) {
-                                    selectedTab = tab
-                                }
-                                onTabSelected(tab)
-                            }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                // Cookie/Icon-shape FAB (60dp matching pill height, accent, "+")
-            val fabShape = rememberIconShape(lobes = 10, amplitude = 0.08f)
-            val fabInteractionSource = remember { MutableInteractionSource() }
-            val fabRotation by androidx.compose.animation.core.animateFloatAsState(
-                targetValue = if (isFabExpanded) 45f else 0f,
-                animationSpec = if (reduced) androidx.compose.animation.core.snap() else ExpressiveMotion.SpringSpec,
-                label = "fab_rotation"
-            )
-
-            Box(
-                modifier = Modifier
-                    .size(60.dp)
-                    .pressScale(pressedScale = 0.94f, interactionSource = fabInteractionSource)
-                    .shadow(
-                        elevation = 6.dp,
-                        shape = CircleShape,
-                        ambientColor = Color.Transparent,
-                        spotColor = colors.shadow.copy(alpha = 0.25f)
-                    )
-                    .clip(fabShape)
-                    .background(colors.accent)
-                    .combinedClickable(
-                        interactionSource = fabInteractionSource,
-                        indication = null,
-                        onClick = onFabClick,
-                        onLongClick = onFabLongClick
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = if (isFabExpanded) "Close" else "Create",
-                    tint = colors.ink,
-                    modifier = Modifier
-                        .size(26.dp)
-                        .graphicsLayer { rotationZ = fabRotation }
-                )
-            }
-        }
-    }
-}
-}
-
-@Composable
-private fun ExpressiveNavTabItem(
-    tab: ExpressiveTab,
-    isActive: Boolean,
-    onClick: () -> Unit
-) {
-    val colors = ExpressiveTheme.colors
-    val reduced = ExpressiveMotion.isReducedMotion()
-    val interactionSource = remember { MutableInteractionSource() }
-
-    val tabBgColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isActive) colors.card else Color.Transparent,
-        animationSpec = if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-        label = "tab_bg_color"
-    )
-
-    val iconTint by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isActive) colors.text else colors.muted,
-        animationSpec = if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-        label = "tab_icon_tint"
-    )
-
-    val tabLabel = when (tab) {
-        ExpressiveTab.HOME -> stringResource(R.string.nav_home)
-        ExpressiveTab.BROWSE -> stringResource(R.string.nav_browse)
-        ExpressiveTab.VAULT -> "Vault"
-        ExpressiveTab.SEND -> stringResource(R.string.nav_send)
-    }
-
-    Box(
-        modifier = Modifier
-            .height(46.dp)
-            .clip(RoundedCornerShape(23.dp))
-            .background(tabBgColor)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = if (isActive) 12.dp else 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = tab.icon,
-                contentDescription = tabLabel,
-                tint = iconTint,
-                modifier = Modifier.size(22.dp)
-            )
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isActive,
-                enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(140)) +
-                        androidx.compose.animation.expandHorizontally(animationSpec = androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)),
-                exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(80)) +
-                       androidx.compose.animation.shrinkHorizontally(animationSpec = androidx.compose.animation.core.tween(120, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = tabLabel,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        fontFamily = LocalAppFont.current,
-                        color = colors.text,
-                        maxLines = 1,
-                        softWrap = false
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = if (isFabExpanded) "Close" else "Create",
+                        tint = colors.ink,
+                        modifier = Modifier
+                            .size(26.dp)
+                            .graphicsLayer { rotationZ = fabRotation }
                     )
                 }
             }

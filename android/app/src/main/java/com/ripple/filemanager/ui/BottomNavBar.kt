@@ -185,7 +185,7 @@ fun UnifiedBottomPill(
                     )
             }
         },
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.BottomCenter,
         modifier = modifier.animateContentSize(
             animationSpec = if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)
         ),
@@ -374,7 +374,7 @@ fun ClipboardArmedPill(
             .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp))
             .animateContentSize(animationSpec = tween(220, easing = FastOutSlowInEasing))
             .navigationBarsPadding()
-            .padding(top = 10.dp, bottom = if (isExpanded) 16.dp else 10.dp),
+            .padding(top = 10.dp, bottom = if (isExpanded) 12.dp else 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Centered grab handle (toggles expansion on tap)

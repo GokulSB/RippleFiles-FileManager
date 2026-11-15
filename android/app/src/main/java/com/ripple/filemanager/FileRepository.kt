@@ -123,7 +123,7 @@ class FileRepository(private val context: Context) {
                                 "jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg" -> "image"
                                 "mp4", "mkv", "avi", "mov", "webm" -> "video"
                                 "mp3", "wav", "ogg", "flac", "m4a" -> "audio"
-                                "zip", "rar", "7z", "tar", "gz" -> "archive"
+                                in com.ripple.filemanager.archive.ArchiveUtils.ARCHIVE_EXTENSIONS -> "archive"
                                 "pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "xml", "html", "htm", "md", "csv", "log" -> "doc"
                                 "apk" -> "apk"
                                 else -> "file"
@@ -217,7 +217,7 @@ class FileRepository(private val context: Context) {
                                 "jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg" -> "image"
                                 "mp4", "mkv", "avi", "mov", "webm" -> "video"
                                 "mp3", "wav", "ogg", "flac", "m4a" -> "audio"
-                                "zip", "rar", "7z", "tar", "gz" -> "archive"
+                                in com.ripple.filemanager.archive.ArchiveUtils.ARCHIVE_EXTENSIONS -> "archive"
                                 "pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "xml", "html", "htm", "md", "csv", "log" -> "doc"
                                 "apk" -> "apk"
                                 else -> "file"
@@ -267,17 +267,22 @@ class FileRepository(private val context: Context) {
             val m = rikka.shizuku.Shizuku::class.java.getDeclaredMethods().find { it.name == "newProcess" }
             m?.isAccessible = true
             val process = m?.invoke(null, arrayOf("sh", "-c", cmd), null, null) as? Process
-            process?.waitFor() == 0
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val completed = process?.waitFor(15, java.util.concurrent.TimeUnit.SECONDS) ?: false
+                completed && (process?.exitValue() == 0)
+            } else {
+                process?.waitFor() == 0
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             false
         }
     }
     
-    suspend fun deleteRestrictedPath(path: String): Boolean {
+    suspend fun deleteRestrictedPath(path: String): Boolean = withContext(Dispatchers.IO) {
         if (path.contains("Android/data") || path.contains("Android/obb")) {
             if (hasShizuku()) {
-                return runShizukuCommand("rm -rf \"$path\"")
+                return@withContext runShizukuCommand("rm -rf \"$path\"")
             }
         }
         val file = java.io.File(path)
@@ -294,7 +299,7 @@ class FileRepository(private val context: Context) {
         try {
             android.media.MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
         } catch (e: Exception) {}
-        return deleted || !file.exists()
+        deleted || !file.exists()
     }
 
         fun runShizukuCommandWithOutput(cmd: String): Pair<Boolean, String> {
@@ -493,7 +498,7 @@ class FileRepository(private val context: Context) {
 
 
     fun logRecentAction(path: String, action: String) {
-        if (!path.startsWith("/")) return
+        if (!path.startsWith("/") || com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, path)) return
         try {
             val historyStr = prefs.getString("recent_actions", "[]")
             val history = JSONArray(historyStr)
@@ -669,6 +674,7 @@ class FileRepository(private val context: Context) {
                 for (i in 0 until history.length()) {
                     val item = history.getJSONObject(i)
                     val path = item.getString("path")
+                    if (com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, path)) continue
                     val action = item.getString("action")
                     val timestamp = item.getLong("timestamp")
                     
@@ -683,7 +689,7 @@ class FileRepository(private val context: Context) {
                         ext in listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg") -> "image"
                         ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
                         ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
-                        ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
+                        com.ripple.filemanager.archive.ArchiveUtils.isArchiveExtension(ext) -> "archive"
                         ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx") -> "doc"
                         ext == "apk" -> "apk"
                         else -> "file"
@@ -789,7 +795,7 @@ class FileRepository(private val context: Context) {
             ext in listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg") -> "image"
             ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
             ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
-            ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
+            com.ripple.filemanager.archive.ArchiveUtils.isArchiveExtension(ext) -> "archive"
             ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "xml", "html", "htm", "md", "csv", "log") -> "doc"
             ext == "apk" -> "apk"
             else -> "file"
@@ -1380,7 +1386,7 @@ class FileRepository(private val context: Context) {
                     ext in listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg") -> "image"
                     ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
                     ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
-                    ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
+                    com.ripple.filemanager.archive.ArchiveUtils.isArchiveExtension(ext) -> "archive"
                     ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx") -> "doc"
                     ext == "apk" -> "apk"
                     else -> "file"
@@ -1595,7 +1601,7 @@ class FileRepository(private val context: Context) {
         val vidExts = setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm")
         val audioExts = setOf("mp3", "wav", "flac", "ogg", "m4a", "aac")
         val appExts = setOf("apk", "xapk", "aab")
-        val archiveExts = setOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz")
+        val archiveExts = com.ripple.filemanager.archive.ArchiveUtils.ARCHIVE_EXTENSIONS
         
         val pinned = getPinnedFiles()
         val locked = getLockedFiles()
@@ -1647,8 +1653,8 @@ class FileRepository(private val context: Context) {
                     
                     val typeStr = when {
                         ext in setOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic") -> "image"
-                        ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm") -> "video"
-                        ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac") -> "audio"
+                        ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "3gp", "ts", "m2ts", "ogv", "vob", "mpg", "mpeg") -> "video"
+                        ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac", "opus", "ape", "wma", "mpc", "wv", "tta", "dsf", "dff", "dts", "ac3", "mka") -> "audio"
                         ext in setOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz") -> "archive"
                         ext in setOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "csv") -> "doc"
                         ext in setOf("apk", "xapk", "aab") -> "apk"
@@ -1716,9 +1722,9 @@ class FileRepository(private val context: Context) {
             val ext = f.extension.lowercase(Locale.getDefault())
             val typeStr = when {
                 ext in setOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic") -> "image"
-                ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm") -> "video"
-                ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac") -> "audio"
-                ext in setOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz") -> "archive"
+                ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "3gp", "ts", "m2ts", "ogv", "vob", "mpg", "mpeg") -> "video"
+                ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac", "opus", "ape", "wma", "mpc", "wv", "tta", "dsf", "dff", "dts", "ac3", "mka") -> "audio"
+                com.ripple.filemanager.archive.ArchiveUtils.isArchiveExtension(ext) -> "archive"
                 ext in setOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "csv") -> "doc"
                 ext in setOf("apk", "xapk", "aab") -> "apk"
                 else -> "file"
@@ -1993,7 +1999,7 @@ suspend fun moveToTrash(paths: List<String>) = withContext(Dispatchers.IO) {
                             ext in listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "svg") -> "image"
                             ext in listOf("mp4", "mkv", "avi", "mov", "webm") -> "video"
                             ext in listOf("mp3", "wav", "ogg", "flac", "m4a") -> "audio"
-                            ext in listOf("zip", "rar", "7z", "tar", "gz") -> "archive"
+                            com.ripple.filemanager.archive.ArchiveUtils.isArchiveExtension(ext) -> "archive"
                             ext in listOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx") -> "doc"
                             ext == "apk" -> "apk"
                             else -> "file"
@@ -2071,9 +2077,9 @@ suspend fun moveToTrash(paths: List<String>) = withContext(Dispatchers.IO) {
                 val ext = f.extension.lowercase(Locale.getDefault())
                 val typeStr = when {
                     ext in setOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic") -> "image"
-                    ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm") -> "video"
-                    ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac") -> "audio"
-                    ext in setOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz") -> "archive"
+                    ext in setOf("mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "3gp", "ts", "m2ts", "ogv", "vob", "mpg", "mpeg") -> "video"
+                    ext in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac", "opus", "ape", "wma", "mpc", "wv", "tta", "dsf", "dff", "dts", "ac3", "mka") -> "audio"
+                    com.ripple.filemanager.archive.ArchiveUtils.isArchiveExtension(ext) -> "archive"
                     ext in setOf("pdf", "doc", "docx", "txt", "json", "xls", "xlsx", "ppt", "pptx", "csv") -> "doc"
                     ext in setOf("apk", "xapk", "aab") -> "apk"
                     else -> "file"

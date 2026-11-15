@@ -193,8 +193,48 @@
 -dontwarn nz.mega.sdk.**
 
 # ============================================================================
-# Archive Handling (Unrar5j & Zip4j)
+# Archive Handling (7-Zip Native Bridge, Engine, Unrar5j & Zip4j)
 # ============================================================================
+-keep class com.ripple.filemanager.archive.sevenzip.Native7zBridge {
+    native <methods>;
+    *;
+}
+-keepclassmembers class com.ripple.filemanager.archive.sevenzip.Native7zBridge {
+    native <methods>;
+    *;
+}
+-keep class com.ripple.filemanager.archive.sevenzip.NativeFormatInfo {
+    <init>(...);
+    *;
+}
+-keepclassmembers class com.ripple.filemanager.archive.sevenzip.NativeFormatInfo {
+    *;
+}
+-keep class com.ripple.filemanager.archive.sevenzip.NativeArchiveEntry {
+    <init>(...);
+    *;
+}
+-keepclassmembers class com.ripple.filemanager.archive.sevenzip.NativeArchiveEntry {
+    *;
+}
+-keep interface com.ripple.filemanager.archive.sevenzip.NativeArchiveCallback {
+    public *;
+}
+-keepclassmembers interface com.ripple.filemanager.archive.sevenzip.NativeArchiveCallback {
+    public *;
+}
+-keep class * implements com.ripple.filemanager.archive.sevenzip.NativeArchiveCallback {
+    public *;
+}
+-keepclassmembers class * implements com.ripple.filemanager.archive.sevenzip.NativeArchiveCallback {
+    public *;
+}
+-keep class com.ripple.filemanager.archive.sevenzip.** { *; }
+-keepclassmembers class com.ripple.filemanager.archive.sevenzip.** { *; }
+-keep class com.ripple.filemanager.archive.engine.** { *; }
+-keepclassmembers class com.ripple.filemanager.archive.engine.** { *; }
+-keep class com.ripple.filemanager.archive.ArchiveExtractWorker { *; }
+-keep class com.ripple.filemanager.archive.ArchiveCreateWorker { *; }
 -dontwarn be.stef.rar.**
 -dontwarn net.lingala.zip4j.**
 
@@ -262,3 +302,15 @@
 -dontwarn org.apache.xmlbeans.**
 -dontwarn org.apache.logging.log4j.**
 -dontwarn net.engio.mbassy.**
+
+# ============================================================================
+# libVLC Rules
+# ============================================================================
+-keep class org.videolan.libvlc.** { *; }
+-keepclassmembers class org.videolan.libvlc.** { *; }
+-dontwarn org.videolan.libvlc.**
+-keep class org.videolan.medialibrary.** { *; }
+-keepclassmembers class org.videolan.medialibrary.** { *; }
+-dontwarn org.videolan.medialibrary.**
+-keep class com.ripple.filemanager.video.** { *; }
+

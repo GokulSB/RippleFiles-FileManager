@@ -383,6 +383,8 @@ class MainActivity : FragmentActivity() {
                         is AppAction.OrganiseDownloads -> viewModel.organiseDownloads()
                         is AppAction.ConfirmOrganiseDownloads -> viewModel.confirmOrganiseDownloads()
                         is AppAction.CancelOrganiseDownloads -> viewModel.cancelOrganiseDownloads()
+                        is AppAction.OpenArchive -> viewModel.openArchiveFile(action.file)
+                        is AppAction.ClearArchiveFileToOpen -> viewModel.clearArchiveFileToOpen()
                         is AppAction.SetViewerPreference -> viewModel.setViewerPreference(action.category, action.preference)
                         is AppAction.RequestAuth -> viewModel.requestAuth(action.reason, action.path, action.fileId, action.folderName)
                         is AppAction.CancelAuth -> viewModel.cancelAuth()

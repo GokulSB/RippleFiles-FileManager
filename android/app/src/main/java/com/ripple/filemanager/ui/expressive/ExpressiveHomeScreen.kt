@@ -45,6 +45,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import com.ripple.filemanager.AppAction
 import com.ripple.filemanager.AppState
 import com.ripple.filemanager.FileItem
@@ -83,17 +88,57 @@ fun ExpressiveHomeScreen(
     onFileClick: (FileItem) -> Unit,
     onFileMenuClick: (FileItem) -> Unit,
     onOpenNewConnection: () -> Unit = {},
+    onSwipeToBrowse: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     SideEffect {
         com.ripple.filemanager.ui.TabSwitchLatencyTracker.onHomeCompose(state.recentFiles.size)
     }
     val colors = ExpressiveTheme.colors
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showStorageSheet by remember { mutableStateOf(false) }
+
+    val currentOnSwipeToBrowse by androidx.compose.runtime.rememberUpdatedState(onSwipeToBrowse)
+    val density = LocalDensity.current
+    val swipeThreshold = with(density) { 60.dp.toPx() }
+
+    val swipeModifier = if (state.query.isEmpty() && onSwipeToBrowse != null) {
+        Modifier.pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                var totalDragX = 0f
+                var totalDragY = 0f
+                var hasTriggered = false
+                while (true) {
+                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull() ?: break
+                    if (!change.pressed) break
+                    val deltaX = change.position.x - change.previousPosition.x
+                    val deltaY = change.position.y - change.previousPosition.y
+                    totalDragX += deltaX
+                    totalDragY += deltaY
+                    // If vertical drag dominates, don't trigger horizontal swipe to browse
+                    if (kotlin.math.abs(totalDragY) > kotlin.math.abs(totalDragX) * 1.5f && kotlin.math.abs(totalDragY) > 30f) {
+                        break
+                    }
+                    // Swiping right is ignored on home
+                    if (totalDragX > 20f) {
+                        break
+                    }
+                    if (!hasTriggered && totalDragX <= -swipeThreshold && -totalDragX > kotlin.math.abs(totalDragY)) {
+                        hasTriggered = true
+                        currentOnSwipeToBrowse?.invoke()
+                        break
+                    }
+                }
+            }
+        }
+    } else Modifier
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
+            .then(swipeModifier)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
         contentPadding = PaddingValues(bottom = 130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
@@ -140,8 +185,15 @@ fun ExpressiveHomeScreen(
             val displayedFiles = if (state.query.isNotEmpty()) {
                 state.files
             } else {
-                val pool = state.recentFiles.filter { state.showHiddenFiles || !it.isHidden }
-                    .ifEmpty { state.files.filter { state.showHiddenFiles || !it.isHidden } }
+                val pool = state.recentFiles.filter {
+                    (state.showHiddenFiles || !it.isHidden) &&
+                    !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, it.path)
+                }.ifEmpty {
+                    state.files.filter {
+                        (state.showHiddenFiles || !it.isHidden) &&
+                        !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, it.path)
+                    }
+                }
                 pool.take(10)
             }
 

@@ -95,6 +95,46 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+
+        viewModelScope.launch {
+            workManager.getWorkInfosByTagFlow("archive_create").collect { workInfos ->
+                if (workInfos.isEmpty()) return@collect
+
+                workInfos.filter { !it.state.isFinished }.forEach { workInfo ->
+                    activeWorkIds.add(workInfo.id)
+                }
+
+                val currentWork = workInfos.firstOrNull { !it.state.isFinished }
+                    ?: workInfos.firstOrNull { it.id in activeWorkIds && (it.state == WorkInfo.State.SUCCEEDED || it.state == WorkInfo.State.FAILED) }
+
+                if (currentWork == null) return@collect
+
+                when (currentWork.state) {
+                    WorkInfo.State.RUNNING -> {
+                        autoClearJob?.cancel()
+                        val pct = currentWork.progress.getInt("progressPercent", 0)
+                        val curFile = currentWork.progress.getString("currentFile") ?: ""
+                        _archiveProgress.value = ArchiveProgress.Running(pct, 100, curFile)
+                    }
+                    WorkInfo.State.SUCCEEDED -> {
+                        val outPath = currentWork.outputData.getString("outPath") ?: ""
+                        _archiveProgress.value = ArchiveProgress.Complete(outPath)
+                        scheduleAutoClear(currentWork.id)
+                    }
+                    WorkInfo.State.FAILED -> {
+                        val error = currentWork.outputData.getString("error") ?: "Compression failed"
+                        _archiveProgress.value = ArchiveProgress.Failed(error)
+                        activeWorkIds.remove(currentWork.id)
+                    }
+                    WorkInfo.State.CANCELLED -> {
+                        autoClearJob?.cancel()
+                        _archiveProgress.value = null
+                        activeWorkIds.remove(currentWork.id)
+                    }
+                    else -> {}
+                }
+            }
+        }
     }
 
     private fun scheduleAutoClear(workId: java.util.UUID) {
@@ -107,9 +147,18 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun extract(source: Uri, dest: Uri, initialPassword: String? = null, archiveName: String? = null) {
+    private var currentSelectedIndices: List<Int>? = null
+
+    fun extract(
+        source: Uri,
+        dest: Uri,
+        initialPassword: String? = null,
+        archiveName: String? = null,
+        selectedIndices: List<Int>? = null
+    ) {
         currentSource = source
         currentDest = dest
+        currentSelectedIndices = selectedIndices
         _archiveProgress.value = null
         val resolvedName = archiveName
             ?: source.lastPathSegment?.substringAfterLast('/')
@@ -119,7 +168,7 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             try {
                 if (initialPassword != null) {
-                    enqueueWorker(source, dest, initialPassword)
+                    enqueueWorker(source, dest, initialPassword, selectedIndices)
                     return@launch
                 }
 
@@ -136,7 +185,7 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
                     return@launch
                 }
                 
-                enqueueWorker(source, dest, null)
+                enqueueWorker(source, dest, null, selectedIndices)
             } catch (e: Exception) {
                 val msg = e.message ?: ""
                 if (msg.contains("password", ignoreCase = true) || msg.contains("encrypt", ignoreCase = true) || msg.contains("decrypter", ignoreCase = true)) {
@@ -157,7 +206,7 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
                 val handler = ArchiveHandlerFactory.create(getApplication(), source)
                 val isValid = handler.testPassword(source, password)
                 if (isValid) {
-                    enqueueWorker(source, dest, password)
+                    enqueueWorker(source, dest, password, currentSelectedIndices)
                 } else {
                     _archiveProgress.value = ArchiveProgress.NeedsPassword(attemptFailed = true)
                 }
@@ -183,9 +232,41 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
         currentSource?.let {
             workManager.cancelUniqueWork(it.toString())
         }
+        workManager.cancelAllWorkByTag("archive_extract")
+        workManager.cancelAllWorkByTag("archive_create")
         activeWorkIds.clear()
         _archiveProgress.value = null
         workManager.pruneWork()
+    }
+
+    fun compress(
+        sourceFiles: List<java.io.File>,
+        destinationFile: java.io.File,
+        config: ArchiveCreateConfig
+    ) {
+        _currentArchiveName.value = destinationFile.name
+        val builder = Data.Builder()
+            .putStringArray("inputPaths", sourceFiles.map { it.absolutePath }.toTypedArray())
+            .putString("outPath", destinationFile.absolutePath)
+            .putString("format", config.format.extension)
+            .putInt("level", config.compressionMethod.levelNumber)
+            .putString("password", config.password)
+            .putBoolean("encryptNames", config.encryptFileNames)
+            .putLong("splitSize", config.splitVolume.sizeBytes)
+            .putString("charset", config.charset)
+            .putBoolean("deleteAfterArchive", config.deleteAfterArchive)
+            .putString("displayName", destinationFile.name)
+
+        val request = OneTimeWorkRequestBuilder<ArchiveCreateWorker>()
+            .setInputData(builder.build())
+            .addTag("archive_create")
+            .build()
+
+        workManager.enqueueUniqueWork(
+            "archive_create_${destinationFile.absolutePath}",
+            ExistingWorkPolicy.REPLACE,
+            request
+        )
     }
 
     /**
@@ -201,20 +282,23 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun enqueueWorker(source: Uri, dest: Uri, password: String?) {
+    private fun enqueueWorker(source: Uri, dest: Uri, password: String?, selectedIndices: List<Int>? = null) {
         val archiveName = _currentArchiveName.value
             ?: source.lastPathSegment?.substringAfterLast('/')
             ?: "Archive"
 
-        val inputData = Data.Builder()
+        val builder = Data.Builder()
             .putString("source", source.toString())
             .putString("dest", dest.toString())
             .putString("password", password)
             .putString("archiveName", archiveName)
-            .build()
+
+        if (selectedIndices != null) {
+            builder.putIntArray("selectedIndices", selectedIndices.toIntArray())
+        }
 
         val workRequest = OneTimeWorkRequestBuilder<ArchiveExtractWorker>()
-            .setInputData(inputData)
+            .setInputData(builder.build())
             .addTag("archive_extract")
             .build()
 

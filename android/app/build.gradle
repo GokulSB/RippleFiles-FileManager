@@ -12,9 +12,12 @@ android {
         applicationId "com.ripple.filemanager"
         minSdk 26
         targetSdk 36
-        versionCode 45
-        versionName "3.0.9"
+        versionCode 46
+        versionName "3.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+        }
     }
 
     def localProperties = new Properties()
@@ -165,6 +168,17 @@ dependencies {
     // Archives
     implementation("io.github.realburst:unrar5j:v2.0.3")
     implementation 'net.lingala.zip4j:zip4j:2.11.5'
+
+    // libVLC
+    implementation('org.videolan.android:libvlc-all:3.7.7') {
+        exclude group: 'org.jetbrains.kotlin'
+    }
+
+    constraints {
+        implementation('org.jetbrains.kotlin:kotlin-stdlib') {
+            version { strictly '2.0.21' }
+        }
+    }
     
     // Testing
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'

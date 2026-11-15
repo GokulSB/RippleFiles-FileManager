@@ -45,6 +45,11 @@ import com.ripple.filemanager.AppState
 import com.ripple.filemanager.FileItem
 import com.ripple.filemanager.R
 import com.ripple.filemanager.SortMode
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Velocity
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
@@ -59,6 +64,11 @@ import kotlinx.coroutines.launch
 import java.io.File
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 
 /**
@@ -257,9 +267,46 @@ fun ExpressiveBrowseScreen(
         else -> activeStorageItem?.location ?: rootPath
     }
 
+    val density = LocalDensity.current
+    val swipeThreshold = with(density) { 60.dp.toPx() }
+    val currentOnAction by androidx.compose.runtime.rememberUpdatedState(onAction)
+    val swipeToHomeModifier = if (state.query.isEmpty() && pagerState.currentPage == 0) {
+        Modifier.pointerInput(pagerState.currentPage) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                var totalDragX = 0f
+                var totalDragY = 0f
+                var hasTriggered = false
+                while (true) {
+                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull() ?: break
+                    if (!change.pressed) break
+                    val deltaX = change.position.x - change.previousPosition.x
+                    val deltaY = change.position.y - change.previousPosition.y
+                    totalDragX += deltaX
+                    totalDragY += deltaY
+                    // If vertical drag dominates, don't trigger horizontal swipe
+                    if (kotlin.math.abs(totalDragY) > kotlin.math.abs(totalDragX) * 1.5f && kotlin.math.abs(totalDragY) > 30f) {
+                        break
+                    }
+                    // Swiping left is for paging to next storage (SD/Drive)
+                    if (totalDragX < -20f) {
+                        break
+                    }
+                    if (!hasTriggered && totalDragX >= swipeThreshold && totalDragX > kotlin.math.abs(totalDragY)) {
+                        hasTriggered = true
+                        currentOnAction(AppAction.SetLocation("home"))
+                        break
+                    }
+                }
+            }
+        }
+    } else Modifier
+
     Column(
         modifier = modifier
             .fillMaxSize()
+            .then(swipeToHomeModifier)
             .padding(horizontal = 16.dp)
     ) {
         // 1. Expressive Screen Header with storage switcher subtitle

@@ -1,0 +1,47 @@
+PROG = 7z_bridge
+IS_NOT_STANDALONE = 1
+
+SYS_OBJS = \
+  $O/MyWindows.o \
+
+CURRENT_OBJS = \
+  $O/Native7zBridge.o \
+
+COMMON_OBJS = \
+  $O/IntToString.o \
+  $O/MyString.o \
+  $O/MyVector.o \
+  $O/NewHandler.o \
+  $O/StringConvert.o \
+  $O/StringToInt.o \
+  $O/UTFConvert.o \
+  $O/Wildcard.o \
+
+WIN_OBJS = \
+  $O/DLL.o \
+  $O/FileDir.o \
+  $O/FileFind.o \
+  $O/FileIO.o \
+  $O/FileName.o \
+  $O/PropVariant.o \
+  $O/PropVariantConv.o \
+  $O/TimeUtils.o \
+
+7ZIP_COMMON_OBJS = \
+  $O/FileStreams.o \
+
+C_OBJS = \
+  $O/Alloc.o \
+
+OBJS = \
+  $(C_OBJS) \
+  $(COMMON_OBJS) \
+  $(WIN_OBJS) \
+  $(SYS_OBJS) \
+  $(7ZIP_COMMON_OBJS) \
+  $(CURRENT_OBJS) \
+
+include ../../7zip_gcc.mak
+
+$O/Native7zBridge.o: Native7zBridge.cpp
+	$(CXX) $(CXXFLAGS) $<

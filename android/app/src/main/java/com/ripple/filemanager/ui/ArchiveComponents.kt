@@ -133,6 +133,12 @@ fun ArchiveFileCard(
         }
     }
 }
+enum class ExtractDestinationMode {
+    NEW_FOLDER,
+    HERE,
+    CHOOSE_FOLDER
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArchiveExtractDialog(
@@ -140,8 +146,9 @@ fun ArchiveExtractDialog(
     archiveName: String,
     itemCount: String,
     isRar: Boolean,
-    onExtractHere: () -> Unit,
-    onExtractTo: () -> Unit,
+    onExtractHere: (password: String?) -> Unit,
+    onExtractToNewFolder: (password: String?) -> Unit,
+    onExtractTo: (password: String?) -> Unit,
     onViewContents: () -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit
@@ -149,6 +156,15 @@ fun ArchiveExtractDialog(
     val haptics = com.ripple.filemanager.haptics.LocalHaptics.current
     val colors = ExpressiveTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var destinationMode by remember { mutableStateOf(ExtractDestinationMode.NEW_FOLDER) }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var hasPassword by remember { mutableStateOf(false) }
+
+    val baseFolderName = remember(archiveName) {
+        archiveName.substringBeforeLast('.').ifEmpty { "Extracted" }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -203,8 +219,16 @@ fun ArchiveExtractDialog(
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(2.dp))
+                    val formatLabel = remember(archiveName, isRar) {
+                        val ext = archiveName.substringAfterLast('.', "").uppercase(java.util.Locale.getDefault())
+                        when {
+                            isRar -> "RAR Archive"
+                            ext in setOf("7Z", "ISO", "ZST", "TAR", "GZ", "BZ2", "XZ", "ZIP", "CAB", "WIM", "LZ4") -> "$ext Archive"
+                            else -> "Archive"
+                        }
+                    }
                     Text(
-                        text = if (itemCount.isNotBlank()) "$itemCount • ${if (isRar) "RAR Archive" else "Archive"}" else if (isRar) "RAR Archive" else "Archive",
+                        text = if (itemCount.isNotBlank()) "$itemCount • $formatLabel" else formatLabel,
                         fontFamily = LocalAppFont.current,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Normal,
@@ -215,64 +239,180 @@ fun ArchiveExtractDialog(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // Action Items
+            // Destination selection
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 24.dp)
             ) {
-                ExpressiveArchiveActionCard(
-                    icon = Icons.Outlined.Unarchive,
-                    title = "Extract here",
-                    subtitle = "Extract files to the current folder",
-                    onClick = {
-                        haptics.tap()
-                        onExtractHere()
-                    }
+                Text(
+                    text = "Extract Destination",
+                    fontFamily = LocalAppFont.current,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.text
                 )
-
-                ExpressiveArchiveActionCard(
-                    icon = Icons.AutoMirrored.Outlined.DriveFileMove,
-                    title = "Extract to...",
-                    subtitle = "Choose destination folder",
-                    onClick = {
-                        haptics.tap()
-                        onExtractTo()
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val isNewFolder = destinationMode == ExtractDestinationMode.NEW_FOLDER
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isNewFolder) colors.accent else colors.card)
+                            .border(1.dp, if (isNewFolder) colors.accent else colors.line, RoundedCornerShape(12.dp))
+                            .clickable {
+                                haptics.tap()
+                                destinationMode = ExtractDestinationMode.NEW_FOLDER
+                            }
+                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "New Folder",
+                            fontFamily = LocalAppFont.current,
+                            fontSize = 12.sp,
+                            fontWeight = if (isNewFolder) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isNewFolder) colors.ink else colors.text
+                        )
                     }
-                )
 
-                ExpressiveArchiveActionCard(
-                    icon = Icons.Outlined.Visibility,
-                    title = "View contents",
-                    subtitle = "Browse files inside this archive",
-                    onClick = {
-                        haptics.tap()
-                        onViewContents()
+                    val isHere = destinationMode == ExtractDestinationMode.HERE
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isHere) colors.accent else colors.card)
+                            .border(1.dp, if (isHere) colors.accent else colors.line, RoundedCornerShape(12.dp))
+                            .clickable {
+                                haptics.tap()
+                                destinationMode = ExtractDestinationMode.HERE
+                            }
+                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Extract Here",
+                            fontFamily = LocalAppFont.current,
+                            fontSize = 12.sp,
+                            fontWeight = if (isHere) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isHere) colors.ink else colors.text
+                        )
                     }
-                )
 
-                ExpressiveArchiveActionCard(
-                    icon = Icons.Outlined.Delete,
-                    title = "Delete archive",
-                    subtitle = "Move this archive to trash",
-                    isDestructive = true,
-                    onClick = {
-                        haptics.delete()
-                        onDelete()
+                    val isChoose = destinationMode == ExtractDestinationMode.CHOOSE_FOLDER
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isChoose) colors.accent else colors.card)
+                            .border(1.dp, if (isChoose) colors.accent else colors.line, RoundedCornerShape(12.dp))
+                            .clickable {
+                                haptics.tap()
+                                destinationMode = ExtractDestinationMode.CHOOSE_FOLDER
+                            }
+                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Choose…",
+                            fontFamily = LocalAppFont.current,
+                            fontSize = 12.sp,
+                            fontWeight = if (isChoose) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isChoose) colors.ink else colors.text
+                        )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = when (destinationMode) {
+                        ExtractDestinationMode.NEW_FOLDER -> "Will extract to: ./$baseFolderName/"
+                        ExtractDestinationMode.HERE -> "Will extract directly into current folder"
+                        ExtractDestinationMode.CHOOSE_FOLDER -> "Will prompt to choose target destination folder"
+                    },
+                    fontFamily = LocalAppFont.current,
+                    fontSize = 11.sp,
+                    color = colors.muted
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Cancel button
+            // Password field toggle
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            haptics.tap()
+                            hasPassword = !hasPassword
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Archive has password?",
+                        fontFamily = LocalAppFont.current,
+                        fontSize = 13.sp,
+                        color = colors.text
+                    )
+                    Switch(
+                        checked = hasPassword,
+                        onCheckedChange = {
+                            haptics.tap()
+                            hasPassword = it
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = colors.ink,
+                            checkedTrackColor = colors.accent
+                        )
+                    )
+                }
+
+                if (hasPassword) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        placeholder = { Text("Enter archive password", color = colors.muted, fontSize = 13.sp) },
+                        singleLine = true,
+                        visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = colors.insetCard,
+                            unfocusedContainerColor = colors.insetCard,
+                            focusedBorderColor = colors.accent,
+                            unfocusedBorderColor = colors.line,
+                            focusedTextColor = colors.text,
+                            unfocusedTextColor = colors.text
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Primary Extract Action Button
             Button(
                 onClick = {
                     haptics.tap()
-                    onDismiss()
+                    val pwd = if (hasPassword && password.isNotBlank()) password else null
+                    when (destinationMode) {
+                        ExtractDestinationMode.NEW_FOLDER -> onExtractToNewFolder(pwd)
+                        ExtractDestinationMode.HERE -> onExtractHere(pwd)
+                        ExtractDestinationMode.CHOOSE_FOLDER -> onExtractTo(pwd)
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -280,15 +420,91 @@ fun ArchiveExtractDialog(
                     .padding(horizontal = 24.dp),
                 shape = RoundedCornerShape(24.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.card,
-                    contentColor = colors.text
+                    containerColor = colors.accent,
+                    contentColor = colors.ink
                 )
+            ) {
+                Icon(Icons.Outlined.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Extract Now",
+                    fontFamily = LocalAppFont.current,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Secondary Actions: View Contents & Delete
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // View Contents
+                OutlinedButton(
+                    onClick = {
+                        haptics.tap()
+                        onViewContents()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.line)
+                ) {
+                    Icon(Icons.Outlined.Visibility, contentDescription = null, tint = colors.text, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Browse",
+                        fontFamily = LocalAppFont.current,
+                        fontSize = 13.sp,
+                        color = colors.text
+                    )
+                }
+
+                // Delete Archive
+                OutlinedButton(
+                    onClick = {
+                        haptics.delete()
+                        onDelete()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.line)
+                ) {
+                    Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Delete",
+                        fontFamily = LocalAppFont.current,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Cancel button
+            TextButton(
+                onClick = {
+                    haptics.tap()
+                    onDismiss()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
             ) {
                 Text(
                     text = "Cancel",
                     fontFamily = LocalAppFont.current,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
+                    fontSize = 14.sp,
+                    color = colors.muted
                 )
             }
         }

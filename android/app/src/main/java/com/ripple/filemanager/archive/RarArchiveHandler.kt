@@ -62,7 +62,10 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
 
     override suspend fun listEntries(source: Uri): List<ArchiveEntryInfo> = listEntries(source, null)
 
-    override suspend fun listEntries(source: Uri, password: String?): List<ArchiveEntryInfo> = withContext(Dispatchers.IO) {
+    override suspend fun listEntries(source: Uri, password: String?): List<ArchiveEntryInfo> =
+        listEntries(source, password, null)
+
+    override suspend fun listEntries(source: Uri, password: String?, charset: String?): List<ArchiveEntryInfo> = withContext(Dispatchers.IO) {
         val file = getSourceFile(source)
         try {
             val isEncrypted = try { Unrar5j.isEncrypted(file.absolutePath) } catch (e: Exception) { false }
@@ -140,7 +143,19 @@ class RarArchiveHandler(private val context: Context) : ArchiveHandler {
         }
     }
 
-    override fun extract(source: Uri, destDir: Uri, password: String?): Flow<ArchiveProgress> = flow {
+    override fun extract(source: Uri, destDir: Uri, password: String?): Flow<ArchiveProgress> =
+        extract(source, destDir, password, null, null)
+
+    override fun extract(source: Uri, destDir: Uri, password: String?, selectedIndices: List<Int>?): Flow<ArchiveProgress> =
+        extract(source, destDir, password, selectedIndices, null)
+
+    override fun extract(
+        source: Uri,
+        destDir: Uri,
+        password: String?,
+        selectedIndices: List<Int>?,
+        charset: String?
+    ): Flow<ArchiveProgress> = flow {
         val file = getSourceFile(source)
         try {
             val destPath = destDir.path ?: throw Exception("Invalid destination")

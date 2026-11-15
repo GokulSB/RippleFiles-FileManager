@@ -47,19 +47,28 @@ class ZipArchiveHandler(private val context: Context) : ArchiveHandler {
 
     override suspend fun listEntries(source: Uri): List<ArchiveEntryInfo> = listEntries(source, null)
 
-    override suspend fun listEntries(source: Uri, password: String?): List<ArchiveEntryInfo> = withContext(Dispatchers.IO) {
+    override suspend fun listEntries(source: Uri, password: String?): List<ArchiveEntryInfo> =
+        listEntries(source, password, null)
+
+    override suspend fun listEntries(source: Uri, password: String?, charset: String?): List<ArchiveEntryInfo> = withContext(Dispatchers.IO) {
         val file = getSourceFile(source)
         try {
             val zipFile = if (password != null) ZipFile(file, password.toCharArray()) else ZipFile(file)
+            if (!charset.isNullOrBlank()) {
+                try {
+                    zipFile.charset = java.nio.charset.Charset.forName(charset)
+                } catch (_: Exception) {}
+            }
             if (!zipFile.isValidZipFile) {
                 throw Exception("Invalid ZIP file")
             }
-            zipFile.fileHeaders.map { header ->
+            zipFile.fileHeaders.mapIndexed { index, header ->
                 ArchiveEntryInfo(
                     name = header.fileName,
                     sizeBytes = header.uncompressedSize,
                     isDirectory = header.isDirectory,
-                    isEncrypted = header.isEncrypted || zipFile.isEncrypted
+                    isEncrypted = header.isEncrypted || zipFile.isEncrypted,
+                    index = index
                 )
             }
         } finally {
@@ -93,10 +102,27 @@ class ZipArchiveHandler(private val context: Context) : ArchiveHandler {
         }
     }
 
-    override fun extract(source: Uri, destDir: Uri, password: String?): Flow<ArchiveProgress> = flow {
+    override fun extract(source: Uri, destDir: Uri, password: String?): Flow<ArchiveProgress> =
+        extract(source, destDir, password, null, null)
+
+    override fun extract(source: Uri, destDir: Uri, password: String?, selectedIndices: List<Int>?): Flow<ArchiveProgress> =
+        extract(source, destDir, password, selectedIndices, null)
+
+    override fun extract(
+        source: Uri,
+        destDir: Uri,
+        password: String?,
+        selectedIndices: List<Int>?,
+        charset: String?
+    ): Flow<ArchiveProgress> = flow {
         val file = getSourceFile(source)
         try {
             val zipFile = if (password != null) ZipFile(file, password.toCharArray()) else ZipFile(file)
+            if (!charset.isNullOrBlank()) {
+                try {
+                    zipFile.charset = java.nio.charset.Charset.forName(charset)
+                } catch (_: Exception) {}
+            }
             if (!zipFile.isValidZipFile) {
                 emit(ArchiveProgress.Failed("Invalid ZIP file"))
                 return@flow
@@ -110,7 +136,16 @@ class ZipArchiveHandler(private val context: Context) : ArchiveHandler {
             zipFile.isRunInThread = true
             
             val progressMonitor = zipFile.progressMonitor
-            zipFile.extractAll(destPath)
+            if (selectedIndices != null) {
+                val headers = zipFile.fileHeaders
+                for (idx in selectedIndices) {
+                    if (idx in headers.indices) {
+                        zipFile.extractFile(headers[idx], destPath)
+                    }
+                }
+            } else {
+                zipFile.extractAll(destPath)
+            }
             
             while (progressMonitor.state == ProgressMonitor.State.BUSY) {
                 emit(

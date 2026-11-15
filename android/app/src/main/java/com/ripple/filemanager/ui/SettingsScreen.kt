@@ -4,6 +4,9 @@ import androidx.compose.ui.text.style.TextOverflow
 
 import android.content.Context
 import android.widget.Toast
+import com.ripple.filemanager.video.VideoPlayerPrefs
+import com.ripple.filemanager.video.engine.HwAccelerationMode
+import com.ripple.filemanager.video.subtitles.SubtitleManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -255,6 +258,20 @@ fun SettingsScreen(
                 }
             ) {
                 SettingsViewersContent(state, hapticOnAction)
+            }
+
+            // Accordion: Video Player
+            ExpressiveAccordionSection(
+                title = "Video player",
+                subtitle = "Hardware decoding, gestures, subtitles, playback",
+                icon = Icons.Outlined.PlayCircle,
+                pastel = ExpressiveTokens.PastelRose,
+                isExpanded = expandedSection == "video_player",
+                onToggle = {
+                    expandedSection = if (expandedSection == "video_player") null else "video_player"
+                }
+            ) {
+                SettingsVideoPlayerContent(context)
             }
 
             // Accordion 5: File Organiser
@@ -676,7 +693,8 @@ private fun SettingsThemeContent(state: AppState, onAction: (AppAction) -> Unit)
             ) {
                 IconShapeType.selectableShapes.forEach { shapeType ->
                     val isSelected = state.iconShapeSetting == shapeType
-                    val previewShape = IconShapes.forType(shapeType)
+                    val cornerRoundness = com.ripple.filemanager.ui.expressive.LocalCornerRoundness.current
+                    val previewShape = IconShapes.forType(shapeType, cornerRoundness = cornerRoundness)
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1068,6 +1086,9 @@ private fun SettingsViewersContent(state: AppState, onAction: (AppAction) -> Uni
         ExpressiveViewerRow("Image", state.viewerImage) {
             onAction(AppAction.SetViewerPreference("Image", it))
         }
+        ExpressiveViewerRow("Video", state.viewerVideo) {
+            onAction(AppAction.SetViewerPreference("Video", it))
+        }
     }
 }
 
@@ -1111,6 +1132,250 @@ private fun ExpressiveViewerRow(label: String, currentValue: String, onValueChan
                     onClick = { onValueChange("External"); expanded = false }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SettingsVideoPlayerContent(context: Context) {
+    val colors = ExpressiveTheme.colors
+    val prefs = remember { VideoPlayerPrefs(context) }
+
+    var hwMode by remember { mutableStateOf(prefs.hwAcceleration) }
+    var resumePlayback by remember { mutableStateOf(prefs.resumePlayback) }
+    var backgroundPlay by remember { mutableStateOf(prefs.backgroundPlay) }
+    var pipEnabled by remember { mutableStateOf(prefs.pictureInPicture) }
+    var orientation by remember { mutableStateOf(prefs.defaultOrientation) }
+
+    // Gestures
+    var doubleTapSeek by remember { mutableStateOf(prefs.gestureDoubleTapSeek) }
+    var swipeSeek by remember { mutableStateOf(prefs.gestureSwipeSeek) }
+    var swipeBv by remember { mutableStateOf(prefs.gestureSwipeBrightnessVolume) }
+    var pinchZoom by remember { mutableStateOf(prefs.gesturePinchZoom) }
+    var longPressSpeed by remember { mutableStateOf(prefs.gestureLongPressSpeed) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Hardware Decoding
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Hardware acceleration", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
+                Text("Use GPU decoding via MediaCodec", fontSize = 12.sp, color = colors.muted)
+            }
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.insetCard)
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                HwAccelerationMode.values().forEach { mode ->
+                    val isSel = hwMode == mode
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSel) colors.accent else Color.Transparent)
+                            .clickable {
+                                hwMode = mode
+                                prefs.hwAcceleration = mode
+                            }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = mode.label,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSel) Color.White else colors.text
+                        )
+                    }
+                }
+            }
+        }
+
+        // Resume playback
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Resume playback", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
+                Text("Remember last playback position", fontSize = 12.sp, color = colors.muted)
+            }
+            Switch(
+                checked = resumePlayback,
+                onCheckedChange = {
+                    resumePlayback = it
+                    prefs.resumePlayback = it
+                }
+            )
+        }
+
+        // Picture-in-Picture
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Picture-in-Picture", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
+                Text("Auto-minimize video to overlay", fontSize = 12.sp, color = colors.muted)
+            }
+            Switch(
+                checked = pipEnabled,
+                onCheckedChange = {
+                    pipEnabled = it
+                    prefs.pictureInPicture = it
+                }
+            )
+        }
+
+        // Background audio
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Background audio", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
+                Text("Continue audio with screen off", fontSize = 12.sp, color = colors.muted)
+            }
+            Switch(
+                checked = backgroundPlay,
+                onCheckedChange = {
+                    backgroundPlay = it
+                    prefs.backgroundPlay = it
+                }
+            )
+        }
+
+        // Default Orientation
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Default orientation", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.text)
+                Text("Initial player orientation", fontSize = 12.sp, color = colors.muted)
+            }
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.insetCard)
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                listOf("sensor" to "Auto", "landscape" to "Landscape", "portrait" to "Portrait").forEach { (key, label) ->
+                    val isSel = orientation == key
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSel) colors.accent else Color.Transparent)
+                            .clickable {
+                                orientation = key
+                                prefs.defaultOrientation = key
+                            }
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSel) Color.White else colors.text
+                        )
+                    }
+                }
+            }
+        }
+
+        // Gestures Subheader
+        Text(
+            text = "Gestures",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.accent,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Double tap to seek (10s)", fontSize = 13.sp, color = colors.text)
+            Switch(
+                checked = doubleTapSeek,
+                onCheckedChange = {
+                    doubleTapSeek = it
+                    prefs.gestureDoubleTapSeek = it
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Swipe to scrub / seek", fontSize = 13.sp, color = colors.text)
+            Switch(
+                checked = swipeSeek,
+                onCheckedChange = {
+                    swipeSeek = it
+                    prefs.gestureSwipeSeek = it
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Vertical swipe for brightness & volume", fontSize = 13.sp, color = colors.text)
+            Switch(
+                checked = swipeBv,
+                onCheckedChange = {
+                    swipeBv = it
+                    prefs.gestureSwipeBrightnessVolume = it
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Pinch to zoom", fontSize = 13.sp, color = colors.text)
+            Switch(
+                checked = pinchZoom,
+                onCheckedChange = {
+                    pinchZoom = it
+                    prefs.gesturePinchZoom = it
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Long press for 2x speed boost", fontSize = 13.sp, color = colors.text)
+            Switch(
+                checked = longPressSpeed,
+                onCheckedChange = {
+                    longPressSpeed = it
+                    prefs.gestureLongPressSpeed = it
+                }
+            )
         }
     }
 }

@@ -87,7 +87,7 @@ object VaultManager {
                 ext in setOf("mp4", "mkv", "mov", "webm", "avi", "3gp") -> "video"
                 ext in setOf("mp3", "flac", "wav", "m4a", "ogg", "aac") -> "audio"
                 ext in setOf("pdf", "doc", "docx", "txt", "xlsx", "xls", "pptx", "ppt", "md") -> "doc"
-                ext in setOf("zip", "rar", "7z", "tar", "gz") -> "archive"
+                com.ripple.filemanager.archive.ArchiveUtils.isArchiveExtension(ext) -> "archive"
                 ext == "apk" -> "apk"
                 else -> "file"
             }
@@ -113,6 +113,7 @@ object VaultManager {
     fun importFiles(context: Context, uris: List<Uri>): Int {
         var count = 0
         val vaultDir = getVaultDirectory(context)
+        val metadata = loadMetadata(context)
         for (uri in uris) {
             try {
                 val fileName = getFileNameFromUri(context, uri) ?: "imported_file_${System.currentTimeMillis()}"
@@ -130,11 +131,41 @@ object VaultManager {
                         input.copyTo(output)
                     }
                 }
+
+                val possiblePath = if (uri.scheme == "file") {
+                    uri.path
+                } else if (uri.scheme == "content" && uri.authority == "com.android.externalstorage.documents") {
+                    try {
+                        val docId = android.provider.DocumentsContract.getDocumentId(uri)
+                        val split = docId.split(":")
+                        if (split.size >= 2) {
+                            if (split[0].equals("primary", ignoreCase = true)) {
+                                "${Environment.getExternalStorageDirectory().absolutePath}/${split[1]}"
+                            } else {
+                                "/storage/${split[0]}/${split[1]}"
+                            }
+                        } else null
+                    } catch (_: Exception) { null }
+                } else null
+
+                if (!possiblePath.isNullOrBlank()) {
+                    val entry = JSONObject().apply {
+                        put("originalPath", possiblePath)
+                        put("originalName", fileName)
+                        put("timestamp", System.currentTimeMillis())
+                    }
+                    metadata[destFile.name] = entry
+                }
+
                 count++
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
+        if (metadata.isNotEmpty()) {
+            saveMetadata(context, metadata)
+        }
+        purgeVaultFilesFromRecent(context)
         return count
     }
 
@@ -233,7 +264,55 @@ object VaultManager {
             } catch (_: Exception) {}
         }
 
+        purgeVaultFilesFromRecent(context)
         return count
+    }
+
+    fun getVaultOriginalPaths(context: Context): Set<String> {
+        val metadata = loadMetadata(context)
+        val paths = mutableSetOf<String>()
+        for ((_, obj) in metadata) {
+            val originalPath = obj.optString("originalPath")
+            if (!originalPath.isNullOrBlank()) {
+                paths.add(originalPath)
+            }
+        }
+        return paths
+    }
+
+    fun isVaultFileOrPath(context: Context, path: String): Boolean {
+        if (path.isBlank()) return false
+        val vaultDir = getVaultDirectory(context).absolutePath
+        val vaultCanonical = try { getVaultDirectory(context).canonicalPath } catch (_: Exception) { vaultDir }
+        if (path.startsWith(vaultDir) || path.startsWith(vaultCanonical) || path.contains("vault_files")) return true
+        val originalPaths = getVaultOriginalPaths(context)
+        if (originalPaths.contains(path)) return true
+        try {
+            val fileCanonical = File(path).canonicalPath
+            for (orig in originalPaths) {
+                if (orig == path || File(orig).canonicalPath == fileCanonical) return true
+            }
+        } catch (_: Exception) {}
+        return false
+    }
+
+    fun purgeVaultFilesFromRecent(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences("sift_prefs", Context.MODE_PRIVATE)
+            val historyStr = prefs.getString("recent_actions", "[]") ?: "[]"
+            val history = org.json.JSONArray(historyStr)
+            val updated = org.json.JSONArray()
+            for (i in 0 until history.length()) {
+                val item = history.getJSONObject(i)
+                val path = item.optString("path", "")
+                if (path.isNotEmpty() && !isVaultFileOrPath(context, path)) {
+                    updated.put(item)
+                }
+            }
+            prefs.edit().putString("recent_actions", updated.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun restoreFile(context: Context, fileItem: FileItem): Boolean {

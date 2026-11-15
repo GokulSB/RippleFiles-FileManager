@@ -347,9 +347,13 @@ fun SiftTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = Color.Transparent.toArgb()
-            window.navigationBarColor = Color.Transparent.toArgb()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT < 35) {
+                @Suppress("DEPRECATION")
+                window.statusBarColor = Color.Transparent.toArgb()
+                @Suppress("DEPRECATION")
+                window.navigationBarColor = Color.Transparent.toArgb()
+            }
+            if (Build.VERSION.SDK_INT in Build.VERSION_CODES.Q..34) {
                 window.isNavigationBarContrastEnforced = false
                 window.isStatusBarContrastEnforced = false
             }

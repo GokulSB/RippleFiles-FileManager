@@ -45,7 +45,8 @@ fun DetailsPane(
                     Text(stringResource(R.string.selected_item), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(stringResource(R.string.details_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
-                IconButton(onClick = onClose, modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(16.dp))) {
+                val closeShape = com.ripple.filemanager.ui.getDynamicCornerShape(16f, cornerRoundness)
+                IconButton(onClick = onClose, modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, closeShape).clip(closeShape)) {
                     Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close_details))
                 }
             }

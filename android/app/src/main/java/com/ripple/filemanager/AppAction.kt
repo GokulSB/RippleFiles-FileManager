@@ -76,6 +76,8 @@ sealed class AppAction {
     
     // Extraction Operations
     data class ExtractZip(val sourcePath: String, val destPath: String) : AppAction()
+    data class OpenArchive(val file: FileItem) : AppAction()
+    object ClearArchiveFileToOpen : AppAction()
     object ToggleExtractPause : AppAction()
     object CancelExtract : AppAction()
     object ClearExtractResult : AppAction()

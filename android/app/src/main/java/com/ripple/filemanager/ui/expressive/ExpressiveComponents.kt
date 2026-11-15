@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Search
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.ripple.filemanager.ui.theme.OutfitFontFamily
 import com.ripple.filemanager.ui.theme.LocalAppFont
 import com.ripple.filemanager.FileItem
+import com.ripple.filemanager.IconShapeType
 
 // ═══════════════════════════════════════════════════════════════════════
 // SECTION TITLE + CONTAINER
@@ -104,6 +106,17 @@ fun InnerCard(
             .padding(contentPadding),
         content = content
     )
+}
+
+fun getSearchBarShape(
+    iconShape: IconShapeType = IconShapeType.COOKIE,
+    cornerRoundness: Float = 0.5f
+): androidx.compose.ui.graphics.Shape {
+    val roundness = cornerRoundness.coerceIn(0f, 1f)
+    val maxRadius = 28f
+    val baseRadius = 16f
+    val radius = (baseRadius * (roundness * 2f)).coerceIn(0f, maxRadius)
+    return RoundedCornerShape(radius.dp)
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -197,10 +210,11 @@ fun ExpressiveScreenHeader(
                 if (subtitle.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(2.dp))
                     if (onSubtitleClick != null) {
+                        val subtitleChipShape = RoundedCornerShape((12f * (LocalCornerRoundness.current * 2)).coerceIn(0f, 24f).dp)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(subtitleChipShape)
                                 .clickable(onClick = onSubtitleClick)
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
@@ -257,6 +271,11 @@ fun ExpressiveScreenHeader(
         }
 
         if (showSearch) {
+            val iconShapeType = LocalIconShapeType.current
+            val cornerRoundness = LocalCornerRoundness.current
+            val searchBarShape = remember(iconShapeType, cornerRoundness) {
+                getSearchBarShape(iconShapeType, cornerRoundness)
+            }
             Spacer(modifier = Modifier.height(8.dp))
 
             // 56dp Search Pill with AI search sparkle cookie
@@ -264,9 +283,9 @@ fun ExpressiveScreenHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
+                    .clip(searchBarShape)
                     .background(colors.insetCard)
-                    .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), RoundedCornerShape(28.dp))
+                    .border(1.dp, colors.line.copy(alpha = colors.lineAlpha), searchBarShape)
                     .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -304,6 +323,19 @@ fun ExpressiveScreenHeader(
                         innerTextField()
                     }
                 )
+
+                if (query.isNotEmpty()) {
+                    CookieIconButton(
+                        onClick = { onQueryChange("") },
+                        icon = Icons.Default.Close,
+                        bgColor = colors.card,
+                        description = "Clear search",
+                        iconTint = colors.text,
+                        size = 32.dp,
+                        lobes = 8
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
 
                 if (onAiSearchClick != null) {
                     CookieIconButton(

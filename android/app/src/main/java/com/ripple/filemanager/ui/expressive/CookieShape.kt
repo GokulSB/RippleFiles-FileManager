@@ -18,6 +18,7 @@ import com.ripple.filemanager.IconShapeType
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sign
 import kotlin.math.sin
 
@@ -26,10 +27,12 @@ import kotlin.math.sin
  *
  * @param lobes Number of scallops (6–12)
  * @param amplitude Scallop depth (0.0–0.15; default 0.07)
+ * @param exponent Curvature exponent (2.0 = circular base, > 2.0 = squarish base for lower roundness)
  */
 class CookieShape(
     val lobes: Int = 8,
-    val amplitude: Float = 0.07f
+    val amplitude: Float = 0.07f,
+    val exponent: Float = 2.0f
 ) : Shape {
     private val outlineCache = LruCache<Long, Outline>(16)
 
@@ -51,12 +54,23 @@ class CookieShape(
         val rx = (size.width / 2f) / (1f + amplitude)
         val ry = (size.height / 2f) / (1f + amplitude)
         val steps = lobes * 12
+        val power = 2.0 / exponent.toDouble()
 
         for (i in 0..steps) {
             val angle = (i.toFloat() / steps) * 2f * Math.PI.toFloat()
             val lobeFactor = 1f + amplitude * cos(lobes * angle)
-            val x = cx + rx * lobeFactor * cos(angle)
-            val y = cy + ry * lobeFactor * sin(angle)
+            val cosA = cos(angle)
+            val sinA = sin(angle)
+            val x = if (exponent == 2f) {
+                cx + rx * lobeFactor * cosA
+            } else {
+                cx + rx * lobeFactor * sign(cosA) * abs(cosA).toDouble().pow(power).toFloat()
+            }
+            val y = if (exponent == 2f) {
+                cy + ry * lobeFactor * sinA
+            } else {
+                cy + ry * lobeFactor * sign(sinA) * abs(sinA).toDouble().pow(power).toFloat()
+            }
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         path.close()
@@ -68,10 +82,15 @@ class CookieShape(
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is CookieShape) return false
-        return lobes == other.lobes && amplitude == other.amplitude
+        return lobes == other.lobes && amplitude == other.amplitude && exponent == other.exponent
     }
 
-    override fun hashCode(): Int = 31 * lobes + amplitude.hashCode()
+    override fun hashCode(): Int {
+        var result = lobes
+        result = 31 * result + amplitude.hashCode()
+        result = 31 * result + exponent.hashCode()
+        return result
+    }
 }
 
 /**
@@ -171,25 +190,90 @@ object IconShapes {
     val Ios: Shape = SuperellipseShape(n = 5.0f)
     val OneUi: Shape = SuperellipseShape(n = 3.2f)
 
-    private val cookieCache = LruCache<Long, CookieShape>(16)
+    private val cookieCache = LruCache<String, CookieShape>(32)
 
-    fun cookieShape(lobes: Int = 8, amplitude: Float = 0.07f): CookieShape {
-        val key = (lobes.toLong() shl 32) or (amplitude.toRawBits().toLong() and 0xFFFFFFFFL)
+    fun cookieShape(lobes: Int = 8, amplitude: Float = 0.07f, exponent: Float = 2.0f): CookieShape {
+        val key = "$lobes:$amplitude:$exponent"
         cookieCache.get(key)?.let { return it }
-        val s = CookieShape(lobes, amplitude)
+        val s = CookieShape(lobes, amplitude, exponent)
         cookieCache.put(key, s)
         return s
     }
 
-    fun forType(type: IconShapeType, lobes: Int = 8, amplitude: Float = 0.07f): Shape {
+    fun forType(
+        type: IconShapeType,
+        lobes: Int = 8,
+        amplitude: Float = 0.07f,
+        cornerRoundness: Float = 0.5f
+    ): Shape {
+        val roundness = cornerRoundness.coerceIn(0f, 1f)
+        if (roundness <= 0.05f) {
+            return RoundedCornerShape(0.dp)
+        }
         return when (type) {
-            IconShapeType.COOKIE -> cookieShape(lobes, amplitude)
-            IconShapeType.CIRCLE -> Circle
-            IconShapeType.SQUARE -> Square
-            IconShapeType.ROUNDED_SQUARE -> RoundedSquare
-            IconShapeType.IOS -> Ios
-            IconShapeType.ONE_UI -> OneUi
-            IconShapeType.AUTO -> forType(AutoIconShapeSession.sessionAutoShape, lobes, amplitude)
+            IconShapeType.COOKIE -> {
+                if (roundness >= 0.95f) {
+                    CircleShape
+                } else if (roundness in 0.05f..0.5f) {
+                    val t = (0.5f - roundness) / 0.45f
+                    val exponent = 2.0f + 14.0f * t
+                    val amp = amplitude * (1f - 0.7f * t)
+                    cookieShape(lobes, amp, exponent)
+                } else {
+                    val t = (roundness - 0.5f) / 0.45f
+                    val amp = amplitude * (1f + 0.35f * t)
+                    cookieShape(lobes, amp, 2.0f)
+                }
+            }
+            IconShapeType.CIRCLE -> {
+                val percent = if (roundness <= 0.5f) {
+                    (28f * (roundness / 0.5f)).roundToInt()
+                } else {
+                    (28f + 22f * ((roundness - 0.5f) / 0.5f)).roundToInt()
+                }
+                if (percent >= 50) CircleShape else RoundedCornerShape(percent = percent.coerceIn(0, 50))
+            }
+            IconShapeType.SQUARE -> {
+                val r = (8f * roundness).dp
+                RoundedCornerShape(r)
+            }
+            IconShapeType.ROUNDED_SQUARE -> {
+                val percent = if (roundness <= 0.5f) {
+                    (28f * (roundness / 0.5f)).roundToInt()
+                } else {
+                    (28f + 22f * ((roundness - 0.5f) / 0.5f)).roundToInt()
+                }
+                if (percent >= 50) CircleShape else RoundedCornerShape(percent = percent.coerceIn(0, 50))
+            }
+            IconShapeType.IOS -> {
+                if (roundness >= 0.98f) {
+                    CircleShape
+                } else if (roundness <= 0.5f) {
+                    val t = (0.5f - roundness) / 0.48f
+                    val n = 5.0f + 19.0f * t
+                    SuperellipseShape(n = n.coerceIn(2.0f, 24.0f))
+                } else {
+                    val t = (roundness - 0.5f) / 0.48f
+                    val n = 5.0f - 3.0f * t
+                    SuperellipseShape(n = n.coerceIn(2.0f, 24.0f))
+                }
+            }
+            IconShapeType.ONE_UI -> {
+                if (roundness >= 0.98f) {
+                    CircleShape
+                } else if (roundness <= 0.5f) {
+                    val t = (0.5f - roundness) / 0.48f
+                    val n = 3.2f + 20.8f * t
+                    SuperellipseShape(n = n.coerceIn(2.0f, 24.0f))
+                } else {
+                    val t = (roundness - 0.5f) / 0.48f
+                    val n = 3.2f - 1.2f * t
+                    SuperellipseShape(n = n.coerceIn(2.0f, 24.0f))
+                }
+            }
+            IconShapeType.AUTO -> {
+                forType(AutoIconShapeSession.sessionAutoShape, lobes, amplitude, roundness)
+            }
         }
     }
 }
@@ -200,9 +284,10 @@ val LocalIconShapeType = staticCompositionLocalOf<IconShapeType> { IconShapeType
 fun rememberIconShape(
     type: IconShapeType = LocalIconShapeType.current,
     lobes: Int = 8,
-    amplitude: Float = 0.07f
+    amplitude: Float = 0.07f,
+    cornerRoundness: Float = LocalCornerRoundness.current
 ): Shape {
-    return remember(type, lobes, amplitude) {
-        IconShapes.forType(type, lobes = lobes, amplitude = amplitude)
+    return remember(type, lobes, amplitude, cornerRoundness) {
+        IconShapes.forType(type, lobes = lobes, amplitude = amplitude, cornerRoundness = cornerRoundness)
     }
 }
