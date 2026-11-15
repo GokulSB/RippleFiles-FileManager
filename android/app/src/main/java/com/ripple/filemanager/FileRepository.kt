@@ -526,6 +526,32 @@ class FileRepository(private val context: Context) {
         }
     }
 
+    fun clearRecentActions() {
+        try {
+            prefs.edit().putString("recent_actions", "[]").apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun removeRecentAction(path: String) {
+        try {
+            val historyStr = prefs.getString("recent_actions", "[]") ?: "[]"
+            val history = JSONArray(historyStr)
+            val updated = JSONArray()
+            for (i in 0 until history.length()) {
+                val item = history.getJSONObject(i)
+                val itemPath = item.optString("path", "")
+                if (itemPath.isNotEmpty() && itemPath != path) {
+                    updated.put(item)
+                }
+            }
+            prefs.edit().putString("recent_actions", updated.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     suspend fun createFolder(parentPath: String, name: String): Boolean = withContext(Dispatchers.IO) {
         if (parentPath == "recent" || parentPath == "pinned") return@withContext false
         if (parentPath.startsWith("drive_id:") || parentPath == "drive" || parentPath.startsWith("drive:")) {

@@ -264,6 +264,8 @@ class MainActivity : FragmentActivity() {
                         is AppAction.BatchRenameFiles -> viewModel.batchRenameFiles(action.baseName, action.extension, action.padding, action.startNumber, action.isPrefix, action.style)
                         is AppAction.DeleteSelectedFiles -> viewModel.deleteSelectedFiles()
                         is AppAction.LogRecentAction -> viewModel.logRecentAction(action.path, action.action)
+                        is AppAction.ClearRecentFiles -> viewModel.clearRecentFiles()
+                        is AppAction.RemoveRecentFile -> viewModel.removeRecentFile(action.path)
                         is AppAction.SetClipboard -> viewModel.setClipboard(action.action)
                         is AppAction.ClearClipboard -> viewModel.clearClipboard()
                         is AppAction.PasteClipboard -> viewModel.pasteClipboard(action.location)

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.*
@@ -97,6 +98,7 @@ fun ExpressiveHomeScreen(
     val colors = ExpressiveTheme.colors
     val context = androidx.compose.ui.platform.LocalContext.current
     var showStorageSheet by remember { mutableStateOf(false) }
+    var showClearRecentsConfirm by remember { mutableStateOf(false) }
 
     val currentOnSwipeToBrowse by androidx.compose.runtime.rememberUpdatedState(onSwipeToBrowse)
     val density = LocalDensity.current
@@ -175,9 +177,31 @@ fun ExpressiveHomeScreen(
 
         // 4. Section Title (Search results vs Recent files)
         item(key = "files_title") {
-            SectionTitle(
-                title = if (state.query.isNotEmpty()) "Search results (${state.files.size})" else "Recent files"
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SectionTitle(
+                    title = if (state.query.isNotEmpty()) "Search results (${state.files.size})" else "Recent files"
+                )
+                if (state.query.isEmpty() && state.recentFiles.isNotEmpty()) {
+                    TextButton(
+                        onClick = { showClearRecentsConfirm = true },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Clear all",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = LocalAppFont.current,
+                            color = colors.muted
+                        )
+                    }
+                }
+            }
         }
 
         // 5. Section Container with rows
@@ -188,11 +212,6 @@ fun ExpressiveHomeScreen(
                 val pool = state.recentFiles.filter {
                     (state.showHiddenFiles || !it.isHidden) &&
                     !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, it.path)
-                }.ifEmpty {
-                    state.files.filter {
-                        (state.showHiddenFiles || !it.isHidden) &&
-                        !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, it.path)
-                    }
                 }
                 pool.take(10)
             }
@@ -273,7 +292,10 @@ fun ExpressiveHomeScreen(
                                     isSelected = state.selectedFiles.contains(file.id),
                                     onSelect = { onAction(AppAction.ToggleSelection(file.id)) },
                                     onClick = { onFileClick(file) },
-                                    onMenuClick = { onFileMenuClick(file) }
+                                    onMenuClick = { onFileMenuClick(file) },
+                                    onRemoveClick = if (state.query.isEmpty()) {
+                                        { onAction(AppAction.RemoveRecentFile(file.path)) }
+                                    } else null
                                 )
                                 if (index < displayedFiles.size - 1) {
                                     Box(
@@ -289,6 +311,21 @@ fun ExpressiveHomeScreen(
                 }
             }
         }
+    }
+
+    // Clear Recent History Confirmation Sheet
+    if (showClearRecentsConfirm) {
+        ExpressiveConfirmationSheet(
+            title = "Clear recent history",
+            subtitle = "This will remove all files from your recently viewed history. Your original files will not be deleted.",
+            confirmLabel = "Clear",
+            cancelLabel = "Cancel",
+            onConfirm = {
+                showClearRecentsConfirm = false
+                onAction(AppAction.ClearRecentFiles)
+            },
+            onDismissRequest = { showClearRecentsConfirm = false }
+        )
     }
 
     // Storage Switcher Bottom Sheet
@@ -1094,6 +1131,7 @@ fun ExpressiveRecentFileRow(
     onSelect: () -> Unit,
     onClick: () -> Unit,
     onMenuClick: () -> Unit,
+    onRemoveClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val colors = ExpressiveTheme.colors
@@ -1197,8 +1235,26 @@ fun ExpressiveRecentFileRow(
             )
         }
 
+        // Remove from recents button (close icon)
+        if (onRemoveClick != null) {
+            IconButton(
+                onClick = onRemoveClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove from recents",
+                    tint = colors.muted,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
         // 3-dot menu button
-        IconButton(onClick = onMenuClick) {
+        IconButton(
+            onClick = onMenuClick,
+            modifier = Modifier.size(36.dp)
+        ) {
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "Options",

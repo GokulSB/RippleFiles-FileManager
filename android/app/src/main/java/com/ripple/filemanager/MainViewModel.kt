@@ -758,6 +758,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun clearRecentFiles() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.clearRecentActions()
+            _state.update { it.copy(recentFiles = persistentListOf()) }
+        }
+    }
+
+    fun removeRecentFile(path: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.removeRecentAction(path)
+            _state.update { state ->
+                state.copy(recentFiles = state.recentFiles.filter { it.path != path }.toImmutableList())
+            }
+        }
+    }
+
     private fun updateStorageStats() {
         try {
             val stat = StatFs(Environment.getExternalStorageDirectory().path)

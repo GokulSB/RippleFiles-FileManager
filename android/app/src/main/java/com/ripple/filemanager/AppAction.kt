@@ -66,6 +66,8 @@ sealed class AppAction {
     ) : AppAction()
     object DeleteSelectedFiles : AppAction()
     data class LogRecentAction(val path: String, val action: String) : AppAction()
+    object ClearRecentFiles : AppAction()
+    data class RemoveRecentFile(val path: String) : AppAction()
     
     // Clipboard Operations
     data class SetClipboard(val action: String) : AppAction()

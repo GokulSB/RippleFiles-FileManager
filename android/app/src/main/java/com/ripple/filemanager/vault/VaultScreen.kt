@@ -12,9 +12,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Deselect
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -1355,6 +1359,14 @@ private fun VaultBrowserScreen(
     var vaultFiles by remember { mutableStateOf(VaultManager.getVaultFiles(context)) }
     var selectedFileForMenu by remember { mutableStateOf<FileItem?>(null) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var isSelectionMode by remember { mutableStateOf(false) }
+    val selectedPaths = remember { mutableStateListOf<String>() }
+    var isRestoring by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isSelectionMode) {
+        isSelectionMode = false
+        selectedPaths.clear()
+    }
 
     LaunchedEffect(refreshTrigger) {
         vaultFiles = VaultManager.getVaultFiles(context)
@@ -1362,6 +1374,31 @@ private fun VaultBrowserScreen(
 
     fun refreshFiles() {
         vaultFiles = VaultManager.getVaultFiles(context)
+        selectedPaths.retainAll(vaultFiles.map { it.path })
+        if (selectedPaths.isEmpty()) {
+            isSelectionMode = false
+        }
+    }
+
+    fun restoreSelectedFiles() {
+        val filesToRestore = vaultFiles.filter { selectedPaths.contains(it.path) }
+        if (filesToRestore.isEmpty()) return
+        isRestoring = true
+        coroutineScope.launch(Dispatchers.IO) {
+            val count = VaultManager.restoreFiles(context, filesToRestore)
+            withContext(Dispatchers.Main) {
+                isRestoring = false
+                isSelectionMode = false
+                selectedPaths.clear()
+                refreshFiles()
+                onAction(AppAction.Reload)
+                Toast.makeText(
+                    context,
+                    "Restored $count file${if (count == 1) "" else "s"} to internal storage",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 
     val categories = remember {
@@ -1418,91 +1455,218 @@ private fun VaultBrowserScreen(
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CookieIconButton(
-                        onClick = onClose,
-                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        bgColor = colors.card,
-                        iconTint = colors.text,
-                        description = "Back and Lock",
-                        size = 40.dp,
-                        lobes = 8
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "Vault",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = LocalAppFont.current,
-                            color = colors.text
+            if (isSelectionMode) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CookieIconButton(
+                            onClick = {
+                                haptics.tap()
+                                isSelectionMode = false
+                                selectedPaths.clear()
+                            },
+                            icon = Icons.Default.Close,
+                            bgColor = colors.card,
+                            iconTint = colors.text,
+                            description = "Close selection",
+                            size = 40.dp,
+                            lobes = 8
                         )
-                        Text(
-                            text = "${vaultFiles.size} protected file${if (vaultFiles.size == 1) "" else "s"}",
-                            fontSize = 12.sp,
-                            fontFamily = LocalAppFont.current,
-                            color = colors.muted
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "${selectedPaths.size} selected",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.text
+                            )
+                            val selBytes = displayFiles.filter { selectedPaths.contains(it.path) }.sumOf { it.sizeBytes }
+                            if (selBytes > 0L) {
+                                Text(
+                                    text = android.text.format.Formatter.formatFileSize(context, selBytes),
+                                    fontSize = 12.sp,
+                                    fontFamily = LocalAppFont.current,
+                                    color = colors.muted
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val allSelected = displayFiles.isNotEmpty() && selectedPaths.size >= displayFiles.size
+                        CookieIconButton(
+                            onClick = {
+                                haptics.tap()
+                                if (allSelected) {
+                                    selectedPaths.clear()
+                                } else {
+                                    selectedPaths.clear()
+                                    selectedPaths.addAll(displayFiles.map { it.path })
+                                }
+                            },
+                            icon = if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll,
+                            bgColor = colors.card,
+                            iconTint = if (allSelected) colors.accent else colors.text,
+                            description = if (allSelected) "Deselect All" else "Select All",
+                            size = 40.dp,
+                            lobes = 8
+                        )
+
+                        CookieIconButton(
+                            onClick = {
+                                if (selectedPaths.isNotEmpty()) {
+                                    haptics.tap()
+                                    restoreSelectedFiles()
+                                }
+                            },
+                            icon = Icons.Outlined.SettingsBackupRestore,
+                            bgColor = if (selectedPaths.isNotEmpty()) colors.accent else colors.card,
+                            iconTint = if (selectedPaths.isNotEmpty()) colors.ink else colors.muted,
+                            description = "Restore to Storage",
+                            size = 40.dp,
+                            lobes = 8
                         )
                     }
                 }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CookieIconButton(
+                            onClick = onClose,
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            bgColor = colors.card,
+                            iconTint = colors.text,
+                            description = "Back and Lock",
+                            size = 40.dp,
+                            lobes = 8
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Vault",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.text
+                            )
+                            Text(
+                                text = "${vaultFiles.size} protected file${if (vaultFiles.size == 1) "" else "s"}",
+                                fontSize = 12.sp,
+                                fontFamily = LocalAppFont.current,
+                                color = colors.muted
+                            )
+                        }
+                    }
 
-                // Lock Vault button
-                CookieIconButton(
-                    onClick = {
-                        haptics.tap()
-                        onLock()
-                    },
-                    icon = Icons.Outlined.Lock,
-                    bgColor = colors.card,
-                    iconTint = colors.accent,
-                    description = "Lock Vault",
-                    size = 40.dp,
-                    lobes = 8
-                )
+                    // Lock Vault button
+                    CookieIconButton(
+                        onClick = {
+                            haptics.tap()
+                            onLock()
+                        },
+                        icon = Icons.Outlined.Lock,
+                        bgColor = colors.card,
+                        iconTint = colors.accent,
+                        description = "Lock Vault",
+                        size = 40.dp,
+                        lobes = 8
+                    )
+                }
             }
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    haptics.tap()
-                    onAddFilesClick()
-                },
-                containerColor = colors.accent,
-                contentColor = colors.ink,
-                shape = RoundedCornerShape(24.dp),
-                icon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = "Add Files",
-                        tint = colors.ink
-                    )
-                },
-                text = {
-                    Text(
-                        text = "Add Files",
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = LocalAppFont.current
+            if (isSelectionMode) {
+                if (selectedPaths.isNotEmpty()) {
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            haptics.tap()
+                            restoreSelectedFiles()
+                        },
+                        containerColor = colors.accent,
+                        contentColor = colors.ink,
+                        shape = RoundedCornerShape(24.dp),
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Outlined.SettingsBackupRestore,
+                                contentDescription = "Restore to Internal Storage",
+                                tint = colors.ink
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "Restore (${selectedPaths.size})",
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = LocalAppFont.current
+                            )
+                        }
                     )
                 }
-            )
+            } else {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        haptics.tap()
+                        onAddFilesClick()
+                    },
+                    containerColor = colors.accent,
+                    contentColor = colors.ink,
+                    shape = RoundedCornerShape(24.dp),
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = "Add Files",
+                            tint = colors.ink
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Add Files",
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = LocalAppFont.current
+                        )
+                    }
+                )
+            }
         }
     ) { paddingValues ->
-        if (isImporting) {
+        if (isImporting || isRestoring) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = colors.accent)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(color = colors.accent)
+                    if (isRestoring) {
+                        Text(
+                            text = "Restoring files...",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = LocalAppFont.current,
+                            color = colors.muted
+                        )
+                    }
+                }
             }
         } else {
             LazyColumn(
@@ -1764,12 +1928,36 @@ private fun VaultBrowserScreen(
                     }
                 } else {
                     items(displayFiles, key = { it.path }) { file ->
+                        val isSelected = selectedPaths.contains(file.path)
                         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                             VaultFileItemRow(
                                 file = file,
+                                isSelected = isSelected,
+                                isSelectionMode = isSelectionMode,
                                 onClick = {
                                     haptics.tap()
-                                    onAction(AppAction.ViewFile(file))
+                                    if (isSelectionMode) {
+                                        if (isSelected) {
+                                            selectedPaths.remove(file.path)
+                                        } else {
+                                            selectedPaths.add(file.path)
+                                        }
+                                    } else {
+                                        onAction(AppAction.ViewFile(file))
+                                    }
+                                },
+                                onLongClick = {
+                                    haptics.tap()
+                                    if (!isSelectionMode) {
+                                        isSelectionMode = true
+                                        selectedPaths.add(file.path)
+                                    } else {
+                                        if (isSelected) {
+                                            selectedPaths.remove(file.path)
+                                        } else {
+                                            selectedPaths.add(file.path)
+                                        }
+                                    }
                                 },
                                 onMenuClick = {
                                     haptics.tap()
@@ -1966,20 +2154,35 @@ private fun VaultCategoryCookieTile(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VaultFileItemRow(
     file: FileItem,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onMenuClick: () -> Unit
 ) {
     val colors = ExpressiveTheme.colors
+    val roundness = LocalCornerRoundness.current
+    val rowShape = RoundedCornerShape((20f * (roundness * 2).coerceIn(0f, 2f)).dp)
     Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.card),
-        border = androidx.compose.foundation.BorderStroke(1.dp, colors.line.copy(alpha = colors.lineAlpha)),
+        shape = rowShape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) colors.card.copy(alpha = 0.85f) else colors.card
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) colors.accent else colors.line.copy(alpha = colors.lineAlpha)
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clip(rowShape)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1987,7 +2190,7 @@ private fun VaultFileItemRow(
         ) {
             ExpressiveFileThumbnail(
                 file = file,
-                isSelected = false,
+                isSelected = isSelected,
                 size = 46.dp
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -2009,13 +2212,25 @@ private fun VaultFileItemRow(
                     color = colors.muted
                 )
             }
-            IconButton(onClick = onMenuClick) {
-                Icon(
-                    imageVector = Icons.Outlined.MoreVert,
-                    contentDescription = "Options",
-                    tint = colors.muted,
-                    modifier = Modifier.size(20.dp)
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick() },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = colors.accent,
+                        checkmarkColor = colors.ink,
+                        uncheckedColor = colors.muted
+                    )
                 )
+            } else {
+                IconButton(onClick = onMenuClick) {
+                    Icon(
+                        imageVector = Icons.Outlined.MoreVert,
+                        contentDescription = "Options",
+                        tint = colors.muted,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
