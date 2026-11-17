@@ -101,8 +101,11 @@ class LibVlcPlayerEngine(
     ): ArrayList<String> {
         val options = ArrayList<String>()
         options.add("--audio-time-stretch")
-        options.add("--file-caching=2500")
+        options.add("--file-caching=2000")
         options.add("--network-caching=3000")
+        options.add("--drop-late-frames")
+        options.add("--skip-frames")
+        options.add("--no-stats")
 
         when (hw) {
             HwAccelerationMode.AUTO -> {
@@ -144,7 +147,17 @@ class LibVlcPlayerEngine(
     ) {
         try {
             val options = buildVlcOptions(hw, encoding, style)
-            libVLC?.release()
+            val oldVlc = libVLC
+            libVLC = null
+            if (oldVlc != null) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        oldVlc.release()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error releasing old LibVLC in background", e)
+                    }
+                }
+            }
             libVLC = LibVLC(context.applicationContext, options)
             createMediaPlayer()
         } catch (e: Exception) {
@@ -155,24 +168,35 @@ class LibVlcPlayerEngine(
 
     private fun createMediaPlayer() {
         val vlc = libVLC ?: return
-        mediaPlayer?.let { mp ->
+        val oldMp = mediaPlayer
+        mediaPlayer = null
+
+        oldMp?.let { mp ->
             try {
                 mp.setEventListener(null)
-                mp.stop()
-                mp.detachViews()
-                mp.release()
+                if (areViewsAttached) {
+                    mp.detachViews()
+                }
             } catch (e: Exception) {
-                Log.w(TAG, "Error releasing previous player", e)
+                Log.w(TAG, "Error detaching previous player", e)
+            }
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    mp.stop()
+                    mp.release()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error releasing previous player in background", e)
+                }
             }
         }
 
+        areViewsAttached = false
         mediaPlayer = MediaPlayer(vlc).apply {
             setEventListener { event ->
                 handleMediaPlayerEvent(event)
             }
         }
 
-        areViewsAttached = false
         attachedLayout?.let { layout ->
             try {
                 mediaPlayer?.attachViews(layout, null, true, true)
@@ -328,7 +352,6 @@ class LibVlcPlayerEngine(
 
     override fun attachVideoLayout(layout: VLCVideoLayout) {
         if (attachedLayout == layout && areViewsAttached) {
-            applyScaleType(_aspectRatio.value)
             return
         }
         attachedLayout = layout
@@ -375,11 +398,18 @@ class LibVlcPlayerEngine(
             libVLC ?: return
         }
 
+        val oldMedia = currentMedia
+        val oldPfd = pfd
+        currentMedia = null
+        pfd = null
+        if (oldMedia != null || oldPfd != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try { oldMedia?.release() } catch (_: Exception) {}
+                try { oldPfd?.close() } catch (_: Exception) {}
+            }
+        }
+
         try {
-            currentMedia?.release()
-            currentMedia = null
-            pfd?.close()
-            pfd = null
 
             val media: Media = when {
                 source.path != null && File(source.path).exists() -> {
@@ -510,11 +540,13 @@ class LibVlcPlayerEngine(
     override fun stop() {
         val mp = mediaPlayer ?: return
         if (mp.isReleased) return
-        try {
-            mp.stop()
-            _playbackState.value = PlaybackState.Idle
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping", e)
+        _playbackState.value = PlaybackState.Idle
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                mp.stop()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping in background", e)
+            }
         }
     }
 
@@ -752,31 +784,52 @@ class LibVlcPlayerEngine(
 
     override fun release() {
         scope.cancel()
+        val layout = attachedLayout
+        val mp = mediaPlayer
+        val media = currentMedia
+        val vlc = libVLC
+        val fd = pfd
+
         attachedLayout = null
         areViewsAttached = false
+        mediaPlayer = null
+        currentMedia = null
+        libVLC = null
+        pfd = null
+
         try {
-            mediaPlayer?.let { mp ->
-                try {
-                    mp.setEventListener(null)
-                    mp.stop()
-                    mp.detachViews()
-                    mp.release()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error cleaning up mediaPlayer on release", e)
-                }
+            mp?.setEventListener(null)
+            if (layout != null) {
+                mp?.detachViews()
             }
-            mediaPlayer = null
-
-            currentMedia?.release()
-            currentMedia = null
-
-            pfd?.close()
-            pfd = null
-
-            libVLC?.release()
-            libVLC = null
         } catch (e: Exception) {
-            Log.e(TAG, "Error releasing LibVlcPlayerEngine", e)
+            Log.w(TAG, "Error detaching views during release", e)
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                mp?.stop()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error stopping mediaPlayer in background", e)
+            }
+            try {
+                mp?.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error releasing mediaPlayer in background", e)
+            }
+            try {
+                media?.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error releasing media in background", e)
+            }
+            try {
+                fd?.close()
+            } catch (_: Exception) {}
+            try {
+                vlc?.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error releasing LibVLC in background", e)
+            }
         }
     }
 }

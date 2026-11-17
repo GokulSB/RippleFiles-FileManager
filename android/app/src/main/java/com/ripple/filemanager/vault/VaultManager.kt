@@ -72,17 +72,28 @@ object VaultManager {
         return dir
     }
 
-    fun getVaultFiles(context: Context): List<FileItem> {
-        val dir = getVaultDirectory(context)
+    fun getVaultFiles(context: Context, customDir: File? = null): List<FileItem> {
+        val dir = customDir ?: getVaultDirectory(context)
         val files = dir.listFiles()?.filter { !it.name.startsWith(".") } ?: emptyList()
         val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
         return files.mapIndexed { index, file ->
-            val ext = file.extension.lowercase(Locale.getDefault())
-            val sizeStr = android.text.format.Formatter.formatFileSize(context, file.length())
+            val isDir = file.isDirectory
+            val ext = if (isDir) "" else file.extension.lowercase(Locale.getDefault())
+            val sizeBytes = if (isDir) {
+                try { file.walkTopDown().filter { it.isFile }.sumOf { it.length() } } catch (_: Exception) { 0L }
+            } else {
+                file.length()
+            }
+            val sizeStr = if (isDir) {
+                val itemsCount = file.list()?.filter { !it.startsWith(".") }?.size ?: 0
+                "$itemsCount item${if (itemsCount == 1) "" else "s"}"
+            } else {
+                android.text.format.Formatter.formatFileSize(context, sizeBytes)
+            }
             val dateStr = dateFormat.format(Date(file.lastModified()))
             val fileType = when {
-                file.isDirectory -> "folder"
+                isDir -> "folder"
                 ext in setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic") -> "image"
                 ext in setOf("mp4", "mkv", "mov", "webm", "avi", "3gp") -> "video"
                 ext in setOf("mp3", "flac", "wav", "m4a", "ogg", "aac") -> "audio"
@@ -97,17 +108,17 @@ object VaultManager {
                 path = file.absolutePath,
                 name = file.name,
                 type = fileType,
-                kind = if (file.isDirectory) "folder" else "file",
+                kind = if (isDir) "folder" else "file",
                 size = sizeStr,
                 changed = dateStr,
                 owner = "",
                 isPinned = false,
                 isLocked = true,
-                isEmptyFolder = file.isDirectory && (file.list()?.isEmpty() == true),
-                sizeBytes = file.length(),
+                isEmptyFolder = isDir && (file.list()?.isEmpty() == true),
+                sizeBytes = sizeBytes,
                 lastModified = file.lastModified()
             )
-        }.sortedByDescending { it.lastModified }
+        }.sortedWith(compareByDescending<FileItem> { it.kind == "folder" }.thenByDescending { it.lastModified })
     }
 
     fun importFiles(context: Context, uris: List<Uri>): Int {
@@ -193,13 +204,80 @@ object VaultManager {
         return map
     }
 
+    @Volatile
+    private var cachedOriginalPaths: Set<String>? = null
+
     private fun saveMetadata(context: Context, map: Map<String, JSONObject>) {
+        cachedOriginalPaths = null
         try {
             val json = JSONObject()
             for ((k, v) in map) {
                 json.put(k, v)
             }
             getMetadataFile(context).writeText(json.toString())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun deleteSourceFileOrDir(context: Context, file: File): Boolean {
+        if (!file.exists()) return true
+        try {
+            if (file.isDirectory) {
+                file.walkBottomUp().forEach { child ->
+                    if (child.absolutePath != file.absolutePath) {
+                        deleteSingleFileOrDir(context, child)
+                    }
+                }
+                deleteSingleFileOrDir(context, file)
+            } else {
+                deleteSingleFileOrDir(context, file)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        try {
+            val uri = android.provider.MediaStore.Files.getContentUri("external")
+            context.contentResolver.delete(
+                uri,
+                "${android.provider.MediaStore.MediaColumns.DATA} = ? OR ${android.provider.MediaStore.MediaColumns.DATA} LIKE ?",
+                arrayOf(file.absolutePath, "${file.absolutePath}/%")
+            )
+        } catch (_: Exception) {}
+
+        return !file.exists()
+    }
+
+    private fun deleteSingleFileOrDir(context: Context, file: File): Boolean {
+        if (!file.exists()) return true
+        var deleted = try { file.delete() } catch (_: Exception) { false }
+        if (!deleted && file.exists()) {
+            try {
+                val uri = android.provider.MediaStore.Files.getContentUri("external")
+                context.contentResolver.delete(
+                    uri,
+                    "${android.provider.MediaStore.MediaColumns.DATA} = ?",
+                    arrayOf(file.absolutePath)
+                )
+            } catch (_: Exception) {}
+            deleted = !file.exists()
+        }
+        if (!deleted && file.exists()) {
+            deleted = try { file.delete() } catch (_: Exception) { false }
+        }
+        return deleted || !file.exists()
+    }
+
+    fun purgeVaultSourceFiles(context: Context) {
+        try {
+            val originalPaths = getVaultOriginalPaths(context)
+            for (path in originalPaths) {
+                val file = File(path)
+                if (file.exists()) {
+                    deleteSourceFileOrDir(context, file)
+                }
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -214,36 +292,65 @@ object VaultManager {
         for (path in filePaths) {
             try {
                 val srcFile = File(path)
-                if (!srcFile.exists() || srcFile.isDirectory) continue
-                val fileName = srcFile.name
-                var destFile = File(vaultDir, fileName)
-                var counter = 1
-                while (destFile.exists()) {
-                    val base = fileName.substringBeforeLast('.')
-                    val ext = if (fileName.contains('.')) ".${fileName.substringAfterLast('.')}" else ""
-                    destFile = File(vaultDir, "${base}_$counter$ext")
-                    counter++
-                }
+                if (!srcFile.exists()) continue
 
-                srcFile.inputStream().use { input ->
-                    FileOutputStream(destFile).use { output ->
-                        input.copyTo(output)
+                if (srcFile.isDirectory) {
+                    val folderName = srcFile.name
+                    var destDir = File(vaultDir, folderName)
+                    var counter = 1
+                    while (destDir.exists()) {
+                        destDir = File(vaultDir, "${folderName}_$counter")
+                        counter++
                     }
-                }
 
-                val entry = JSONObject().apply {
-                    put("originalPath", srcFile.absolutePath)
-                    put("originalName", fileName)
-                    put("timestamp", System.currentTimeMillis())
-                }
-                metadata[destFile.name] = entry
+                    val copied = srcFile.copyRecursively(destDir, overwrite = false)
+                    if (!copied) {
+                        destDir.deleteRecursively()
+                        continue
+                    }
 
-                val originalPath = srcFile.absolutePath
-                val deleted = srcFile.delete()
-                if (deleted) {
+                    val entry = JSONObject().apply {
+                        put("originalPath", srcFile.absolutePath)
+                        put("originalName", folderName)
+                        put("isFolder", true)
+                        put("timestamp", System.currentTimeMillis())
+                    }
+                    metadata[destDir.name] = entry
+
+                    srcFile.walkTopDown().filter { it.isFile }.forEach { f ->
+                        scannedPaths.add(f.absolutePath)
+                    }
+                    deleteSourceFileOrDir(context, srcFile)
+                    count++
+                } else {
+                    val fileName = srcFile.name
+                    var destFile = File(vaultDir, fileName)
+                    var counter = 1
+                    while (destFile.exists()) {
+                        val base = fileName.substringBeforeLast('.')
+                        val ext = if (fileName.contains('.')) ".${fileName.substringAfterLast('.')}" else ""
+                        destFile = File(vaultDir, "${base}_$counter$ext")
+                        counter++
+                    }
+
+                    srcFile.inputStream().use { input ->
+                        FileOutputStream(destFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+
+                    val entry = JSONObject().apply {
+                        put("originalPath", srcFile.absolutePath)
+                        put("originalName", fileName)
+                        put("timestamp", System.currentTimeMillis())
+                    }
+                    metadata[destFile.name] = entry
+
+                    val originalPath = srcFile.absolutePath
+                    deleteSourceFileOrDir(context, srcFile)
                     scannedPaths.add(originalPath)
+                    count++
                 }
-                count++
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -265,10 +372,12 @@ object VaultManager {
         }
 
         purgeVaultFilesFromRecent(context)
+        purgeVaultSourceFiles(context)
         return count
     }
 
     fun getVaultOriginalPaths(context: Context): Set<String> {
+        cachedOriginalPaths?.let { return it }
         val metadata = loadMetadata(context)
         val paths = mutableSetOf<String>()
         for ((_, obj) in metadata) {
@@ -277,6 +386,7 @@ object VaultManager {
                 paths.add(originalPath)
             }
         }
+        cachedOriginalPaths = paths
         return paths
     }
 
@@ -286,13 +396,24 @@ object VaultManager {
         val vaultCanonical = try { getVaultDirectory(context).canonicalPath } catch (_: Exception) { vaultDir }
         if (path.startsWith(vaultDir) || path.startsWith(vaultCanonical) || path.contains("vault_files")) return true
         val originalPaths = getVaultOriginalPaths(context)
-        if (originalPaths.contains(path)) return true
+        if (originalPaths.isEmpty()) return false
+
+        val normPath = path.trimEnd('/', '\\')
+        for (orig in originalPaths) {
+            val normOrig = orig.trimEnd('/', '\\')
+            if (normPath.equals(normOrig, ignoreCase = true)) return true
+            if (normPath.startsWith("$normOrig/", ignoreCase = true) || normPath.startsWith("$normOrig\\", ignoreCase = true)) return true
+        }
+
         try {
-            val fileCanonical = File(path).canonicalPath
+            val fileCanonical = File(path).canonicalPath.trimEnd('/', '\\')
             for (orig in originalPaths) {
-                if (orig == path || File(orig).canonicalPath == fileCanonical) return true
+                val origCanonical = try { File(orig).canonicalPath.trimEnd('/', '\\') } catch (_: Exception) { orig.trimEnd('/', '\\') }
+                if (fileCanonical.equals(origCanonical, ignoreCase = true)) return true
+                if (fileCanonical.startsWith("$origCanonical/", ignoreCase = true) || fileCanonical.startsWith("$origCanonical\\", ignoreCase = true)) return true
             }
         } catch (_: Exception) {}
+
         return false
     }
 
@@ -336,9 +457,13 @@ object VaultManager {
                     var dest = candidate
                     var counter = 1
                     while (dest.exists()) {
-                        val base = originalName.substringBeforeLast('.')
-                        val ext = if (originalName.contains('.')) ".${originalName.substringAfterLast('.')}" else ""
-                        dest = File(parentDir, "${base}_$counter$ext")
+                        if (vaultFile.isDirectory) {
+                            dest = File(parentDir, "${originalName}_$counter")
+                        } else {
+                            val base = originalName.substringBeforeLast('.')
+                            val ext = if (originalName.contains('.')) ".${originalName.substringAfterLast('.')}" else ""
+                            dest = File(parentDir, "${base}_$counter$ext")
+                        }
                         counter++
                     }
                     targetFile = dest
@@ -348,9 +473,13 @@ object VaultManager {
                     var dest = File(downloads, originalName)
                     var counter = 1
                     while (dest.exists()) {
-                        val base = originalName.substringBeforeLast('.')
-                        val ext = if (originalName.contains('.')) ".${originalName.substringAfterLast('.')}" else ""
-                        dest = File(downloads, "${base}_$counter$ext")
+                        if (vaultFile.isDirectory) {
+                            dest = File(downloads, "${originalName}_$counter")
+                        } else {
+                            val base = originalName.substringBeforeLast('.')
+                            val ext = if (originalName.contains('.')) ".${originalName.substringAfterLast('.')}" else ""
+                            dest = File(downloads, "${base}_$counter$ext")
+                        }
                         counter++
                     }
                     targetFile = dest
@@ -361,24 +490,41 @@ object VaultManager {
                 var dest = File(downloads, originalName)
                 var counter = 1
                 while (dest.exists()) {
-                    val base = originalName.substringBeforeLast('.')
-                    val ext = if (originalName.contains('.')) ".${originalName.substringAfterLast('.')}" else ""
-                    dest = File(downloads, "${base}_$counter$ext")
+                    if (vaultFile.isDirectory) {
+                        dest = File(downloads, "${originalName}_$counter")
+                    } else {
+                        val base = originalName.substringBeforeLast('.')
+                        val ext = if (originalName.contains('.')) ".${originalName.substringAfterLast('.')}" else ""
+                        dest = File(downloads, "${base}_$counter$ext")
+                    }
                     counter++
                 }
                 targetFile = dest
             }
 
-            vaultFile.copyTo(targetFile, overwrite = false)
-            vaultFile.delete()
+            if (vaultFile.isDirectory) {
+                vaultFile.copyRecursively(targetFile, overwrite = false)
+                vaultFile.deleteRecursively()
+            } else {
+                vaultFile.copyTo(targetFile, overwrite = false)
+                vaultFile.delete()
+            }
 
             metadata.remove(vaultFile.name)
             saveMetadata(context, metadata)
 
+            val scannedPaths = if (targetFile.isDirectory) {
+                val list = mutableListOf(targetFile.absolutePath)
+                targetFile.walkTopDown().forEach { list.add(it.absolutePath) }
+                list.toTypedArray()
+            } else {
+                arrayOf(targetFile.absolutePath)
+            }
+
             try {
                 MediaScannerConnection.scanFile(
                     context,
-                    arrayOf(targetFile.absolutePath),
+                    scannedPaths,
                     null,
                     null
                 )
@@ -410,12 +556,20 @@ object VaultManager {
             var dest = File(downloads, fileItem.name)
             var counter = 1
             while (dest.exists()) {
-                val base = fileItem.name.substringBeforeLast('.')
-                val ext = if (fileItem.name.contains('.')) ".${fileItem.name.substringAfterLast('.')}" else ""
-                dest = File(downloads, "${base}_$counter$ext")
+                if (source.isDirectory) {
+                    dest = File(downloads, "${fileItem.name}_$counter")
+                } else {
+                    val base = fileItem.name.substringBeforeLast('.')
+                    val ext = if (fileItem.name.contains('.')) ".${fileItem.name.substringAfterLast('.')}" else ""
+                    dest = File(downloads, "${base}_$counter$ext")
+                }
                 counter++
             }
-            source.copyTo(dest, overwrite = false)
+            if (source.isDirectory) {
+                source.copyRecursively(dest, overwrite = false)
+            } else {
+                source.copyTo(dest, overwrite = false)
+            }
             true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -426,7 +580,7 @@ object VaultManager {
     fun deleteFile(fileItem: FileItem): Boolean {
         return try {
             val f = File(fileItem.path)
-            if (f.exists()) f.delete() else false
+            if (f.isDirectory) f.deleteRecursively() else if (f.exists()) f.delete() else false
         } catch (e: Exception) {
             false
         }
@@ -435,7 +589,7 @@ object VaultManager {
     fun deleteFile(context: Context, fileItem: FileItem): Boolean {
         return try {
             val f = File(fileItem.path)
-            val deleted = if (f.exists()) f.delete() else false
+            val deleted = if (f.isDirectory) f.deleteRecursively() else if (f.exists()) f.delete() else false
             if (deleted) {
                 val metadata = loadMetadata(context)
                 if (metadata.containsKey(f.name)) {

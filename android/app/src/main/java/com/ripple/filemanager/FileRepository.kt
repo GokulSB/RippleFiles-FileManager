@@ -140,6 +140,7 @@ class FileRepository(private val context: Context) {
                     val sizeStr = if (isDir) "" else formatSize(sizeBytes)
                     val changedStr = ""
                     val filePath = if (location.endsWith("/")) location + name else "$location/$name"
+                    if (com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, filePath)) continue
                     
                     items.add(FileItem(
                         id = idCounter++,
@@ -202,7 +203,7 @@ class FileRepository(private val context: Context) {
                     val childName = if (isDir) relPath.substringBefore("/") else (if (nameIdx != -1) c.getString(nameIdx) ?: relPath else relPath)
                     val childPath = normalizedPath + childName
 
-                    if (directChildren.containsKey(childName)) {
+                    if (directChildren.containsKey(childName) || com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, childPath)) {
                         continue
                     }
 
@@ -643,7 +644,7 @@ class FileRepository(private val context: Context) {
         
         val files = if (location == "pinned") {
             pinned.mapNotNull { path ->
-                if (path.startsWith("drive_id:")) null else {
+                if (path.startsWith("drive_id:") || com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, path)) null else {
                     val f = File(path)
                     if (f.exists()) f else null
                 }
@@ -806,6 +807,7 @@ class FileRepository(private val context: Context) {
         }
 
         for (file in files) {
+            if (com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, file.absolutePath)) continue
             items.add(fileToItem(file, idCounter++, pinned, locked, dateFormat))
         }
 
@@ -900,6 +902,8 @@ class FileRepository(private val context: Context) {
                     continue
                 }
                 
+                if (com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, child.absolutePath)) continue
+
                 if (child.name.contains(query, ignoreCase = true)) {
                     results.add(fileToItem(child, idCounter++, pinned, locked, dateFormat))
                 }
@@ -1641,10 +1645,12 @@ class FileRepository(private val context: Context) {
                 !path.contains("/Android/obb") &&
                 !name.startsWith(".ripple_trash") &&
                 !path.contains("/.ripple_trash") &&
+                !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, path) &&
                 (!name.startsWith(".") || dir == rootDir)
             }.forEach { file ->
                 if (file.name.startsWith(".")) return@forEach
                 if (file.absolutePath.contains("/.ripple_trash")) return@forEach
+                if (com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, file.absolutePath)) return@forEach
 
                 
                 if (file.isDirectory) {
@@ -2085,13 +2091,13 @@ suspend fun moveToTrash(paths: List<String>) = withContext(Dispatchers.IO) {
             else -> null
         }
         if (cached != null) {
-            val existing = cached.filter { java.io.File(it.path).exists() }
+            val existing = cached.filter { java.io.File(it.path).exists() && !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, it.path) }
             return@withContext existing
         }
 
         if (categoryKey.equals("download", ignoreCase = true) || categoryKey.equals("downloads", ignoreCase = true)) {
             val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val downloadFilesList = downloadDir.listFiles()?.filter { !it.name.startsWith(".") } ?: emptyList()
+            val downloadFilesList = downloadDir.listFiles()?.filter { !it.name.startsWith(".") && !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, it.absolutePath) } ?: emptyList()
             val pinned = getPinnedFiles()
             val locked = getLockedFiles()
             var idCounter = 300000
@@ -2130,7 +2136,7 @@ suspend fun moveToTrash(paths: List<String>) = withContext(Dispatchers.IO) {
 
         if (cleanerData != null) {
             val nonNullCached: List<FileItem> = cached ?: emptyList()
-            return@withContext nonNullCached.filter { file: FileItem -> java.io.File(file.path).exists() }
+            return@withContext nonNullCached.filter { file: FileItem -> java.io.File(file.path).exists() && !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, file.path) }
         }
 
         val scanned = scanDeviceForCleaner()
@@ -2147,7 +2153,7 @@ suspend fun moveToTrash(paths: List<String>) = withContext(Dispatchers.IO) {
             "empty folders", "empty_folders" -> scanned.emptyFolders.files
             else -> emptyList()
         }
-        return@withContext result.filter { file: FileItem -> java.io.File(file.path).exists() }
+        return@withContext result.filter { file: FileItem -> java.io.File(file.path).exists() && !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, file.path) }
     }
 }
 

@@ -49,6 +49,8 @@ fun FilePickerDialog(
     title: String = "SELECT FILES",
     confirmText: String = "Select",
     initialPath: String = Environment.getExternalStorageDirectory().path,
+    allowFolders: Boolean = false,
+    foldersOnly: Boolean = false,
     onDismiss: () -> Unit,
     onFilesSelected: (List<FileItem>) -> Unit,
     onOpenSystemPicker: (() -> Unit)? = null,
@@ -84,8 +86,8 @@ fun FilePickerDialog(
         coroutineScope.launch {
             try {
                 val allItems = repository.getFiles(path)
-                folders = allItems.filter { it.type == "folder" || it.kind == "folder" }.sortedBy { it.name.lowercase() }
-                files = allItems.filter { it.type != "folder" && it.kind != "folder" }.sortedBy { it.name.lowercase() }
+                folders = allItems.filter { (it.type == "folder" || it.kind == "folder") && !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, it.path) }.sortedBy { it.name.lowercase() }
+                files = if (foldersOnly) emptyList() else allItems.filter { it.type != "folder" && it.kind != "folder" && !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(context, it.path) }.sortedBy { it.name.lowercase() }
                 currentPath = path
             } catch (e: Exception) {
                 folders = emptyList()
@@ -166,7 +168,13 @@ fun FilePickerDialog(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (selectedFiles.isEmpty()) "Tap files to select" else "${selectedFiles.size} file${if (selectedFiles.size == 1) "" else "s"} selected",
+                                text = if (selectedFiles.isEmpty()) {
+                                    if (foldersOnly) "Tap folder to select or navigate"
+                                    else if (allowFolders) "Tap files or folders to select"
+                                    else "Tap files to select"
+                                } else {
+                                    "${selectedFiles.size} item${if (selectedFiles.size == 1) "" else "s"} selected"
+                                },
                                 fontSize = 12.sp,
                                 fontFamily = LocalAppFont.current,
                                 color = if (selectedFiles.isNotEmpty()) colors.accent else colors.muted
@@ -286,8 +294,44 @@ fun FilePickerDialog(
                         )
                     }
 
-                    if (files.isNotEmpty()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val isRoot = currentPath == Environment.getExternalStorageDirectory().path
+                        if (allowFolders && !isRoot) {
+                            val isCurrentSelected = selectedFiles.containsKey(currentPath)
+                            Text(
+                                text = if (isCurrentSelected) "✓ Selected" else "+ Select Folder",
+                                fontSize = 11.sp,
+                                color = if (isCurrentSelected) colors.accent else colors.text,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = LocalAppFont.current,
+                                modifier = Modifier
+                                    .clickable {
+                                        haptics.tap()
+                                        val dir = File(currentPath)
+                                        val folderItem = FileItem(
+                                            id = currentPath.hashCode(),
+                                            path = currentPath,
+                                            name = dir.name.ifEmpty { "Folder" },
+                                            type = "folder",
+                                            kind = "folder",
+                                            size = "Folder",
+                                            changed = "",
+                                            owner = "",
+                                            isPinned = false,
+                                            isLocked = false
+                                        )
+                                        if (isCurrentSelected) {
+                                            selectedFiles.remove(currentPath)
+                                        } else {
+                                            selectedFiles[currentPath] = folderItem
+                                        }
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+
+                        if (!foldersOnly && files.isNotEmpty()) {
                             Text(
                                 text = "Select All",
                                 fontSize = 11.sp,
@@ -303,21 +347,38 @@ fun FilePickerDialog(
                                     }
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             )
-                            if (selectedFiles.isNotEmpty()) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Clear",
-                                    fontSize = 11.sp,
-                                    color = colors.muted,
-                                    fontFamily = LocalAppFont.current,
-                                    modifier = Modifier
-                                        .clickable {
-                                            haptics.tap()
-                                            selectedFiles.clear()
+                        } else if (foldersOnly && folders.isNotEmpty()) {
+                            Text(
+                                text = "Select All",
+                                fontSize = 11.sp,
+                                color = colors.accent,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = LocalAppFont.current,
+                                modifier = Modifier
+                                    .clickable {
+                                        haptics.tap()
+                                        folders.forEach { folder ->
+                                            selectedFiles[folder.path] = folder
                                         }
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        if (selectedFiles.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Clear",
+                                fontSize = 11.sp,
+                                color = colors.muted,
+                                fontFamily = LocalAppFont.current,
+                                modifier = Modifier
+                                    .clickable {
+                                        haptics.tap()
+                                        selectedFiles.clear()
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
                     }
                 }
@@ -381,16 +442,30 @@ fun FilePickerDialog(
                         ) {
                             // Folders first
                             items(folders, key = { "folder_${it.path}" }) { folder ->
+                                val isFolderSelected = selectedFiles.containsKey(folder.path)
                                 Card(
                                     shape = RoundedCornerShape(18.dp),
-                                    colors = CardDefaults.cardColors(containerColor = colors.card),
-                                    border = BorderStroke(1.dp, colors.line.copy(alpha = colors.lineAlpha * 0.4f)),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isFolderSelected) colors.accent.copy(alpha = 0.12f) else colors.card
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isFolderSelected) colors.accent else colors.line.copy(alpha = colors.lineAlpha * 0.4f)
+                                    ),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .pressScale(0.97f)
                                         .clickable {
                                             haptics.tap()
-                                            loadPath(folder.path)
+                                            if (foldersOnly) {
+                                                if (isFolderSelected) {
+                                                    selectedFiles.remove(folder.path)
+                                                } else {
+                                                    selectedFiles[folder.path] = folder
+                                                }
+                                            } else {
+                                                loadPath(folder.path)
+                                            }
                                         }
                                 ) {
                                     Row(
@@ -399,8 +474,8 @@ fun FilePickerDialog(
                                     ) {
                                         CookieIcon(
                                             icon = Icons.Default.Folder,
-                                            bgColor = ExpressiveTokens.PastelPeach,
-                                            iconTint = ExpressiveTokens.OnPastel,
+                                            bgColor = if (isFolderSelected) colors.accent else ExpressiveTokens.PastelPeach,
+                                            iconTint = if (isFolderSelected) colors.ink else ExpressiveTokens.OnPastel,
                                             size = 40.dp,
                                             lobes = 8
                                         )
@@ -409,7 +484,7 @@ fun FilePickerDialog(
                                             Text(
                                                 text = folder.name,
                                                 fontSize = 14.sp,
-                                                fontWeight = FontWeight.Medium,
+                                                fontWeight = if (isFolderSelected) FontWeight.Bold else FontWeight.Medium,
                                                 fontFamily = LocalAppFont.current,
                                                 color = colors.text,
                                                 maxLines = 1,
@@ -417,18 +492,52 @@ fun FilePickerDialog(
                                             )
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Text(
-                                                text = "Folder",
+                                                text = if (isFolderSelected) "Selected" else "Folder",
                                                 fontSize = 11.sp,
                                                 fontFamily = LocalAppFont.current,
-                                                color = colors.muted
+                                                color = if (isFolderSelected) colors.accent else colors.muted
                                             )
                                         }
-                                        Icon(
-                                            imageVector = Icons.Outlined.ChevronRight,
-                                            contentDescription = null,
-                                            tint = colors.muted,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+
+                                        if (allowFolders) {
+                                            Checkbox(
+                                                checked = isFolderSelected,
+                                                onCheckedChange = { checked ->
+                                                    haptics.tap()
+                                                    if (checked) {
+                                                        selectedFiles[folder.path] = folder
+                                                    } else {
+                                                        selectedFiles.remove(folder.path)
+                                                    }
+                                                },
+                                                colors = CheckboxDefaults.colors(
+                                                    checkedColor = colors.accent,
+                                                    checkmarkColor = colors.ink,
+                                                    uncheckedColor = colors.muted
+                                                )
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    haptics.tap()
+                                                    loadPath(folder.path)
+                                                },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.ChevronRight,
+                                                    contentDescription = "Open folder",
+                                                    tint = colors.muted,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Outlined.ChevronRight,
+                                                contentDescription = null,
+                                                tint = colors.muted,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }

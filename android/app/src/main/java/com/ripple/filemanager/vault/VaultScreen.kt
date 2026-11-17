@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -68,6 +69,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VaultScreen(
     state: AppState,
@@ -76,6 +78,7 @@ fun VaultScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val colors = ExpressiveTheme.colors
     val coroutineScope = rememberCoroutineScope()
     val haptics = LocalHaptics.current
 
@@ -84,6 +87,8 @@ fun VaultScreen(
 
     var isImporting by remember { mutableStateOf(false) }
     var showFilePicker by remember { mutableStateOf(false) }
+    var pickerFoldersOnly by remember { mutableStateOf(false) }
+    var showAddOptionsSheet by remember { mutableStateOf(false) }
     var vaultRefreshTrigger by remember { mutableIntStateOf(0) }
 
     // Top-level unconditionally registered ActivityResult launcher for safe fallback system file picking
@@ -175,16 +180,86 @@ fun VaultScreen(
                     },
                     onAction = onAction,
                     isImporting = isImporting,
-                    onAddFilesClick = { showFilePicker = true },
+                    onAddClick = { showAddOptionsSheet = true },
+                    onAddFilesClick = {
+                        pickerFoldersOnly = false
+                        showFilePicker = true
+                    },
+                    onAddFoldersClick = {
+                        pickerFoldersOnly = true
+                        showFilePicker = true
+                    },
                     refreshTrigger = vaultRefreshTrigger
                 )
             }
         }
 
+        if (showAddOptionsSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showAddOptionsSheet = false },
+                containerColor = colors.container,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .navigationBarsPadding(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(colors.muted.copy(alpha = 0.3f))
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Add to Vault",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = LocalAppFont.current,
+                        color = colors.text
+                    )
+                    Text(
+                        text = "Items are encrypted and hidden from other apps",
+                        fontSize = 12.sp,
+                        fontFamily = LocalAppFont.current,
+                        color = colors.muted
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    VaultActionTile(
+                        icon = Icons.Outlined.InsertDriveFile,
+                        title = "Add Files",
+                        onClick = {
+                            showAddOptionsSheet = false
+                            pickerFoldersOnly = false
+                            showFilePicker = true
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    VaultActionTile(
+                        icon = Icons.Outlined.Folder,
+                        title = "Add Folder",
+                        onClick = {
+                            showAddOptionsSheet = false
+                            pickerFoldersOnly = true
+                            showFilePicker = true
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
+
         if (showFilePicker) {
             FilePickerDialog(
-                title = "Add Files to Vault",
+                title = if (pickerFoldersOnly) "Add Folder to Vault" else "Add Files to Vault",
                 confirmText = "Add to Vault",
+                allowFolders = true,
+                foldersOnly = pickerFoldersOnly,
                 cornerRoundness = state.cornerRoundness,
                 onDismiss = { showFilePicker = false },
                 onFilesSelected = { selectedFiles ->
@@ -197,7 +272,7 @@ fun VaultScreen(
                                 isImporting = false
                                 vaultRefreshTrigger++
                                 haptics.tap()
-                                Toast.makeText(context, "Added $count file(s) to Vault", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Added $count item(s) to Vault", Toast.LENGTH_SHORT).show()
                                 onAction(AppAction.Reload)
                             }
                         }
@@ -1348,7 +1423,9 @@ private fun VaultBrowserScreen(
     onClose: () -> Unit,
     onAction: (AppAction) -> Unit,
     isImporting: Boolean,
+    onAddClick: () -> Unit,
     onAddFilesClick: () -> Unit,
+    onAddFoldersClick: () -> Unit,
     refreshTrigger: Int
 ) {
     val context = LocalContext.current
@@ -1356,24 +1433,40 @@ private fun VaultBrowserScreen(
     val haptics = LocalHaptics.current
     val coroutineScope = rememberCoroutineScope()
 
-    var vaultFiles by remember { mutableStateOf(VaultManager.getVaultFiles(context)) }
+    var currentVaultDir by remember { mutableStateOf<File?>(null) }
+    var vaultFiles by remember { mutableStateOf(VaultManager.getVaultFiles(context, currentVaultDir)) }
     var selectedFileForMenu by remember { mutableStateOf<FileItem?>(null) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedPaths = remember { mutableStateListOf<String>() }
     var isRestoring by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = isSelectionMode) {
-        isSelectionMode = false
-        selectedPaths.clear()
+    val vaultRoot = remember { VaultManager.getVaultDirectory(context) }
+
+    fun navigateUp() {
+        val parent = currentVaultDir?.parentFile
+        if (parent != null && parent.absolutePath.startsWith(vaultRoot.absolutePath) && parent.absolutePath != vaultRoot.absolutePath) {
+            currentVaultDir = parent
+        } else {
+            currentVaultDir = null
+        }
     }
 
-    LaunchedEffect(refreshTrigger) {
-        vaultFiles = VaultManager.getVaultFiles(context)
+    BackHandler(enabled = isSelectionMode || currentVaultDir != null) {
+        if (isSelectionMode) {
+            isSelectionMode = false
+            selectedPaths.clear()
+        } else if (currentVaultDir != null) {
+            navigateUp()
+        }
+    }
+
+    LaunchedEffect(refreshTrigger, currentVaultDir) {
+        vaultFiles = VaultManager.getVaultFiles(context, currentVaultDir)
     }
 
     fun refreshFiles() {
-        vaultFiles = VaultManager.getVaultFiles(context)
+        vaultFiles = VaultManager.getVaultFiles(context, currentVaultDir)
         selectedPaths.retainAll(vaultFiles.map { it.path })
         if (selectedPaths.isEmpty()) {
             isSelectionMode = false
@@ -1394,7 +1487,7 @@ private fun VaultBrowserScreen(
                 onAction(AppAction.Reload)
                 Toast.makeText(
                     context,
-                    "Restored $count file${if (count == 1) "" else "s"} to internal storage",
+                    "Restored $count item${if (count == 1) "" else "s"} to internal storage",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -1407,7 +1500,7 @@ private fun VaultBrowserScreen(
             VaultCategoryItem("video", "Videos", Icons.Outlined.Videocam, "videos"),
             VaultCategoryItem("audio", "Audio", Icons.Outlined.MusicNote, "audio"),
             VaultCategoryItem("doc", "Docs", Icons.Outlined.Description, "docs"),
-            VaultCategoryItem("apk", "Apps", Icons.Outlined.Android, "apps"),
+            VaultCategoryItem("folder", "Folders", Icons.Outlined.Folder, "folders"),
             VaultCategoryItem("archive", "Archives", Icons.Outlined.FolderZip, "archives"),
             VaultCategoryItem("other", "Other", Icons.AutoMirrored.Outlined.InsertDriveFile, "large"),
             VaultCategoryItem("all", "All Files", Icons.Outlined.GridView, "downloads")
@@ -1420,9 +1513,9 @@ private fun VaultBrowserScreen(
             "video" -> file.type == "video"
             "audio" -> file.type == "audio"
             "doc" -> file.type == "doc"
-            "apk" -> file.type == "apk"
+            "folder" -> file.type == "folder" || file.kind == "folder"
             "archive" -> file.type == "archive"
-            "other" -> file.type !in setOf("image", "video", "audio", "doc", "apk", "archive")
+            "other" -> file.type !in setOf("image", "video", "audio", "doc", "archive", "folder")
             "all" -> true
             else -> true
         }
@@ -1549,25 +1642,34 @@ private fun VaultBrowserScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CookieIconButton(
-                            onClick = onClose,
+                            onClick = {
+                                if (currentVaultDir != null) {
+                                    haptics.tap()
+                                    navigateUp()
+                                } else {
+                                    onClose()
+                                }
+                            },
                             icon = Icons.AutoMirrored.Filled.ArrowBack,
                             bgColor = colors.card,
                             iconTint = colors.text,
-                            description = "Back and Lock",
+                            description = if (currentVaultDir != null) "Back" else "Back and Lock",
                             size = 40.dp,
                             lobes = 8
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Vault",
+                                text = currentVaultDir?.name ?: "Vault",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = LocalAppFont.current,
-                                color = colors.text
+                                color = colors.text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${vaultFiles.size} protected file${if (vaultFiles.size == 1) "" else "s"}",
+                                text = "${vaultFiles.size} protected item${if (vaultFiles.size == 1) "" else "s"}",
                                 fontSize = 12.sp,
                                 fontFamily = LocalAppFont.current,
                                 color = colors.muted
@@ -1622,7 +1724,7 @@ private fun VaultBrowserScreen(
                 ExtendedFloatingActionButton(
                     onClick = {
                         haptics.tap()
-                        onAddFilesClick()
+                        onAddClick()
                     },
                     containerColor = colors.accent,
                     contentColor = colors.ink,
@@ -1630,13 +1732,13 @@ private fun VaultBrowserScreen(
                     icon = {
                         Icon(
                             imageVector = Icons.Outlined.Add,
-                            contentDescription = "Add Files",
+                            contentDescription = "Add to Vault",
                             tint = colors.ink
                         )
                     },
                     text = {
                         Text(
-                            text = "Add Files",
+                            text = "Add to Vault",
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = LocalAppFont.current
                         )
@@ -1676,149 +1778,151 @@ private fun VaultBrowserScreen(
                 contentPadding = PaddingValues(bottom = 96.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Overview Storage Card
-                item {
-                    SectionContainer(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CookieIcon(
-                                icon = Icons.Outlined.Security,
-                                bgColor = colors.accent,
-                                iconTint = colors.ink,
-                                size = 52.dp,
-                                lobes = 10
-                            )
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Encrypted Vault",
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = LocalAppFont.current,
-                                    color = colors.text
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Offline isolated storage • Invisible to other apps",
-                                    fontSize = 12.sp,
-                                    fontFamily = LocalAppFont.current,
-                                    color = colors.muted
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Surface(
-                                        color = colors.card,
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Text(
-                                            text = "$formattedTotalSize used",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            fontFamily = LocalAppFont.current,
-                                            color = colors.text,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                    Surface(
-                                        color = colors.card,
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Text(
-                                            text = "${vaultFiles.size} protected",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            fontFamily = LocalAppFont.current,
-                                            color = colors.text,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 2. Categories Grid (similar to ExpressiveHomeScreen)
-                item {
-                    SectionContainer(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 1. Overview Storage Card (only at vault root)
+                if (currentVaultDir == null) {
+                    item {
+                        SectionContainer(modifier = Modifier.padding(horizontal = 16.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Categories",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = LocalAppFont.current,
-                                    color = colors.text
+                                CookieIcon(
+                                    icon = Icons.Outlined.Security,
+                                    bgColor = colors.accent,
+                                    iconTint = colors.ink,
+                                    size = 52.dp,
+                                    lobes = 10
                                 )
-                                if (selectedCategory != null) {
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Clear filter",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
+                                        text = "Encrypted Vault",
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Bold,
                                         fontFamily = LocalAppFont.current,
-                                        color = colors.accent,
-                                        modifier = Modifier.clickable {
-                                            haptics.tap()
-                                            selectedCategory = null
+                                        color = colors.text
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Offline isolated storage • Invisible to other apps",
+                                        fontSize = 12.sp,
+                                        fontFamily = LocalAppFont.current,
+                                        color = colors.muted
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Surface(
+                                            color = colors.card,
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(
+                                                text = "$formattedTotalSize used",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                fontFamily = LocalAppFont.current,
+                                                color = colors.text,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
                                         }
-                                    )
+                                        Surface(
+                                            color = colors.card,
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(
+                                                text = "${vaultFiles.size} protected",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                fontFamily = LocalAppFont.current,
+                                                color = colors.text,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
+                        }
+                    }
 
-                            // Row 1 (4 items)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                categories.take(4).forEach { cat ->
-                                    VaultCategoryCookieTile(
-                                        item = cat,
-                                        subtitle = getCategorySubtitle(cat.key),
-                                        isSelected = selectedCategory == cat.key,
-                                        onClick = {
-                                            haptics.tap()
-                                            selectedCategory = if (selectedCategory == cat.key) null else cat.key
-                                        },
-                                        modifier = Modifier.weight(1f)
+                    // 2. Categories Grid (only at vault root)
+                    item {
+                        SectionContainer(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Categories",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = LocalAppFont.current,
+                                        color = colors.text
                                     )
+                                    if (selectedCategory != null) {
+                                        Text(
+                                            text = "Clear filter",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            fontFamily = LocalAppFont.current,
+                                            color = colors.accent,
+                                            modifier = Modifier.clickable {
+                                                haptics.tap()
+                                                selectedCategory = null
+                                            }
+                                        )
+                                    }
                                 }
-                            }
 
-                            // Row 2 (4 items)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                categories.drop(4).take(4).forEach { cat ->
-                                    VaultCategoryCookieTile(
-                                        item = cat,
-                                        subtitle = getCategorySubtitle(cat.key),
-                                        isSelected = if (cat.key == "all") selectedCategory == null else selectedCategory == cat.key,
-                                        onClick = {
-                                            haptics.tap()
-                                            selectedCategory = if (cat.key == "all" || selectedCategory == cat.key) null else cat.key
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                // Row 1 (4 items)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    categories.take(4).forEach { cat ->
+                                        VaultCategoryCookieTile(
+                                            item = cat,
+                                            subtitle = getCategorySubtitle(cat.key),
+                                            isSelected = selectedCategory == cat.key,
+                                            onClick = {
+                                                haptics.tap()
+                                                selectedCategory = if (selectedCategory == cat.key) null else cat.key
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+
+                                // Row 2 (4 items)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    categories.drop(4).take(4).forEach { cat ->
+                                        VaultCategoryCookieTile(
+                                            item = cat,
+                                            subtitle = getCategorySubtitle(cat.key),
+                                            isSelected = if (cat.key == "all") selectedCategory == null else selectedCategory == cat.key,
+                                            onClick = {
+                                                haptics.tap()
+                                                selectedCategory = if (cat.key == "all" || selectedCategory == cat.key) null else cat.key
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // 3. Section Title for Recent Files
+                // 3. Section Title
                 item {
                     val categoryTitle = categories.find { it.key == selectedCategory }?.title
-                    val sectionTitle = if (categoryTitle != null && selectedCategory != "all") {
-                        "$categoryTitle in Vault"
-                    } else {
-                        "Recent Files"
+                    val sectionTitle = when {
+                        currentVaultDir != null -> currentVaultDir!!.name
+                        categoryTitle != null && selectedCategory != "all" -> "$categoryTitle in Vault"
+                        else -> "All Items in Vault"
                     }
                     Row(
                         modifier = Modifier
@@ -1832,8 +1936,12 @@ private fun VaultBrowserScreen(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = LocalAppFont.current,
-                            color = colors.text
+                            color = colors.text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "${displayFiles.size} items",
                             fontSize = 12.sp,
@@ -1854,7 +1962,7 @@ private fun VaultBrowserScreen(
                             verticalArrangement = Arrangement.Center
                         ) {
                             CookieIcon(
-                                icon = Icons.Outlined.Security,
+                                icon = if (currentVaultDir != null) Icons.Outlined.FolderOpen else Icons.Outlined.Security,
                                 bgColor = colors.card,
                                 iconTint = colors.accent,
                                 size = 64.dp,
@@ -1862,7 +1970,7 @@ private fun VaultBrowserScreen(
                             )
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = "Your Vault is Empty",
+                                text = if (currentVaultDir != null) "Folder is Empty" else "Your Vault is Empty",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = LocalAppFont.current,
@@ -1871,7 +1979,7 @@ private fun VaultBrowserScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Import private photos, videos, or documents here. Files are hidden from internal storage and other apps.",
+                                text = if (currentVaultDir != null) "No items found in this folder." else "Import private photos, videos, documents, or entire folders here. Items are hidden from internal storage and other apps.",
                                 fontSize = 13.sp,
                                 lineHeight = 18.sp,
                                 fontFamily = LocalAppFont.current,
@@ -1879,29 +1987,60 @@ private fun VaultBrowserScreen(
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(20.dp))
-                            Button(
-                                onClick = {
-                                    haptics.tap()
-                                    onAddFilesClick()
-                                },
-                                shape = RoundedCornerShape(22.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = colors.accent,
-                                    contentColor = colors.ink
-                                )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Add,
-                                    contentDescription = null,
-                                    tint = colors.ink,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Add Files to Vault",
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontFamily = LocalAppFont.current
-                                )
+                                Button(
+                                    onClick = {
+                                        haptics.tap()
+                                        onAddFilesClick()
+                                    },
+                                    shape = RoundedCornerShape(22.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = colors.accent,
+                                        contentColor = colors.ink
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.InsertDriveFile,
+                                        contentDescription = null,
+                                        tint = colors.ink,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Add Files",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontFamily = LocalAppFont.current
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        haptics.tap()
+                                        onAddFoldersClick()
+                                    },
+                                    shape = RoundedCornerShape(22.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = colors.card,
+                                        contentColor = colors.text
+                                    ),
+                                    border = BorderStroke(1.dp, colors.line.copy(alpha = colors.lineAlpha * 0.6f))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Folder,
+                                        contentDescription = null,
+                                        tint = colors.accent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Add Folder",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontFamily = LocalAppFont.current
+                                    )
+                                }
                             }
                         }
                     }
@@ -1922,7 +2061,7 @@ private fun VaultBrowserScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             TextButton(onClick = { selectedCategory = null }) {
-                                Text("Show all files", color = colors.accent, fontFamily = LocalAppFont.current)
+                                Text("Show all items", color = colors.accent, fontFamily = LocalAppFont.current)
                             }
                         }
                     }
@@ -1943,7 +2082,11 @@ private fun VaultBrowserScreen(
                                             selectedPaths.add(file.path)
                                         }
                                     } else {
-                                        onAction(AppAction.ViewFile(file))
+                                        if (file.type == "folder" || file.kind == "folder") {
+                                            currentVaultDir = File(file.path)
+                                        } else {
+                                            onAction(AppAction.ViewFile(file))
+                                        }
                                     }
                                 },
                                 onLongClick = {
@@ -1974,6 +2117,7 @@ private fun VaultBrowserScreen(
     // File Action Bottom Sheet
     if (selectedFileForMenu != null) {
         val targetFile = selectedFileForMenu!!
+        val isFolder = targetFile.type == "folder" || targetFile.kind == "folder"
         ModalBottomSheet(
             onDismissRequest = { selectedFileForMenu = null },
             containerColor = colors.container,
@@ -2005,14 +2149,25 @@ private fun VaultBrowserScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Action rows
-                VaultActionTile(
-                    icon = Icons.Outlined.FileOpen,
-                    title = "Open / View",
-                    onClick = {
-                        selectedFileForMenu = null
-                        onAction(AppAction.ViewFile(targetFile))
-                    }
-                )
+                if (isFolder) {
+                    VaultActionTile(
+                        icon = Icons.Outlined.FolderOpen,
+                        title = "Open Folder",
+                        onClick = {
+                            selectedFileForMenu = null
+                            currentVaultDir = File(targetFile.path)
+                        }
+                    )
+                } else {
+                    VaultActionTile(
+                        icon = Icons.Outlined.FileOpen,
+                        title = "Open / View",
+                        onClick = {
+                            selectedFileForMenu = null
+                            onAction(AppAction.ViewFile(targetFile))
+                        }
+                    )
+                }
 
                 VaultActionTile(
                     icon = Icons.Outlined.SettingsBackupRestore,
@@ -2027,7 +2182,7 @@ private fun VaultBrowserScreen(
                                     onAction(AppAction.Reload)
                                     Toast.makeText(context, "Restored ${targetFile.name} to internal storage", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "Failed to restore file", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Failed to restore", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -2043,29 +2198,31 @@ private fun VaultBrowserScreen(
                         if (success) {
                             Toast.makeText(context, "Exported ${targetFile.name} to Downloads", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Failed to export file", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Failed to export", Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
 
-                VaultActionTile(
-                    icon = Icons.Outlined.Share,
-                    title = "Share",
-                    onClick = {
-                        selectedFileForMenu = null
-                        try {
-                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(targetFile.path))
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "*/*"
-                                putExtra(Intent.EXTRA_STREAM, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (!isFolder) {
+                    VaultActionTile(
+                        icon = Icons.Outlined.Share,
+                        title = "Share",
+                        onClick = {
+                            selectedFileForMenu = null
+                            try {
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(targetFile.path))
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "*/*"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "Share ${targetFile.name}"))
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Cannot share: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
-                            context.startActivity(Intent.createChooser(shareIntent, "Share ${targetFile.name}"))
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Cannot share: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
-                    }
-                )
+                    )
+                }
 
                 VaultActionTile(
                     icon = Icons.Outlined.Delete,

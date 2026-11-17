@@ -467,6 +467,10 @@ class VideoPlayerActivity : ComponentActivity() {
             return
         }
 
+        if (isFinishing) {
+            engine?.detachVideoLayout()
+        }
+
         if (!prefs.backgroundPlay) {
             engine?.pause()
             abandonAudioFocus()

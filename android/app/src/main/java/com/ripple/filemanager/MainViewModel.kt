@@ -807,7 +807,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.invalidateShizukuCache()
             val hasShizuku = repository.hasShizuku()
             _state.update { it.copy(hasShizuku = hasShizuku) }
+            com.ripple.filemanager.vault.VaultManager.purgeVaultSourceFiles(getApplication())
         }
+        _state.update { it.copy(folderCache = kotlinx.collections.immutable.persistentMapOf()) }
         loadFiles(_state.value.location)
         loadRecentFiles()
     }
@@ -998,7 +1000,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> current.folderStack
         }
 
-        val cachedFiles = current.folderCache[location] ?: persistentListOf()
+        val cachedFiles = (current.folderCache[location] ?: persistentListOf())
+            .filter { !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(getApplication(), it.path) }
+            .toImmutableList()
         _state.update { it.copy(secondPaneState = current.copy(location = location, currentFolderName = folderName, folderStack = newStack, isLoading = true, files = cachedFiles)) }
         loadFilesForPane(location)
     }
@@ -1011,7 +1015,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _state.value.secondPaneState
         if (current.folderStack.isNotEmpty()) {
             val (prevLocation, prevName) = current.folderStack.last()
-            val cachedFiles = current.folderCache[prevLocation] ?: persistentListOf()
+            val cachedFiles = (current.folderCache[prevLocation] ?: persistentListOf())
+                .filter { !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(getApplication(), it.path) }
+                .toImmutableList()
             _state.update { it.copy(secondPaneState = current.copy(location = prevLocation, currentFolderName = prevName, folderStack = current.folderStack.dropLast(1), isLoading = true, files = cachedFiles)) }
             loadFilesForPane(prevLocation)
         } else {
@@ -1237,7 +1243,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> current.driveFolderStack
         }
 
-        val cachedFiles = current.folderCache[effectiveLocation] ?: kotlinx.collections.immutable.persistentListOf()
+        val cachedFiles = (current.folderCache[effectiveLocation] ?: kotlinx.collections.immutable.persistentListOf())
+            .filter { !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(getApplication(), it.path) }
+            .toImmutableList()
         val resetFilter = if (effectiveLocation.startsWith("/")) "all" else current.filter
         val newBrowseLoc = if (effectiveLocation.startsWith("/") && effectiveLocation != "home") effectiveLocation else current.lastBrowseLocation
 
@@ -1305,7 +1313,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val stack = _state.value.driveFolderStack
         if (stack.isNotEmpty()) {
             val (prevLocation, prevName) = stack.last()
-            val cachedFiles = _state.value.folderCache[prevLocation] ?: kotlinx.collections.immutable.persistentListOf()
+            val cachedFiles = (_state.value.folderCache[prevLocation] ?: kotlinx.collections.immutable.persistentListOf())
+                .filter { !com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(getApplication(), it.path) }
+                .toImmutableList()
             _state.update { it.copy(location = prevLocation, currentFolderName = prevName, driveFolderStack = stack.dropLast(1), isLoading = true, files = cachedFiles) }
             loadFiles(prevLocation)
         } else {
@@ -1475,6 +1485,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun applyFiltersAndSort(raw: List<FileItem>, st: AppState): List<FileItem> {
         return raw.filter {
+            if (com.ripple.filemanager.vault.VaultManager.isVaultFileOrPath(getApplication(), it.path)) return@filter false
             val hiddenMatch = st.showHiddenFiles || !it.isHidden
             val filterMatch = st.location.startsWith("category/") || st.filter == "all" || 
                 (st.filter == "music" && it.type == "audio") ||
@@ -3129,85 +3140,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         "ape", "wma", "mpc", "wv", "tta", "dsd", "dsf", "dff", "dts", "ac3", "mka", "tak", "ofr", "ofs"
     )
 
+    private fun handleVlcAudioEvent(event: org.videolan.libvlc.MediaPlayer.Event) {
+        when (event.type) {
+            org.videolan.libvlc.MediaPlayer.Event.Playing -> {
+                _state.update { it.copy(isAudioPlaying = true) }
+                closePlayerJob?.cancel()
+                val len = vlcAudioPlayer?.length ?: 0L
+                if (len > 0L) {
+                    _state.update { it.copy(audioDuration = len) }
+                }
+            }
+            org.videolan.libvlc.MediaPlayer.Event.Paused -> {
+                _state.update { it.copy(isAudioPlaying = false) }
+                closePlayerJob?.cancel()
+                val timeoutSec = _state.value.miniPlayerAutoCloseSeconds
+                if (timeoutSec > 0) {
+                    closePlayerJob = viewModelScope.launch {
+                        kotlinx.coroutines.delay(timeoutSec * 1000L)
+                        stopAudio()
+                    }
+                }
+            }
+            org.videolan.libvlc.MediaPlayer.Event.EndReached -> {
+                _state.update { it.copy(isAudioPlaying = false) }
+                _audioPosition.value = 0L
+            }
+            org.videolan.libvlc.MediaPlayer.Event.TimeChanged -> {
+                _audioPosition.value = event.timeChanged
+            }
+            org.videolan.libvlc.MediaPlayer.Event.LengthChanged -> {
+                if (event.lengthChanged > 0L) {
+                    _state.update { it.copy(audioDuration = event.lengthChanged) }
+                }
+            }
+            org.videolan.libvlc.MediaPlayer.Event.EncounteredError -> {
+                _state.update { it.copy(isAudioPlaying = false) }
+                viewModelScope.launch(Dispatchers.Main) {
+                    showToast("Unable to play exotic audio format")
+                }
+            }
+        }
+    }
+
     private fun playWithVlcAudio(file: FileItem) {
         isVlcAudioActive = true
         try {
             exoPlayer?.pause()
         } catch (_: Exception) {}
 
-        if (vlcLibVlc == null) {
-            val options = arrayListOf("--audio-time-stretch", "--no-video")
-            vlcLibVlc = org.videolan.libvlc.LibVLC(getApplication(), options)
-        }
-        if (vlcAudioPlayer == null) {
-            vlcAudioPlayer = org.videolan.libvlc.MediaPlayer(vlcLibVlc!!).apply {
-                setEventListener { event ->
-                    when (event.type) {
-                        org.videolan.libvlc.MediaPlayer.Event.Playing -> {
-                            _state.update { it.copy(isAudioPlaying = true) }
-                            closePlayerJob?.cancel()
-                            val len = length
-                            if (len > 0L) {
-                                _state.update { it.copy(audioDuration = len) }
-                            }
-                        }
-                        org.videolan.libvlc.MediaPlayer.Event.Paused -> {
-                            _state.update { it.copy(isAudioPlaying = false) }
-                            closePlayerJob?.cancel()
-                            val timeoutSec = _state.value.miniPlayerAutoCloseSeconds
-                            if (timeoutSec > 0) {
-                                closePlayerJob = viewModelScope.launch {
-                                    kotlinx.coroutines.delay(timeoutSec * 1000L)
-                                    stopAudio()
-                                }
-                            }
-                        }
-                        org.videolan.libvlc.MediaPlayer.Event.EndReached -> {
-                            _state.update { it.copy(isAudioPlaying = false) }
-                            _audioPosition.value = 0L
-                        }
-                        org.videolan.libvlc.MediaPlayer.Event.TimeChanged -> {
-                            _audioPosition.value = event.timeChanged
-                        }
-                        org.videolan.libvlc.MediaPlayer.Event.LengthChanged -> {
-                            if (event.lengthChanged > 0L) {
-                                _state.update { it.copy(audioDuration = event.lengthChanged) }
-                            }
-                        }
-                        org.videolan.libvlc.MediaPlayer.Event.EncounteredError -> {
-                            _state.update { it.copy(isAudioPlaying = false) }
-                            showToast("Unable to play exotic audio format")
-                        }
-                    }
-                }
-            }
-        }
-
         val uri = if (file.path.startsWith("drive_id:") || file.path.startsWith("content://")) {
             android.net.Uri.parse(file.path)
         } else {
             android.net.Uri.fromFile(java.io.File(file.path))
         }
-
-        val media = if (uri.scheme == "file" && uri.path != null) {
-            org.videolan.libvlc.Media(vlcLibVlc!!, uri.path!!)
-        } else if (uri.scheme == "content") {
-            try {
-                val pfd = getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")
-                if (pfd != null) {
-                    org.videolan.libvlc.Media(vlcLibVlc!!, pfd.fileDescriptor)
-                } else {
-                    org.videolan.libvlc.Media(vlcLibVlc!!, uri)
-                }
-            } catch (_: Exception) {
-                org.videolan.libvlc.Media(vlcLibVlc!!, uri)
-            }
-        } else {
-            org.videolan.libvlc.Media(vlcLibVlc!!, uri)
-        }
-
-        vlcAudioPlayer?.media = media
-        vlcAudioPlayer?.play()
 
         _state.update {
             it.copy(
@@ -3216,6 +3201,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 audioArtist = "libVLC Audio Engine",
                 audioArtworkData = null
             )
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (vlcLibVlc == null) {
+                    val options = arrayListOf("--audio-time-stretch", "--no-video")
+                    vlcLibVlc = org.videolan.libvlc.LibVLC(getApplication(), options)
+                }
+                if (vlcAudioPlayer == null) {
+                    vlcAudioPlayer = org.videolan.libvlc.MediaPlayer(vlcLibVlc!!).apply {
+                        setEventListener { event ->
+                            handleVlcAudioEvent(event)
+                        }
+                    }
+                }
+
+                val media = if (uri.scheme == "file" && uri.path != null) {
+                    org.videolan.libvlc.Media(vlcLibVlc!!, uri.path!!)
+                } else if (uri.scheme == "content") {
+                    try {
+                        val pfd = getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")
+                        if (pfd != null) {
+                            org.videolan.libvlc.Media(vlcLibVlc!!, pfd.fileDescriptor)
+                        } else {
+                            org.videolan.libvlc.Media(vlcLibVlc!!, uri)
+                        }
+                    } catch (_: Exception) {
+                        org.videolan.libvlc.Media(vlcLibVlc!!, uri)
+                    }
+                } else {
+                    org.videolan.libvlc.Media(vlcLibVlc!!, uri)
+                }
+
+                vlcAudioPlayer?.media = media
+                vlcAudioPlayer?.play()
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Error starting VLC audio playback", e)
+                withContext(Dispatchers.Main) {
+                    isVlcAudioActive = false
+                    showToast("Unable to play audio format")
+                }
+            }
         }
 
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -3373,8 +3400,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     fun toggleAudioPlayback() {
         if (isVlcAudioActive) {
-            vlcAudioPlayer?.let {
-                if (it.isPlaying) it.pause() else it.play()
+            val player = vlcAudioPlayer ?: return
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    if (player.isPlaying) player.pause() else player.play()
+                } catch (_: Exception) {}
             }
         } else {
             exoPlayer?.let {
@@ -3384,19 +3414,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     fun seekAudio(position: Long) {
+        _audioPosition.value = position
         if (isVlcAudioActive) {
-            vlcAudioPlayer?.time = position
-            _audioPosition.value = position
+            val player = vlcAudioPlayer ?: return
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    player.time = position
+                } catch (_: Exception) {}
+            }
         } else {
             exoPlayer?.seekTo(position)
-            _audioPosition.value = position
         }
     }
     
     fun stopAudio() {
         if (isVlcAudioActive) {
-            vlcAudioPlayer?.stop()
+            val player = vlcAudioPlayer
             isVlcAudioActive = false
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    player?.stop()
+                } catch (_: Exception) {}
+            }
         }
         exoPlayer?.stop()
         exoPlayer?.clearMediaItems()
@@ -3948,11 +3987,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         exoPlayer?.release()
         exoPlayer = null
         try {
-            vlcAudioPlayer?.stop()
-            vlcAudioPlayer?.release()
+            val player = vlcAudioPlayer
+            val vlc = vlcLibVlc
             vlcAudioPlayer = null
-            vlcLibVlc?.release()
             vlcLibVlc = null
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    player?.stop()
+                    player?.release()
+                } catch (_: Exception) {}
+                try {
+                    vlc?.release()
+                } catch (_: Exception) {}
+            }
         } catch (_: Exception) {}
         ftpProvider.disconnect()
         sftpProvider.disconnect()
